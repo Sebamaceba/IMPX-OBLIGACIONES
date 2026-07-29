@@ -6,6 +6,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/chartjs-plugin-datalabels/2.2.0/chartjs-plugin-datalabels.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <style>
   :root{
     --navy:#0E3552; --navy-deep:#081F30; --steel:#3D6A88; --slate:#7488A0; --mist:#C7D2DA; --paper:#F5F7F9;
@@ -200,6 +201,8 @@
         <select id="f2_mes"><option value="">Todos los meses</option></select>
         <select id="f2_estado"><option value="">Todos los estados ($)</option><option value="AL DÍA">Al día</option><option value="CON SALDOS PENDIENTES">Con saldos pendientes</option></select>
         <select id="f2_estadoTon"><option value="">Todos los estados (ton.)</option><option value="EN PRODUCCIÓN">En producción</option><option value="CON ENTREGA PARCIAL">Con entrega parcial</option><option value="COMPLETADO">Completado</option></select>
+        <select id="f2_cerrado"><option value="">Cerrados: todos</option><option value="SI">Solo cerrados (automático)</option><option value="NO">Excluir cerrados</option></select>
+        <select id="f2_diferencia"><option value="">Diferencia de entrega: todas</option><option value="SI">Solo con diferencia relevante (&gt;5%)</option></select>
         <input id="f2_buscar" placeholder="Buscar pedido o proveedor...">
       </div>
       <div class="mini-kpis" id="f2_resumen"></div>
@@ -215,6 +218,7 @@
         <select id="f3_pedido"><option value="">Todos los pedidos</option></select>
         <select id="f3_estado"><option value="">Todos los estados de pago</option><option value="PAGADO">Pagado</option><option value="PENDIENTE POR PAGAR">Pendiente por pagar</option></select>
         <select id="f3_estadoProyecto"><option value="">Todos los estados de proyecto</option><option value="EN PRODUCCIÓN">En producción</option><option value="NAVEGANDO">Navegando</option><option value="ARRIBADO">Arribado</option></select>
+        <select id="f3_mesZarpe"><option value="">Todos los meses (fecha zarpe)</option></select>
       </div>
       <div class="mini-kpis" id="f3_resumen"></div>
       <div class="scroll"><table id="tbl_proyectos"></table></div>
@@ -276,7 +280,10 @@
     </div>
     <div class="panel">
       <h2>4.4 · Giros Financieros por pagar</h2>
-      <div class="filters"><select id="f44_mes"><option value="">Todos los meses de vencimiento</option></select></div>
+      <div class="filters">
+        <select id="f44_mes"><option value="">Todos los meses de vencimiento</option></select>
+        <select id="f44_banco"><option value="">Todos los bancos</option></select>
+      </div>
       <div class="scroll"><table id="tbl_gf_pend"></table></div>
     </div>
     <div class="panel">
@@ -298,6 +305,21 @@
       <div class="mini-kpis" id="v4_nacResumen"></div>
       <div class="scroll"><table id="tbl_nac_estimada"></table></div>
       <div class="note" id="v4_nacNota" style="margin-top:8px;"></div>
+    </div>
+    <div class="panel">
+      <h2>4.7 · Programación de pagos — consolidado para Tesorería</h2>
+      <div class="desc">Vista tipo tabla dinámica: consolida TODO lo pendiente (proyectos comex, pronósticos de pedidos, giros financieros y nacionalización) por mes o por semana, separando lo confirmado (real) de lo estimado — para armar la programación semanal de pagos.</div>
+      <div class="filters">
+        <select id="f47_vista"><option value="mes">Agrupar por mes</option><option value="semana">Agrupar por semana</option></select>
+        <select id="f47_periodo"><option value="">Todos los períodos</option></select>
+        <select id="f47_tipo_fecha"><option value="ambos">Estimados y reales</option><option value="real">Solo reales/confirmados</option><option value="estimado">Solo estimados</option></select>
+        <button id="f47_descargar" type="button" style="background:var(--navy);color:#fff;border:none;border-radius:6px;padding:8px 14px;font-size:12px;cursor:pointer;">⬇ Descargar a Excel</button>
+      </div>
+      <div class="mini-kpis" id="f47_resumen"></div>
+      <h3 style="margin-top:14px;font-size:13px;color:var(--navy);">Consolidado por período</h3>
+      <div class="scroll"><table id="tbl_pivote_periodo"></table></div>
+      <h3 style="margin-top:18px;font-size:13px;color:var(--navy);">Detalle — por proyecto y por banco</h3>
+      <div class="scroll"><table id="tbl_pivote_detalle"></table></div>
     </div>
   </div>
 
@@ -598,6 +620,9 @@ function parseCondicion(raw){
   if(!raw) return null;
   const s = normKey(raw);
   if(s.includes('ANTES DE EMBARQUE')) return {tipo:'ANTES_EMBARQUE', dias:null};
+  const mArribo = s.match(/^(\d+)\s*DIAS.*ARRIBO/) || (s.includes('ARRIBO') ? s.match(/(\d+)\s*DIAS/) : null);
+  if(mArribo && s.includes('ARRIBO')) return {tipo:'DIAS_ARRIBO', dias:parseInt(mArribo[1],10)};
+  if(s==='ARRIBO' || s==='FECHA ARRIBO' || s==='FECHA DE ARRIBO') return {tipo:'DIAS_ARRIBO', dias:0};
   const m = s.match(/^(\d+)\s*DIAS/);
   if(m) return {tipo:'DIAS_BL', dias:parseInt(m[1],10)};
   if(s.includes('FECHA BL')) return {tipo:'DIAS_BL', dias:0};
@@ -614,6 +639,7 @@ function normProf(r){
     fecha: dt(get(r,'FECHA DE PROFORMA')),
     condicion: parseCondicion(get(r,'CONDICIÓN')),
     fechaEstimadaProvision: dt(get(r,'FECHA ESTIMADA DE PROVISIÓN'))
+    // Cierre manual quitado: la detección automática (última fila con producción confirmada sin continuación) reemplaza esto.
   };
 }
 function normSP(r){
@@ -652,8 +678,11 @@ function normGF(r){
     banco: get(r,'BANCO'),
     fechaApertura: dt(get(r,'FECHA DE APERTURA')),
     fechaVencimiento: dt(get(r,'FECHA VENCIMIENTO GF / OBLIGACIÓN')),
+    // Convención vigente: SALDO USD CON TASA y ABONOS PARCIALES GF USD son ambos sobre CAPITAL
+    // (el interés ya no se mezcla ahí, se calcula aparte con el campo de abajo).
     saldoConTasa: num(get(r,'SALDO USD CON TASA')),
     abonos: num(get(r,'ABONOS PARCIALES GF USD')),
+    interesEstimado: num(get(r,'VALOR INTERES GF USD A LA FECHA DE VENCIMIENTO')),
     estado: get(r,'ESTADO DEL PAGO')
   };
 }
@@ -720,7 +749,22 @@ function buildToneladasModel(pedDetRaw, impRaw, prof, spAll){
     g.cantidadEntregadaKg += (r.cantidadEntregadaKg||0);
     g.filas.push(r);
   });
-  const grupos = Object.values(porGrupo).map(g=>({...g, saldoKg: Math.max(0, g.cantidadPedidaKg - g.cantidadEntregadaKg)}));
+  const grupos = Object.values(porGrupo).map(g=>{
+    // Cierre automático: se ordenan las filas del grupo cronológicamente (zarpe real > seguimiento cantidad final >
+    // proforma, lo que exista) y se mira la ÚLTIMA. Si esa última fila YA tiene Kg Finales de producción confirmados
+    // (cantidadEntregadaKg), significa que el proveedor terminó su ciclo de producción para esa línea y NO agregó
+    // una fila nueva con el saldo pendiente para un próximo embarque — es decir, se considera CERRADO aunque
+    // cantidadEntregadaKg < cantidadPedidaKg (evidencia de que entregó de más o de menos, no que falte por llegar).
+    const ordenadas = g.filas.slice().sort((a,b)=>{
+      const fa = a.fechaRealZarpe || a.fechaSeguimientoCantFinal || a.fechaProforma || 0;
+      const fb = b.fechaRealZarpe || b.fechaSeguimientoCantFinal || b.fechaProforma || 0;
+      return fa - fb;
+    });
+    const ultima = ordenadas[ordenadas.length-1];
+    const cerradoAutomatico = !!(ultima && ultima.cantidadEntregadaKg && ultima.cantidadEntregadaKg>0);
+    const saldoKg = Math.max(0, g.cantidadPedidaKg - g.cantidadEntregadaKg);
+    return {...g, saldoKg, cerradoAutomatico, diferenciaKg: g.cantidadEntregadaKg - g.cantidadPedidaKg};
+  });
 
   // Advertencia: grupos donde una fila posterior supera a una anterior (posible pedido adicional no capturado)
   const advertenciasSalto = grupos.filter(g=>{
@@ -739,10 +783,15 @@ function buildToneladasModel(pedDetRaw, impRaw, prof, spAll){
   grupos.forEach(g=>{
     const pedido = proformaToPedido[g.proforma];
     if(!pedido){ proformasSinPedido.add(g.proforma); return; }
-    if(!tonPorPedido[pedido]) tonPorPedido[pedido] = {pedido, pedidoKg:0, entregadoKg:0};
+    if(!tonPorPedido[pedido]) tonPorPedido[pedido] = {pedido, pedidoKg:0, entregadoKg:0, gruposCerrados:0, gruposTotal:0, diferenciaKg:0};
     tonPorPedido[pedido].pedidoKg += g.cantidadPedidaKg;
     tonPorPedido[pedido].entregadoKg += g.cantidadEntregadaKg;
+    tonPorPedido[pedido].diferenciaKg += g.diferenciaKg;
+    tonPorPedido[pedido].gruposTotal += 1;
+    if(g.cerradoAutomatico) tonPorPedido[pedido].gruposCerrados += 1;
   });
+  const pedidoCerradoAutomatico = {};
+  Object.values(tonPorPedido).forEach(t=>{ pedidoCerradoAutomatico[t.pedido] = t.gruposTotal>0 && t.gruposCerrados===t.gruposTotal; });
 
   // Entregado y Fecha Real de Zarpe por Proyecto Comex (Nombre Proyecto = M.spAll[].proyecto)
   const porProyectoComex = {};
@@ -796,7 +845,7 @@ function buildToneladasModel(pedDetRaw, impRaw, prof, spAll){
     if(r.paisOrigen) paisPorPedido[pedido] = r.paisOrigen;
   });
 
-  return { grupos, advertenciasSalto, tonPorPedido, proformasSinPedido:[...proformasSinPedido], porProyectoComex, porProyectoImport, produccionPorProforma, rows, proformaToPedido, paisPorPedido };
+  return { grupos, advertenciasSalto, tonPorPedido, proformasSinPedido:[...proformasSinPedido], porProyectoComex, porProyectoImport, produccionPorProforma, rows, proformaToPedido, paisPorPedido, pedidoCerradoAutomatico };
 }
 
 function estatusPedidoTon(pedidoKg, entregadoKg){
@@ -811,7 +860,7 @@ function estatusProyectoComex(fechaRealZarpe, fechaRealArribo){
   return 'EN PRODUCCIÓN';
 }
 
-function buildMotorPagos(prof, ton){
+function buildMotorPagos(prof, ton, nav){
   const profCondicion = {};
   prof.forEach(p=>{ if(p.proforma) profCondicion[p.proforma] = p.condicion; });
 
@@ -829,7 +878,18 @@ function buildMotorPagos(prof, ton){
     return (arr && arr.length>=MIN_MUESTRA) ? weightedMean(arr) : GLOBAL_diasBL;
   }
 
-  // Estima la fecha de pago del saldo de un proyecto comex YA CONFIRMADO (tiene Fecha BL)
+  function fechaArriboRealOEstimada(s){
+    if(s.fechaRealArribo) return {fecha:s.fechaRealArribo, esEstimada:false};
+    if(s.fechaRealZarpe) return {fecha: addDays(s.fechaRealZarpe, nav.diasNavegacion(ton.paisPorPedido[s.pedido])||45), esEstimada:true};
+    return {fecha:null, esEstimada:true};
+  }
+
+  // Estima la fecha de pago del saldo de un proyecto comex YA CONFIRMADO (tiene Fecha BL y/o Arribo)
+  function fechaBLRealOEstimada(s){
+    if(s.fechaBL) return {fecha:s.fechaBL, esEstimada:false};
+    if(s.fechaRealZarpe) return {fecha:s.fechaRealZarpe, esEstimada:true};
+    return {fecha:null, esEstimada:true};
+  }
   function fechaPagoConfirmado(s){
     const cond = s.proforma ? profCondicion[s.proforma] : null;
     if(cond && cond.tipo==='ANTES_EMBARQUE'){
@@ -837,17 +897,22 @@ function buildMotorPagos(prof, ton){
       const fecha = prod && (prod.fechaRealProduccion || prod.fechaEstimadaProduccion);
       if(fecha) return {fecha, esEstimada: !(prod.fechaRealProduccion), fuente:'condición: antes de embarque'};
     }
-    if(cond && cond.tipo==='DIAS_BL' && s.fechaBL){
-      return {fecha: addDays(s.fechaBL, cond.dias), esEstimada:false, fuente:`condición: ${cond.dias} día(s) post-BL`};
+    if(cond && cond.tipo==='DIAS_ARRIBO'){
+      const arr = fechaArriboRealOEstimada(s);
+      if(arr.fecha) return {fecha: addDays(arr.fecha, cond.dias), esEstimada:arr.esEstimada, fuente:`condición: ${cond.dias} día(s) post-arribo`};
     }
-    if(s.fechaBL){
+    const bl = fechaBLRealOEstimada(s);
+    if(cond && cond.tipo==='DIAS_BL' && bl.fecha){
+      return {fecha: addDays(bl.fecha, cond.dias), esEstimada:bl.esEstimada, fuente:`condición: ${cond.dias} día(s) post-BL${bl.esEstimada?' (BL estimada con zarpe)':''}`};
+    }
+    if(bl.fecha){
       const d = diasBLProveedor(s.proveedor);
-      return {fecha: addDays(s.fechaBL, d==null?15:d), esEstimada:true, fuente:'estadística proveedor (sin condición registrada)'};
+      return {fecha: addDays(bl.fecha, d==null?15:d), esEstimada:true, fuente:`estadística proveedor (sin condición registrada)${bl.esEstimada?' + BL estimada con zarpe':''}`};
     }
     return null;
   }
 
-  return { profCondicion, diasPorProveedor, GLOBAL_diasBL, diasBLProveedor, fechaPagoConfirmado };
+  return { profCondicion, diasPorProveedor, GLOBAL_diasBL, diasBLProveedor, fechaPagoConfirmado, fechaArriboRealOEstimada, fechaBLRealOEstimada };
 }
 
 function dedupSP(sp){
@@ -941,11 +1006,15 @@ function buildModel({profRaw, spRaw, pgRaw, gfRaw, nacRaw, pedDetRaw, impRaw}){
     g.mesPedido = monthKey(g.fechaPedido);
     g.saldoSinFacturar = g.valorPedido - g.valorFacturaBruto;
     g.alDia = g.saldoPendienteProyectos<=0.5 ? 'AL DÍA' : 'CON SALDOS PENDIENTES';
+    g.cerradoAutomatico = ton.pedidoCerradoAutomatico[g.pedido] || false;
+    g.cerrado = g.cerradoAutomatico;
     const t = ton.tonPorPedido[g.pedido];
     g.pedidoKg = t ? t.pedidoKg : null;
     g.entregadoKg = t ? t.entregadoKg : null;
     g.saldoKg = t ? Math.max(0, t.pedidoKg - t.entregadoKg) : null;
+    g.diferenciaEntregaKg = t ? t.diferenciaKg : null; // + = entregó de más, - = entregó de menos (informativo, no bloquea el cierre)
     g.estatusPedido = t ? estatusPedidoTon(t.pedidoKg, t.entregadoKg) : 'SIN DATO DE TONELADAS';
+    if(g.cerrado && g.estatusPedido==='CON ENTREGA PARCIAL') g.estatusPedido = 'COMPLETADO'; // cerrado automático/manual prevalece sobre "parcial" aunque falte Kg
     return g;
   });
 
@@ -1046,7 +1115,7 @@ function buildModel({profRaw, spRaw, pgRaw, gfRaw, nacRaw, pedDetRaw, impRaw}){
   }
 
   const HOY = new Date();
-  const grupoA = pedidos.filter(p=>p.nProyectosParciales===0).map(p=>{
+  const grupoA = pedidos.filter(p=>p.nProyectosParciales===0 && !p.cerrado).map(p=>{
     if(!p.fechaPedido){
       return {...p, base:'sin_parcial', sinFechaBase:true,
         condicionUsada:'Sin fecha de proforma/pedido — por diligenciar', parciales:[], saldoProyectado: p.valorPedido-p.anticipoPagado};
@@ -1081,7 +1150,7 @@ function buildModel({profRaw, spRaw, pgRaw, gfRaw, nacRaw, pedDetRaw, impRaw}){
 
   // Grupo B: pedidos con parciales incompletos — se pronostican TODOS los parciales que faltan
   // (no solo el inmediato siguiente), igual que en Grupo A, encadenando desde el último BL real.
-  const grupoB = pedidos.filter(p=>p.nProyectosParciales>0 && p.saldoSinFacturar>1).map(p=>{
+  const grupoB = pedidos.filter(p=>p.nProyectosParciales>0 && p.saldoSinFacturar>1 && !p.cerrado).map(p=>{
     const nFaltan = Math.max(0, numParcialesPorCapacidad(p.proveedor, p.valorPedido) - p.nProyectosParciales);
     const condRep = condicionRepresentativaPedido(p.pedido);
     const valorPorParcial = nFaltan>0 ? p.saldoSinFacturar/nFaltan : p.saldoSinFacturar;
@@ -1115,16 +1184,23 @@ function buildModel({profRaw, spRaw, pgRaw, gfRaw, nacRaw, pedDetRaw, impRaw}){
   });
 
   const gfAbiertos = gf.filter(g=>g.abiertoReal);
-  const motorPagos = buildMotorPagos(prof, ton);
+  const motorPagos = buildMotorPagos(prof, ton, nav);
   // Se escribe fechaUsada/fechaEsEstimada DIRECTO sobre las filas de spAll (no en un array aparte)
   // para que cualquier vista que lea M.spAll (como la tabla de Proyectos Parciales) también la vea.
   spAll.forEach(s=>{
+    const arr = motorPagos.fechaArriboRealOEstimada(s);
+    s.fechaArriboMostrar = arr.fecha; s.fechaArriboEsEstimada = arr.esEstimada;
     if(s.estadoCalculado!=='PENDIENTE POR PAGAR') return;
+    const est = motorPagos.fechaPagoConfirmado(s);
+    // Fecha Pago Estimada: SIEMPRE el cálculo propio del modelo (condición real de ESE comex, ancla BL o Arribo según corresponda)
+    if(est){ s.fechaPagoEstimadaCalc = est.fecha; s.fechaPagoEstimadaEsEstimada = est.esEstimada; s.fuentePagoEstimada = est.fuente; }
+    else { s.fechaPagoEstimadaCalc = null; s.fuentePagoEstimada = 'sin BL/arribo aún'; }
+    // Fecha Real a Pagar: el dato que el equipo ya diligenció en Seguimiento de Proyectos (si existe)
+    s.fechaRealAPagar = s.fechaEstPago || null;
     if(s.fechaEstPago){
       s.fechaUsada = s.fechaEstPago; s.fechaEsEstimada = false; s.fuentePago = 'sheet';
       return;
     }
-    const est = motorPagos.fechaPagoConfirmado(s);
     if(est){
       s.fechaUsada = est.fecha; s.fechaEsEstimada = est.esEstimada; s.fuentePago = est.fuente;
     } else {
@@ -1219,10 +1295,12 @@ function buildModel({profRaw, spRaw, pgRaw, gfRaw, nacRaw, pedDetRaw, impRaw}){
 
 </script>
 <script>
-const fmt = n => (n<0?'-$':'$') + Math.round(Math.abs(n)).toLocaleString('en-US');
-const fmtTon = v => v===null||v===undefined ? '—' : (v/1000).toLocaleString('en-US', {minimumFractionDigits:1, maximumFractionDigits:1}) + ' Ton';
+const MESES_ABR = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
+const fmt = n => (n<0?'-$':'$') + Math.abs(n).toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2});
+const fmtTon = v => v===null||v===undefined ? '—' : (v/1000).toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2}) + ' Ton';
 const fmtTonAxis = v => (v/1000)>=1 || (v/1000)<=-1 ? (v/1000).toFixed(1)+'t' : (v?Math.round(v)+'kg':'0');
-const fmtDate = d => d ? new Date(d).toISOString().slice(0,10) : '—';
+const fmtDate = d => { if(!d) return '—'; const dd=new Date(d); return String(dd.getDate()).padStart(2,'0')+'-'+MESES_ABR[dd.getMonth()]+'-'+String(dd.getFullYear()).slice(-2); };
+const fmtMesLabel = mk => { if(!mk) return ''; const [y,m]=mk.split('-'); return MESES_ABR[parseInt(m,10)-1]+'-'+y.slice(-2); };
 const COLORS = {navy:'#0E3552', navyDeep:'#081F30', steel:'#3D6A88', slate:'#7488A0', mist:'#C7D2DA',
   gold:'#A9852E', amber:'#C9862E', red:'#B23A2E', green:'#2E7D5B'};
 const CHART_PALETTE = [COLORS.navy, COLORS.gold, COLORS.steel, COLORS.slate, COLORS.navyDeep, COLORS.mist];
@@ -1386,6 +1464,9 @@ function renderDiag(){
   if(t.advertenciasSalto.length) advs.push(`${t.advertenciasSalto.length} grupo(s) Proforma×Producto tienen una fila con cantidad mayor a una anterior (posible pedido adicional bajo la misma proforma, no capturado en el total): ${t.advertenciasSalto.slice(0,10).join(' | ')}${t.advertenciasSalto.length>10?'…':''}`);
   const incons = Object.values(t.porProyectoImport).filter(p=>p.inconsistentePeso).map(p=>p.proyecto);
   if(incons.length) advs.push(`${incons.length} proyecto(s) comex tienen 2 o más contenedores con el MISMO peso bruto exacto en Control de Importaciones (podría ser un total copiado sin actualizar por contenedor, o coincidencia real de cargas similares — se sumó igual, pero conviene validar contra el BL): ${incons.slice(0,10).join(', ')}${incons.length>10?'…':''}`);
+  const cerradosAuto = MODEL.pedidos.filter(p=>p.cerradoAutomatico && Math.abs(p.diferenciaEntregaKg||0)>1);
+  if(cerradosAuto.length) advs.push(`${cerradosAuto.length} pedido(s) se cerraron automáticamente (producción confirmada en la última fila sin continuación) con diferencia entre lo pedido y lo entregado — revisar si es un tema de calidad/cantidad aceptada: ` +
+    cerradosAuto.slice(0,10).map(p=>`${p.pedido} (${p.diferenciaEntregaKg>0?'+':''}${fmtTon(p.diferenciaEntregaKg)})`).join(', ') + (cerradosAuto.length>10?'…':''));
   const diagPanel = document.getElementById('tbl_diag').closest('.panel');
   let advBox = document.getElementById('adv_toneladas');
   if(!advBox){ advBox = document.createElement('div'); advBox.id='adv_toneladas'; advBox.className='note'; diagPanel.appendChild(advBox); }
@@ -1393,6 +1474,20 @@ function renderDiag(){
 }
 
 // ================= KPIs =================
+function getISOWeek(d){
+  const date = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+  const dayNum = date.getUTCDay() || 7;
+  date.setUTCDate(date.getUTCDate() + 4 - dayNum);
+  const yearStart = new Date(Date.UTC(date.getUTCFullYear(),0,1));
+  const weekNo = Math.ceil((((date - yearStart) / 86400000) + 1)/7);
+  const key = date.getUTCFullYear()+'-W'+String(weekNo).padStart(2,'0');
+  // Lunes de esa semana ISO (para mostrar como fecha de referencia)
+  const monday = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+  const dn = monday.getUTCDay() || 7;
+  monday.setUTCDate(monday.getUTCDate() - dn + 1);
+  return { key, monday };
+}
+
 function renderKPIs(){
   const M = MODEL;
 
@@ -1501,7 +1596,7 @@ function renderView1(){
   const selDesde = document.getElementById('f1_desde');
   const selHasta = document.getElementById('f1_hasta');
   if(!selDesde.options.length){
-    todosMeses.forEach(m=>{ selDesde.innerHTML+=`<option value="${m}">${m}</option>`; selHasta.innerHTML+=`<option value="${m}">${m}</option>`; });
+    todosMeses.forEach(m=>{ selDesde.innerHTML+=`<option value="${m}">${fmtMesLabel(m)}</option>`; selHasta.innerHTML+=`<option value="${m}">${fmtMesLabel(m)}</option>`; });
     // por defecto: últimos 12 meses
     const last12start = todosMeses[Math.max(0, todosMeses.length-12)];
     selDesde.value = last12start;
@@ -1605,16 +1700,21 @@ function aggregateByMonth(rows){
 function renderView2(){
   const M = MODEL;
   const meses = [...new Set(M.pedidos.map(p=>p.mesPedido).filter(Boolean))].sort();
-  document.getElementById('f2_mes').innerHTML = '<option value="">Todos los meses</option>' + meses.map(m=>`<option value="${m}">${m}</option>`).join('');
+  document.getElementById('f2_mes').innerHTML = '<option value="">Todos los meses</option>' + meses.map(m=>`<option value="${m}">${fmtMesLabel(m)}</option>`).join('');
   function go(){
     const modo = document.getElementById('f2_agrupa').value;
     const fm = document.getElementById('f2_mes').value;
     const fe = document.getElementById('f2_estado').value;
     const feTon = document.getElementById('f2_estadoTon').value;
+    const fc = document.getElementById('f2_cerrado').value;
+    const fd = document.getElementById('f2_diferencia').value;
     const q = document.getElementById('f2_buscar').value.toLowerCase();
     let base = M.pedidos.filter(p => (!fm||p.mesPedido===fm) && (!fe||p.alDia===fe) && (!feTon||p.estatusPedido===feTon) &&
+      (!fc || (fc==='SI'?p.cerrado:!p.cerrado)) &&
+      (!fd || (fd==='SI' && p.pedidoKg && Math.abs((p.diferenciaEntregaKg||0)/p.pedidoKg)>0.05)) &&
       (!q || (p.pedido||'').toLowerCase().includes(q) || (p.proveedor||'').toLowerCase().includes(q)));
     const nTotal=base.length, nAlDia=base.filter(p=>p.alDia==='AL DÍA').length;
+    const nCerrados = base.filter(p=>p.cerrado).length;
     const tonPed = base.reduce((a,p)=>a+(p.pedidoKg||0),0);
     const tonEnt = base.reduce((a,p)=>a+(p.entregadoKg||0),0);
     document.getElementById('f2_resumen').innerHTML = `
@@ -1625,12 +1725,13 @@ function renderView2(){
       <div class="mini-kpi bad"><span>Saldo pendiente total</span><b>${fmt(base.reduce((a,p)=>a+p.saldoPendienteProyectos,0))}</b></div>
       <div class="mini-kpi"><span>Ton. pedidas (vista)</span><b>${fmtTon(tonPed)}</b></div>
       <div class="mini-kpi"><span>Ton. entregadas (vista)</span><b>${fmtTon(tonEnt)}</b></div>
+      <div class="mini-kpi warn"><span>Pedidos cerrados</span><b>${nCerrados}</b></div>
     `;
     let rows = modo==='mes' ? aggregateByMonth(base) : base.map(p=>({label:p.pedido, sub:p.proveedor, ...p}));
     let html = `<tr><th>${modo==='mes'?'Mes':'Pedido'}</th><th># Prof.</th><th>Valor Pedido</th><th>Anticipo Pagado</th>
       <th># Proy.Parc.</th><th>Facturas (bruto)</th><th>Reclasific.</th><th>Notas Créd.</th><th>Anticipo Reconoc.</th>
       <th>Saldo Directo</th><th>Saldo Financ.</th><th>Saldo Pendiente</th><th>Saldo Sin Facturar</th>
-      <th>Ton. Pedidas</th><th>Ton. Entregadas</th><th>Ton. Saldo</th><th>Estado $</th><th>Estado Ton.</th></tr>`;
+      <th>Ton. Pedidas</th><th>Ton. Entregadas</th><th>Ton. Saldo</th><th>Estado $</th><th>Estado Ton.</th><th>Cerrado</th></tr>`;
     rows.forEach(r=>{
       const bad = r.alDia==='CON SALDOS PENDIENTES';
       const estTon = r.estatusPedido || 'SIN DATO';
@@ -1645,11 +1746,12 @@ function renderView2(){
         <td style="${r.saldoSinFacturar<0?'color:var(--red);':''}">${fmt(r.saldoSinFacturar)}</td>
         <td>${fmtTon(r.pedidoKg)}</td><td>${fmtTon(r.entregadoKg)}</td><td>${fmtTon(r.saldoKg)}</td>
         <td><span class="pill ${bad?'bad':'ok'}">${r.alDia}</span></td>
-        <td><span class="pill ${pillTon}">${estTon}</span></td></tr>`;
+        <td><span class="pill ${pillTon}">${estTon}</span></td>
+        <td>${modo==='mes' ? '—' : (r.cerrado? `<span class="pill ok">Cerrado (auto)</span>${r.diferenciaEntregaKg&&Math.abs(r.diferenciaEntregaKg)>1?`<br><span style="font-size:9px;color:${r.diferenciaEntregaKg>0?'var(--green)':'var(--red)'};">${r.diferenciaEntregaKg>0?'entregó +':'entregó '}${fmtTon(Math.abs(r.diferenciaEntregaKg))}</span>`:''}` : '')}</td></tr>`;
     });
     document.getElementById('tbl_pedidos').innerHTML = html;
   }
-  ['f2_agrupa','f2_mes','f2_estado','f2_estadoTon'].forEach(id=>document.getElementById(id).onchange=go);
+  ['f2_agrupa','f2_mes','f2_estado','f2_estadoTon','f2_cerrado','f2_diferencia'].forEach(id=>document.getElementById(id).onchange=go);
   document.getElementById('f2_buscar').oninput = go;
   go();
 }
@@ -1659,14 +1761,17 @@ function renderView3(){
   const M = MODEL;
   const meses = [...new Set(M.spAll.map(s=>monthKey(s.fechaBL)).filter(Boolean))].sort();
   const pedidosSet = [...new Set(M.spAll.map(s=>s.pedido))].sort();
-  document.getElementById('f3_mes').innerHTML = '<option value="">Todos los meses (fecha BL)</option>' + meses.map(m=>`<option value="${m}">${m}</option>`).join('');
+  document.getElementById('f3_mes').innerHTML = '<option value="">Todos los meses (fecha BL)</option>' + meses.map(m=>`<option value="${m}">${fmtMesLabel(m)}</option>`).join('');
   document.getElementById('f3_pedido').innerHTML = '<option value="">Todos los pedidos</option>' + pedidosSet.map(p=>`<option value="${p}">${p}</option>`).join('');
+  const mesesZarpe = [...new Set(M.spAll.map(s=>monthKey(s.fechaRealZarpe)).filter(Boolean))].sort();
+  document.getElementById('f3_mesZarpe').innerHTML = '<option value="">Todos los meses (fecha zarpe)</option>' + mesesZarpe.map(m=>`<option value="${m}">${fmtMesLabel(m)}</option>`).join('');
   function go(){
     const fm = document.getElementById('f3_mes').value;
     const fp = document.getElementById('f3_pedido').value;
     const fe = document.getElementById('f3_estado').value;
     const feP = document.getElementById('f3_estadoProyecto').value;
-    let rows = M.spAll.filter(s => (!fm||monthKey(s.fechaBL)===fm) && (!fp||s.pedido===fp) && (!fe||s.estadoCalculado===fe) && (!feP||s.estatusProyecto===feP));
+    const fmZ = document.getElementById('f3_mesZarpe').value;
+    let rows = M.spAll.filter(s => (!fm||monthKey(s.fechaBL)===fm) && (!fp||s.pedido===fp) && (!fe||s.estadoCalculado===fe) && (!feP||s.estatusProyecto===feP) && (!fmZ||monthKey(s.fechaRealZarpe)===fmZ));
 
     const pendientesEnVista = rows.filter(s=>s.estadoCalculado==='PENDIENTE POR PAGAR');
     const totalPendiente = pendientesEnVista.reduce((a,s)=>a+s.saldoCalculado,0);
@@ -1698,7 +1803,7 @@ function renderView3(){
     });
     document.getElementById('tbl_proyectos').innerHTML = html;
   }
-  ['f3_mes','f3_pedido','f3_estado','f3_estadoProyecto'].forEach(id=>document.getElementById(id).onchange=go);
+  ['f3_mes','f3_pedido','f3_estado','f3_estadoProyecto','f3_mesZarpe'].forEach(id=>document.getElementById(id).onchange=go);
   go();
 }
 
@@ -1785,7 +1890,7 @@ function renderView4(){
     const sel = document.getElementById(selectId);
     if(sel.dataset.poblado) return;
     const metodos = [...new Set(fechas.filter(Boolean).map(monthKey))].sort();
-    metodos.forEach(m=> sel.innerHTML += `<option value="${m}">${m}</option>`);
+    metodos.forEach(m=> sel.innerHTML += `<option value="${m}">${fmtMesLabel(m)}</option>`);
     sel.dataset.poblado = '1';
   }
 
@@ -1802,12 +1907,16 @@ function renderView4(){
     const fmA = document.getElementById('f41_mesArribo').value;
     const pendComex = pendComexAll.filter(s=>(!fm||monthKey(s.fechaUsada)===fm) && (!fmZ||monthKey(s.fechaRealZarpe)===fmZ) && (!fmA||monthKey(s.fechaArriboRealOEstimada)===fmA))
       .sort((a,b)=>(a.fechaUsada-b.fechaUsada));
-    let html1 = '<tr><th>Proyecto</th><th>Pedido</th><th>Proveedor</th><th>Factura Neta</th><th>Pagado (Saldo)</th><th>Saldo Calculado</th><th>Fecha Pago</th></tr>';
+    let html1 = '<tr><th>Proyecto</th><th>Pedido</th><th>Proveedor</th><th>Factura Neta</th><th>Pagado (Saldo)</th><th>Saldo Calculado</th>'+
+      '<th>Fecha BL</th><th>Fecha Arribo</th><th>Fecha Pago Estimada</th><th>Fecha Real a Pagar</th></tr>';
     pendComex.forEach(s=> html1 += `<tr class="row-bad"><td class="txt">${s.proyecto}</td><td class="txt">${s.pedido}</td><td class="txt">${s.proveedor}</td>
         <td>${fmt(s.netoFactura)}</td><td>${fmt(s.pagadoSaldo)}</td><td>${fmt(s.saldoCalculado)}</td>
-        <td>${fmtDate(s.fechaUsada)}${s.fechaEsEstimada?' <span class="pill warn">estimada</span>':''}</td></tr>`);
+        <td>${s.fechaBL?fmtDate(s.fechaBL):(s.fechaRealZarpe? fmtDate(s.fechaRealZarpe)+' <span class="pill warn">estimada (con zarpe)</span>' : '—')}</td>
+        <td>${fmtDate(s.fechaArriboRealOEstimada)}${s.fechaArriboEsEstimada?' <span class="pill warn">estimada</span>':''}</td>
+        <td>${s.fechaPagoEstimadaCalc?fmtDate(s.fechaPagoEstimadaCalc):'—'}${s.fechaPagoEstimadaCalc&&s.fechaPagoEstimadaEsEstimada?' <span class="pill warn">estimada</span>':''}<br><span style="font-size:9px;color:var(--ink-soft);">${s.fuentePagoEstimada||''}</span></td>
+        <td>${s.fechaRealAPagar?fmtDate(s.fechaRealAPagar):'<span class="pill warn">por diligenciar</span>'}</td></tr>`);
     const totalComex = pendComex.reduce((a,s)=>a+s.saldoCalculado,0);
-    html1 += totalRow(7, 'TOTAL SALDO PROYECTOS COMEX PENDIENTE', totalComex);
+    html1 += totalRow(10, 'TOTAL SALDO PROYECTOS COMEX PENDIENTE', totalComex);
     document.getElementById('tbl_pend_comex').innerHTML = html1;
     return totalComex;
   }
@@ -1886,18 +1995,27 @@ function renderView4(){
 
   // 4.4 GF pendientes, con filtro de mes de vencimiento
   poblarMeses('f44_mes', M.gfAbiertos.map(g=>g.fechaVencimiento));
+  (function poblarBancos(){
+    const sel = document.getElementById('f44_banco');
+    if(sel.dataset.poblado) return;
+    [...new Set(M.gfAbiertos.map(g=>g.banco).filter(Boolean))].sort().forEach(b=> sel.innerHTML += `<option value="${b}">${b}</option>`);
+    sel.dataset.poblado = '1';
+  })();
   function go44(){
     const fm = document.getElementById('f44_mes').value;
-    const gfF = M.gfAbiertos.filter(g=>!fm||monthKey(g.fechaVencimiento)===fm).sort((a,b)=>a.fechaVencimiento-b.fechaVencimiento);
-    let html4 = '<tr><th>Pedido</th><th>Proyecto Comex</th><th>Banco</th><th>Vencimiento</th><th>Saldo USD</th></tr>';
+    const fb = document.getElementById('f44_banco').value;
+    const gfF = M.gfAbiertos.filter(g=>(!fm||monthKey(g.fechaVencimiento)===fm) && (!fb||g.banco===fb)).sort((a,b)=>a.fechaVencimiento-b.fechaVencimiento);
+    let html4 = '<tr><th>Pedido</th><th>Proyecto Comex</th><th>Banco</th><th>Vencimiento</th><th>Saldo Capital USD</th><th>Interés Estimado USD</th></tr>';
     gfF.forEach(g=>
-      html4 += `<tr class="row-bad"><td class="txt">${g.pedido}</td><td class="txt">${g.proyectoComex}</td><td class="txt">${g.banco}</td><td>${fmtDate(g.fechaVencimiento)}</td><td>${fmt(g.saldoReal)}</td></tr>`);
+      html4 += `<tr class="row-bad"><td class="txt">${g.pedido}</td><td class="txt">${g.proyectoComex}</td><td class="txt">${g.banco}</td><td>${fmtDate(g.fechaVencimiento)}</td><td>${fmt(g.saldoReal)}</td><td>${fmt(g.interesEstimado||0)}</td></tr>`);
     const totalGF = gfF.reduce((a,g)=>a+g.saldoReal,0);
-    html4 += totalRow(5, 'TOTAL GIROS FINANCIEROS POR PAGAR', totalGF);
+    const totalInt = gfF.reduce((a,g)=>a+(g.interesEstimado||0),0);
+    html4 += `<tr style="background:var(--paper);font-weight:700;"><td class="txt" colspan="4">TOTAL GIROS FINANCIEROS POR PAGAR (CAPITAL + INTERÉS ESTIMADO)</td><td>${fmt(totalGF)}</td><td>${fmt(totalInt)}</td></tr>`;
     document.getElementById('tbl_gf_pend').innerHTML = html4;
     return totalGF;
   }
   document.getElementById('f44_mes').onchange = go44;
+  document.getElementById('f44_banco').onchange = go44;
   const totalGF = go44();
   renderGirosPorBanco('c_gfPorBanco_v4', 'tbl_gfPorBanco_v4', M.gfAbiertos);
 
@@ -1957,9 +2075,127 @@ function renderView4(){
   document.getElementById('v4_horizonte').onchange = renderView4;
   document.getElementById('v4_arancel').oninput = renderView4;
   document.getElementById('v4_iva').oninput = renderView4;
+
+  renderProgramacionPagos(M, nacEst);
 }
 
-// ================= VISTA 5 =================
+// ================= 4.7 PROGRAMACIÓN DE PAGOS (TABLA DINÁMICA) =================
+function renderProgramacionPagos(M, nacEst){
+  // Construye la lista unificada de obligaciones: Comex confirmado, Grupo A, Grupo B, Giros Financieros, Nacionalización.
+  const items = [];
+  M.spAll.filter(s=>s.estadoCalculado==='PENDIENTE POR PAGAR').forEach(s=>{
+    const real = s.fechaRealAPagar;
+    const fecha = real || s.fechaPagoEstimadaCalc || s.fechaUsada;
+    if(!fecha) return;
+    items.push({tipo:'Proyecto Comex', referencia:s.proyecto, pedido:s.pedido, monto:s.saldoCalculado, fecha, esEstimado: !real});
+  });
+  M.grupoA.forEach(p=>p.parciales.forEach(par=>{
+    items.push({tipo:'Pronóstico: sin parcial', referencia:`${p.pedido} (parcial ${par.n}/${par.deN})`, pedido:p.pedido, monto:par.valorEstimado, fecha:par.fechaPagoEstimada, esEstimado:true});
+  }));
+  M.grupoB.forEach(p=>p.parciales.forEach(par=>{
+    items.push({tipo:'Pronóstico: parcial incompleto', referencia:`${p.pedido} (parcial ${par.n}/${par.deN})`, pedido:p.pedido, monto:par.valorEstimado, fecha:par.fechaPagoEstimada, esEstimado:true});
+  }));
+  M.gfAbiertos.forEach(g=>{
+    items.push({tipo:'Giro Financiero', referencia:g.banco||'Sin banco', pedido:g.pedido, monto:g.saldoReal, fecha:g.fechaVencimiento, esEstimado:false, interes:g.interesEstimado||0});
+  });
+  nacEst.filasMes.forEach(f=>{
+    items.push({tipo:'Nacionalización', referencia:`Consolidado ${f.mesArribo}`, pedido:'—', monto:f.valorNac, fecha:f.fechaPago, esEstimado:true});
+  });
+  items.forEach(it=>{ const w = getISOWeek(it.fecha); it.mesKey = monthKey(it.fecha); it.semanaKey = w.key; it.semanaMonday = w.monday; });
+
+  const selVista = document.getElementById('f47_vista');
+  const selPeriodo = document.getElementById('f47_periodo');
+  const selTipoFecha = document.getElementById('f47_tipo_fecha');
+
+  function poblarPeriodos(){
+    const usaSemana = selVista.value==='semana';
+    const keys = [...new Set(items.map(it=>usaSemana?it.semanaKey:it.mesKey))].sort();
+    const labelFn = k => usaSemana ? (items.find(it=>it.semanaKey===k) ? fmtDate(items.find(it=>it.semanaKey===k).semanaMonday)+' (semana)' : k) : fmtMesLabel(k);
+    selPeriodo.innerHTML = '<option value="">Todos los períodos</option>' + keys.map(k=>`<option value="${k}">${labelFn(k)}</option>`).join('');
+  }
+  poblarPeriodos();
+  selVista.onchange = ()=>{ poblarPeriodos(); go(); };
+  selPeriodo.onchange = go;
+  selTipoFecha.onchange = go;
+
+  let filtrados = [];
+  function go(){
+    const usaSemana = selVista.value==='semana';
+    const periodo = selPeriodo.value;
+    const tipoFecha = selTipoFecha.value;
+    filtrados = items.filter(it=>{
+      const keyMatch = !periodo || (usaSemana? it.semanaKey===periodo : it.mesKey===periodo);
+      const tipoMatch = tipoFecha==='ambos' || (tipoFecha==='real' && !it.esEstimado) || (tipoFecha==='estimado' && it.esEstimado);
+      return keyMatch && tipoMatch;
+    });
+
+    const totalEst = filtrados.filter(it=>it.esEstimado).reduce((a,it)=>a+it.monto,0);
+    const totalReal = filtrados.filter(it=>!it.esEstimado).reduce((a,it)=>a+it.monto,0);
+    const totalComex = filtrados.filter(it=>it.tipo==='Proyecto Comex').reduce((a,it)=>a+it.monto,0);
+    const totalProyectado = filtrados.filter(it=>it.tipo.startsWith('Pronóstico')||it.tipo==='Nacionalización').reduce((a,it)=>a+it.monto,0);
+    const totalGF = filtrados.filter(it=>it.tipo==='Giro Financiero').reduce((a,it)=>a+it.monto,0);
+    document.getElementById('f47_resumen').innerHTML = `
+      <div class="mini-kpi"><span>Obligaciones en la vista</span><b>${filtrados.length}</b></div>
+      <div class="mini-kpi bad"><span>Total Real/Confirmado</span><b>${fmt(totalReal)}</b></div>
+      <div class="mini-kpi warn"><span>Total Estimado</span><b>${fmt(totalEst)}</b></div>
+      <div class="mini-kpi"><span>Proyectos Comex</span><b>${fmt(totalComex)}</b></div>
+      <div class="mini-kpi"><span>Pronósticos + Nacionalización</span><b>${fmt(totalProyectado)}</b></div>
+      <div class="mini-kpi"><span>Giros Financieros</span><b>${fmt(totalGF)}</b></div>
+    `;
+
+    // Tabla consolidada por período (siempre muestra TODOS los períodos, aunque se haya filtrado a uno)
+    const usaSemanaP = selVista.value==='semana';
+    const base = items.filter(it=>{
+      const tipoMatch = tipoFecha==='ambos' || (tipoFecha==='real' && !it.esEstimado) || (tipoFecha==='estimado' && it.esEstimado);
+      return tipoMatch;
+    });
+    const porPeriodo = {};
+    base.forEach(it=>{
+      const k = usaSemanaP ? it.semanaKey : it.mesKey;
+      if(!porPeriodo[k]) porPeriodo[k] = {key:k, monday:it.semanaMonday, estimado:0, real:0, comex:0, proyectado:0, gf:0, n:0};
+      const g = porPeriodo[k];
+      g.n++;
+      if(it.esEstimado) g.estimado += it.monto; else g.real += it.monto;
+      if(it.tipo==='Proyecto Comex') g.comex += it.monto;
+      else if(it.tipo==='Giro Financiero') g.gf += it.monto;
+      else g.proyectado += it.monto;
+    });
+    const filasP = Object.values(porPeriodo).sort((a,b)=> usaSemanaP ? a.key.localeCompare(b.key) : a.key.localeCompare(b.key));
+    let htmlP = `<tr><th>${usaSemanaP?'Semana (lunes)':'Mes'}</th><th>Total Estimado</th><th>Total Real</th><th>Proyectos Comex</th><th>Pronósticos + Nac.</th><th>Giros Financieros</th><th># Obligaciones</th></tr>`;
+    filasP.forEach(g=>{
+      const label = usaSemanaP ? fmtDate(g.monday) : fmtMesLabel(g.key);
+      const activo = (usaSemanaP? g.key===selPeriodo.value : g.key===selPeriodo.value);
+      htmlP += `<tr style="${activo?'background:#EEF3F7;font-weight:700;':''}"><td class="txt">${label}</td><td>${fmt(g.estimado)}</td><td>${fmt(g.real)}</td><td>${fmt(g.comex)}</td><td>${fmt(g.proyectado)}</td><td>${fmt(g.gf)}</td><td>${g.n}</td></tr>`;
+    });
+    document.getElementById('tbl_pivote_periodo').innerHTML = htmlP;
+
+    // Tabla de detalle (itemizada), respetando el filtro de período seleccionado
+    let htmlD = '<tr><th>Fecha</th><th>Tipo</th><th>Referencia (Proyecto/Banco)</th><th>Pedido</th><th>Monto</th><th>Interés Est.</th><th>Origen</th></tr>';
+    filtrados.sort((a,b)=>a.fecha-b.fecha).forEach(it=>{
+      htmlD += `<tr class="${it.esEstimado?'':'row-bad'}"><td>${fmtDate(it.fecha)}</td><td class="txt">${it.tipo}</td><td class="txt">${it.referencia}</td><td class="txt">${it.pedido}</td>
+        <td>${fmt(it.monto)}</td><td>${it.interes?fmt(it.interes):'—'}</td><td>${it.esEstimado?'<span class="pill warn">Estimado</span>':'<span class="pill ok">Real/Confirmado</span>'}</td></tr>`;
+    });
+    const totalDetalle = filtrados.reduce((a,it)=>a+it.monto,0);
+    htmlD += totalRow(7, 'TOTAL DETALLE (filtro actual)', totalDetalle);
+    document.getElementById('tbl_pivote_detalle').innerHTML = htmlD;
+  }
+  go();
+
+  document.getElementById('f47_descargar').onclick = function(){
+    const wsData = [['Fecha','Tipo','Referencia','Pedido','Monto USD','Interés Estimado USD','Origen']];
+    filtrados.sort((a,b)=>a.fecha-b.fecha).forEach(it=>{
+      wsData.push([fmtDate(it.fecha), it.tipo, it.referencia, it.pedido, Number(it.monto.toFixed(2)), it.interes?Number(it.interes.toFixed(2)):0, it.esEstimado?'Estimado':'Real/Confirmado']);
+    });
+    const ws = XLSX.utils.aoa_to_sheet(wsData);
+    ws['!cols'] = [{wch:12},{wch:24},{wch:28},{wch:16},{wch:14},{wch:16},{wch:16}];
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Programación de Pagos');
+    const hoy = new Date();
+    XLSX.writeFile(wb, `Programacion_Pagos_${fmtDate(hoy)}.xlsx`);
+  };
+}
+
+
 function renderView5(){
   const M = MODEL;
   const meses = Object.keys(M.nacMes).sort();
@@ -1976,7 +2212,7 @@ function renderView5(){
     ]},
     options:{responsive:true, plugins:{legend:{position:'bottom'}}, scales:{y:{ticks:{callback:v=>'$'+(v/1e6).toFixed(1)+'M'}}}}
   });
-  document.getElementById('f5_mes').innerHTML = '<option value="">Todos los meses</option>' + meses.map(m=>`<option value="${m}">${m}</option>`).join('');
+  document.getElementById('f5_mes').innerHTML = '<option value="">Todos los meses</option>' + meses.map(m=>`<option value="${m}">${fmtMesLabel(m)}</option>`).join('');
   function go(){
     const fm = document.getElementById('f5_mes').value;
     let rows = M.nac.filter(n => !fm || monthKey(n.fechaPago||n.fechaLevante)===fm);
@@ -1997,7 +2233,7 @@ function renderView6(){
   const M = MODEL;
   const meses = [...new Set(M.pedidos.map(p=>p.mesPedido).filter(Boolean))].sort();
   if(!document.getElementById('f6_mes').options.length > 1){
-    document.getElementById('f6_mes').innerHTML = '<option value="">Todos los meses de pedido</option>' + meses.map(m=>`<option value="${m}">${m}</option>`).join('');
+    document.getElementById('f6_mes').innerHTML = '<option value="">Todos los meses de pedido</option>' + meses.map(m=>`<option value="${m}">${fmtMesLabel(m)}</option>`).join('');
   }
   const proyectosPorPedido = {};
   M.spAll.forEach(s=>{
