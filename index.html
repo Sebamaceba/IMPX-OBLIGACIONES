@@ -237,7 +237,11 @@
     </div>
     <div class="panel">
       <h2>4.1 · Proyectos Comex con saldo pendiente</h2>
-      <div class="filters"><select id="f41_mes"><option value="">Todos los meses de pago</option></select></div>
+      <div class="filters">
+        <select id="f41_mes"><option value="">Todos los meses de pago</option></select>
+        <select id="f41_mesZarpe"><option value="">Todos los meses de zarpe</option></select>
+        <select id="f41_mesArribo"><option value="">Todos los meses de arribo</option></select>
+      </div>
       <div class="scroll"><table id="tbl_pend_comex"></table></div>
     </div>
     <div class="panel">
@@ -249,6 +253,8 @@
           <option value="pedido">Ordenar por pedido</option>
         </select>
         <select id="f42_mes"><option value="">Todos los meses de pago</option></select>
+        <select id="f42_mesZarpe"><option value="">Todos los meses de zarpe</option></select>
+        <select id="f42_mesArribo"><option value="">Todos los meses de arribo</option></select>
         <input id="f42_buscar" placeholder="Buscar pedido o proveedor...">
       </div>
       <div class="scroll"><table id="tbl_grupoA"></table></div>
@@ -262,6 +268,8 @@
           <option value="pedido">Ordenar por pedido</option>
         </select>
         <select id="f43_mes"><option value="">Todos los meses de pago</option></select>
+        <select id="f43_mesZarpe"><option value="">Todos los meses de zarpe</option></select>
+        <select id="f43_mesArribo"><option value="">Todos los meses de arribo</option></select>
         <input id="f43_buscar" placeholder="Buscar pedido o proveedor...">
       </div>
       <div class="scroll"><table id="tbl_grupoB"></table></div>
@@ -1781,12 +1789,19 @@ function renderView4(){
     sel.dataset.poblado = '1';
   }
 
-  // 4.1 Proyectos comex pendientes (saldo CALCULADO, no el que trae el Sheet), con filtro de mes de pago
-  const pendComexAll = M.spAll.filter(s=>s.estadoCalculado==='PENDIENTE POR PAGAR');
+  // 4.1 Proyectos comex pendientes (saldo CALCULADO, no el que trae el Sheet), con filtros de mes de pago/zarpe/arribo
+  const pendComexAll = M.spAll.filter(s=>s.estadoCalculado==='PENDIENTE POR PAGAR').map(s=>({
+    ...s, fechaArriboRealOEstimada: s.fechaRealArribo || (s.fechaRealZarpe ? addDays(s.fechaRealZarpe, M.nav.diasNavegacion(M.ton.paisPorPedido[s.pedido])||45) : null)
+  }));
   poblarMeses('f41_mes', pendComexAll.map(s=>s.fechaUsada));
+  poblarMeses('f41_mesZarpe', pendComexAll.map(s=>s.fechaRealZarpe));
+  poblarMeses('f41_mesArribo', pendComexAll.map(s=>s.fechaArriboRealOEstimada));
   function go41(){
     const fm = document.getElementById('f41_mes').value;
-    const pendComex = pendComexAll.filter(s=>!fm||monthKey(s.fechaUsada)===fm).sort((a,b)=>(a.fechaUsada-b.fechaUsada));
+    const fmZ = document.getElementById('f41_mesZarpe').value;
+    const fmA = document.getElementById('f41_mesArribo').value;
+    const pendComex = pendComexAll.filter(s=>(!fm||monthKey(s.fechaUsada)===fm) && (!fmZ||monthKey(s.fechaRealZarpe)===fmZ) && (!fmA||monthKey(s.fechaArriboRealOEstimada)===fmA))
+      .sort((a,b)=>(a.fechaUsada-b.fechaUsada));
     let html1 = '<tr><th>Proyecto</th><th>Pedido</th><th>Proveedor</th><th>Factura Neta</th><th>Pagado (Saldo)</th><th>Saldo Calculado</th><th>Fecha Pago</th></tr>';
     pendComex.forEach(s=> html1 += `<tr class="row-bad"><td class="txt">${s.proyecto}</td><td class="txt">${s.pedido}</td><td class="txt">${s.proveedor}</td>
         <td>${fmt(s.netoFactura)}</td><td>${fmt(s.pagadoSaldo)}</td><td>${fmt(s.saldoCalculado)}</td>
@@ -1797,20 +1812,28 @@ function renderView4(){
     return totalComex;
   }
   document.getElementById('f41_mes').onchange = go41;
+  document.getElementById('f41_mesZarpe').onchange = go41;
+  document.getElementById('f41_mesArribo').onchange = go41;
   const totalComex = go41();
 
-  // 4.2 Grupo A — un registro por CADA parcial pronosticado, con filtro de orden, mes y búsqueda
+  // 4.2 Grupo A — un registro por CADA parcial pronosticado, con filtros de orden, mes de pago/zarpe/arribo y búsqueda
   const todosParcialesA = M.grupoA.filter(p=>!p.sinFechaBase).flatMap(p=>p.parciales.map(par=>({...par, pedido:p.pedido, proveedor:p.proveedor, condicionUsada:p.condicionUsada})));
   poblarMeses('f42_mes', todosParcialesA.map(f=>f.fechaPagoEstimada));
+  poblarMeses('f42_mesZarpe', todosParcialesA.map(f=>f.fechaZarpeEstimada));
+  poblarMeses('f42_mesArribo', todosParcialesA.map(f=>f.fechaArriboEstimada));
   function goA(){
     const orden = document.getElementById('f42_orden').value;
     const fm = document.getElementById('f42_mes').value;
+    const fmZ = document.getElementById('f42_mesZarpe').value;
+    const fmA = document.getElementById('f42_mesArribo').value;
     const q = (document.getElementById('f42_buscar').value||'').toLowerCase();
+    const sinFiltroActivo = !fm && !fmZ && !fmA;
     const sinFecha = M.grupoA.filter(p=>p.sinFechaBase && (!q || p.pedido.toLowerCase().includes(q) || (p.proveedor||'').toLowerCase().includes(q)));
-    let filasA = todosParcialesA.filter(f=>(!fm||monthKey(f.fechaPagoEstimada)===fm) && (!q || f.pedido.toLowerCase().includes(q) || (f.proveedor||'').toLowerCase().includes(q)));
+    let filasA = todosParcialesA.filter(f=>(!fm||monthKey(f.fechaPagoEstimada)===fm) && (!fmZ||monthKey(f.fechaZarpeEstimada)===fmZ) && (!fmA||monthKey(f.fechaArriboEstimada)===fmA)
+      && (!q || f.pedido.toLowerCase().includes(q) || (f.proveedor||'').toLowerCase().includes(q)));
     filasA = orden==='pedido' ? filasA.sort((a,b)=>a.pedido.localeCompare(b.pedido)||a.n-b.n) : filasA.sort((a,b)=>a.fechaPagoEstimada-b.fechaPagoEstimada);
     let html2 = '<tr><th>Pedido</th><th>Proveedor</th><th>Parcial</th><th>Valor Estimado</th><th>Zarpe Estimado</th><th>Arribo Estimado</th><th>Pago Estimado</th><th>Condición usada</th></tr>';
-    if(!fm) sinFecha.forEach(p=> html2 += `<tr class="row-bad"><td class="txt">${p.pedido}</td><td class="txt">${p.proveedor}</td><td colspan="6" class="txt">⚠ ${p.condicionUsada}</td></tr>`);
+    if(sinFiltroActivo) sinFecha.forEach(p=> html2 += `<tr class="row-bad"><td class="txt">${p.pedido}</td><td class="txt">${p.proveedor}</td><td colspan="6" class="txt">⚠ ${p.condicionUsada}</td></tr>`);
     filasA.forEach(f=>
       html2 += `<tr class="${f.retrasado?'row-bad':''}"><td class="txt">${f.pedido}</td><td class="txt">${f.proveedor}</td><td>${f.n} de ${f.deN}</td>
         <td>${fmt(f.valorEstimado)}</td><td>${fmtDate(f.fechaZarpeEstimada)}</td><td>${fmtDate(f.fechaArriboEstimada)}</td>
@@ -1822,21 +1845,29 @@ function renderView4(){
   }
   document.getElementById('f42_orden').onchange = goA;
   document.getElementById('f42_mes').onchange = goA;
+  document.getElementById('f42_mesZarpe').onchange = goA;
+  document.getElementById('f42_mesArribo').onchange = goA;
   document.getElementById('f42_buscar').oninput = goA;
   const totalA = goA();
 
   // 4.3 Grupo B — TODOS los parciales faltantes, con los mismos filtros
   const todosParcialesB = M.grupoB.filter(p=>!p.sinFechaBase).flatMap(p=>p.parciales.map(par=>({...par, pedido:p.pedido, proveedor:p.proveedor, condicionUsada:p.condicionUsada})));
   poblarMeses('f43_mes', todosParcialesB.map(f=>f.fechaPagoEstimada));
+  poblarMeses('f43_mesZarpe', todosParcialesB.map(f=>f.fechaZarpeEstimada));
+  poblarMeses('f43_mesArribo', todosParcialesB.map(f=>f.fechaArriboEstimada));
   function goB(){
     const orden = document.getElementById('f43_orden').value;
     const fm = document.getElementById('f43_mes').value;
+    const fmZ = document.getElementById('f43_mesZarpe').value;
+    const fmA = document.getElementById('f43_mesArribo').value;
     const q = (document.getElementById('f43_buscar').value||'').toLowerCase();
+    const sinFiltroActivo = !fm && !fmZ && !fmA;
     const sinFecha = M.grupoB.filter(p=>p.sinFechaBase && (!q || p.pedido.toLowerCase().includes(q) || (p.proveedor||'').toLowerCase().includes(q)));
-    let filasB = todosParcialesB.filter(f=>(!fm||monthKey(f.fechaPagoEstimada)===fm) && (!q || f.pedido.toLowerCase().includes(q) || (f.proveedor||'').toLowerCase().includes(q)));
+    let filasB = todosParcialesB.filter(f=>(!fm||monthKey(f.fechaPagoEstimada)===fm) && (!fmZ||monthKey(f.fechaZarpeEstimada)===fmZ) && (!fmA||monthKey(f.fechaArriboEstimada)===fmA)
+      && (!q || f.pedido.toLowerCase().includes(q) || (f.proveedor||'').toLowerCase().includes(q)));
     filasB = orden==='pedido' ? filasB.sort((a,b)=>a.pedido.localeCompare(b.pedido)||a.n-b.n) : filasB.sort((a,b)=>a.fechaPagoEstimada-b.fechaPagoEstimada);
     let html3 = '<tr><th>Pedido</th><th>Proveedor</th><th>Parcial</th><th>Valor Estimado</th><th>Zarpe Estimado</th><th>Arribo Estimado</th><th>Pago Estimado</th><th>Condición usada</th></tr>';
-    if(!fm) sinFecha.forEach(p=> html3 += `<tr class="row-bad"><td class="txt">${p.pedido}</td><td class="txt">${p.proveedor}</td><td colspan="6" class="txt">⚠ ${p.condicionUsada}</td></tr>`);
+    if(sinFiltroActivo) sinFecha.forEach(p=> html3 += `<tr class="row-bad"><td class="txt">${p.pedido}</td><td class="txt">${p.proveedor}</td><td colspan="6" class="txt">⚠ ${p.condicionUsada}</td></tr>`);
     filasB.forEach(f=>
       html3 += `<tr class="${f.retrasado?'row-bad':''}"><td class="txt">${f.pedido}</td><td class="txt">${f.proveedor}</td><td>${f.n} de ${f.deN}</td>
         <td>${fmt(f.valorEstimado)}</td><td>${fmtDate(f.fechaZarpeEstimada)}</td><td>${fmtDate(f.fechaArriboEstimada)}</td>
@@ -1848,6 +1879,8 @@ function renderView4(){
   }
   document.getElementById('f43_orden').onchange = goB;
   document.getElementById('f43_mes').onchange = goB;
+  document.getElementById('f43_mesZarpe').onchange = goB;
+  document.getElementById('f43_mesArribo').onchange = goB;
   document.getElementById('f43_buscar').oninput = goB;
   const totalB = goB();
 
