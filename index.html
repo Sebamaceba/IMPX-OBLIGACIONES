@@ -229,42 +229,47 @@
     </div>
     <div class="panel">
       <h2>4.1 · Proyectos Comex con saldo pendiente</h2>
+      <div class="filters"><select id="f41_mes"><option value="">Todos los meses de pago</option></select></div>
       <div class="scroll"><table id="tbl_pend_comex"></table></div>
     </div>
     <div class="panel">
       <h2>4.2 · Pedidos sin proyecto parcial — proyección de saldo y fecha</h2>
-      <div class="note info">Número de parciales estimado = techo(valor del pedido ÷ capacidad típica de entrega por embarque de ese proveedor, mediana de USD/parcial en sus pedidos ya completados). El tiempo hasta el 2º parcial se estima aparte del tiempo entre parciales subsiguientes (el primer intervalo suele ser más largo — validado con datos reales). Zarpe, arribo y pago se estiman con estadísticas históricas de ese proveedor y país de origen; si no hay suficiente historial, se usa el respaldo global.</div>
+      <div class="note info">Número de parciales estimado = techo(valor del pedido ÷ capacidad típica de entrega por embarque de ese proveedor, mediana de USD/parcial en sus pedidos ya completados). El tiempo hasta el 2º parcial se estima aparte del tiempo entre parciales subsiguientes (el primer intervalo suele ser más largo — validado con datos reales). Zarpe, arribo y pago se estiman con estadísticas históricas de ese proveedor y país de origen; si no hay suficiente historial, se usa el respaldo global. Si un parcial estimado ya debió zarpar/llegar y no aparece confirmado en Seguimiento de Proyectos, se marca <b>RETRASADO</b> y su fecha se recalcula desde hoy.</div>
       <div class="filters">
         <select id="f42_orden">
           <option value="pago">Ordenar por fecha de pago</option>
           <option value="pedido">Ordenar por pedido</option>
         </select>
+        <select id="f42_mes"><option value="">Todos los meses de pago</option></select>
         <input id="f42_buscar" placeholder="Buscar pedido o proveedor...">
       </div>
       <div class="scroll"><table id="tbl_grupoA"></table></div>
     </div>
     <div class="panel">
       <h2>4.3 · Pedidos con entregas parciales incompletas — proyección de TODOS los parciales faltantes</h2>
-      <div class="note info">Se pronostican todos los parciales que aún faltan para completar el pedido (no solo el inmediato siguiente), encadenando desde el último BL real con la misma lógica de capacidad y tiempos entre parciales de Grupo A.</div>
+      <div class="note info">Se pronostican todos los parciales que aún faltan para completar el pedido (no solo el inmediato siguiente), encadenando desde el último BL real con la misma lógica de capacidad y tiempos entre parciales de Grupo A. Igual que en 4.2, los parciales retrasados se marcan y su fecha se recalcula desde hoy.</div>
       <div class="filters">
         <select id="f43_orden">
           <option value="pago">Ordenar por fecha de pago</option>
           <option value="pedido">Ordenar por pedido</option>
         </select>
+        <select id="f43_mes"><option value="">Todos los meses de pago</option></select>
         <input id="f43_buscar" placeholder="Buscar pedido o proveedor...">
       </div>
       <div class="scroll"><table id="tbl_grupoB"></table></div>
     </div>
     <div class="panel">
       <h2>4.4 · Giros Financieros por pagar</h2>
+      <div class="filters"><select id="f44_mes"><option value="">Todos los meses de vencimiento</option></select></div>
       <div class="scroll"><table id="tbl_gf_pend"></table></div>
     </div>
     <div class="panel">
-      <h2>4.6 · Nacionalización estimada (Arancel + IVA)</h2>
-      <div class="desc">Fórmula: Valor Nacionalización = Factura × Arancel% × (1 + IVA%). Cubre 3 escenarios: proyectos comex confirmados sin registro aún en la hoja de Nacionalización, pedidos con parciales incompletos (próximo embarque estimado) y pedidos sin ningún parcial (embarque estimado a partir de estadística del proveedor). Fecha de pago = Fecha Real de Arribo si ya existe; si no, Fecha de Arribo Estimada (Zarpe + días de navegación por país de origen).</div>
+      <h2>4.6 · Nacionalización estimada (Arancel + IVA) — consolidada por mes de pago</h2>
+      <div class="desc">Así se paga en la realidad: todas las llegadas (reales o estimadas) de un mes se acumulan, y el arancel + IVA de ese acumulado se paga en la <b>primera semana del mes siguiente</b>. Fórmula: Nacionalización = Valor Acumulado × Arancel% × (1 + IVA%). Incluye proyectos comex navegando, parciales incompletos y pedidos sin parcial — lo que ya arribó y no está registrado se lista aparte, no se pronostica (ya debió pagarse).</div>
       <div class="filters">
         <label style="font-size:11.5px;color:var(--ink-soft);">Arancel % <input id="v4_arancel" type="number" step="0.1" value="5" style="width:60px;"></label>
         <label style="font-size:11.5px;color:var(--ink-soft);">IVA % <input id="v4_iva" type="number" step="0.1" value="19" style="width:60px;"></label>
+        <select id="f46_mes"><option value="">Todos los meses de pago</option></select>
       </div>
       <div class="mini-kpis" id="v4_nacResumen"></div>
       <div class="scroll"><table id="tbl_nac_estimada"></table></div>
@@ -1016,6 +1021,7 @@ function buildModel({profRaw, spRaw, pgRaw, gfRaw, nacRaw, pedDetRaw, impRaw}){
     return p ? p.condicion : null;
   }
 
+  const HOY = new Date();
   const grupoA = pedidos.filter(p=>p.nProyectosParciales===0).map(p=>{
     if(!p.fechaPedido){
       return {...p, base:'sin_parcial', sinFechaBase:true,
@@ -1027,15 +1033,19 @@ function buildModel({profRaw, spRaw, pgRaw, gfRaw, nacRaw, pedDetRaw, impRaw}){
     const parciales = [];
     let zarpeAnterior = null;
     for(let i=0;i<n;i++){
-      const zarpe = i===0
+      let zarpe = i===0
         ? addDays(p.fechaPedido, avgPrimerZarpe(p.proveedor)||60)
         : addDays(zarpeAnterior, avgEntreParciales(p.proveedor, i)||30); // i=1 → gap hacia el 2do parcial; i=2+ → gaps subsiguientes
       const diasNav = diasNavegacionPedido(p.pedido)||45;
+      // Si el pronóstico de LLEGADA ya quedó en el pasado sin haberse confirmado en Seguimiento de Proyectos,
+      // se marca RETRASADO y se re-ancla el zarpe a HOY para recalcular hacia adelante (no se queda con fechas vencidas).
+      let retrasado = false;
+      if(addDays(zarpe, diasNav) < HOY){ retrasado = true; zarpe = HOY; }
       const arribo = addDays(zarpe, diasNav);
       const pago = (condRep && condRep.tipo==='DIAS_BL')
         ? addDays(zarpe, condRep.dias)
         : addDays(zarpe, avgBlPago(p.proveedor)||15); // 'antes de embarque' o sin condición: no hay fecha de producción futura conocida, se usa respaldo estadístico
-      parciales.push({n:i+1, deN:n, fechaZarpeEstimada:zarpe, fechaArriboEstimada:arribo, fechaPagoEstimada:pago, valorEstimado:valorPorParcial});
+      parciales.push({n:i+1, deN:n, fechaZarpeEstimada:zarpe, fechaArriboEstimada:arribo, fechaPagoEstimada:pago, valorEstimado:valorPorParcial, retrasado});
       zarpeAnterior = zarpe;
     }
     return {...p, base:'sin_parcial', sinFechaBase:false, numParcialesEstimados:n,
@@ -1057,13 +1067,15 @@ function buildModel({profRaw, spRaw, pgRaw, gfRaw, nacRaw, pedDetRaw, impRaw}){
     let anchor = p.ultimoBL || p.fechaPedido;
     for(let i=0;i<nFaltan;i++){
       const posicion = p.nProyectosParciales + i; // posición del próximo gap a estimar (1=hacia el 2do parcial, 2+=subsiguientes)
-      const zarpe = addDays(anchor, avgEntreParciales(p.proveedor, posicion)||12);
+      let zarpe = addDays(anchor, avgEntreParciales(p.proveedor, posicion)||12);
       const diasNav = diasNavegacionPedido(p.pedido)||45;
+      let retrasado = false;
+      if(addDays(zarpe, diasNav) < HOY){ retrasado = true; zarpe = HOY; }
       const arribo = addDays(zarpe, diasNav);
       const pago = (condRep && condRep.tipo==='DIAS_BL')
         ? addDays(zarpe, condRep.dias)
         : addDays(zarpe, avgBlPago(p.proveedor)||15);
-      parciales.push({n:p.nProyectosParciales+i+1, deN:p.nProyectosParciales+nFaltan, fechaZarpeEstimada:zarpe, fechaArriboEstimada:arribo, fechaPagoEstimada:pago, valorEstimado:valorPorParcial});
+      parciales.push({n:p.nProyectosParciales+i+1, deN:p.nProyectosParciales+nFaltan, fechaZarpeEstimada:zarpe, fechaArriboEstimada:arribo, fechaPagoEstimada:pago, valorEstimado:valorPorParcial, retrasado});
       anchor = zarpe;
     }
     return {...p, base:'parcial_incompleto', sinFechaBase:false, numParcialesFaltantes:nFaltan,
@@ -1429,7 +1441,7 @@ function computeFlujoCaja(M, horizonte, arancelPct=0.05, ivaPct=0.19){
     else if(o.tipo==='Proyección (sin parcial)') porMes[m].proyA += o.valor;
     else if(o.tipo==='Proyección (parcial incompleto)') porMes[m].proyB += o.valor;
   });
-  nacEst.filas.forEach(f=>{ const m = monthKey(f.fecha); if(!porMes[m]) return; porMes[m].nac += f.valorNac; });
+  nacEst.filasMes.forEach(f=>{ const m = monthKey(f.fechaPago); if(!porMes[m]) return; porMes[m].nac += f.valorNac; });
   const total = mesesN.reduce((a,m)=>a+porMes[m].comex+porMes[m].gf+porMes[m].proyA+porMes[m].proyB+porMes[m].nac,0);
   return {mesesN, porMes, total};
 }
@@ -1642,11 +1654,21 @@ function renderView3(){
 }
 
 // ================= NACIONALIZACIÓN ESTIMADA (cálculo puro, reutilizado en Vista 4) =================
+function primeraSemanaSiguienteMes(mesArribo){
+  // mesArribo: 'YYYY-MM' de la fecha de arribo (real o estimada). El pago real se hace la primera
+  // semana del mes SIGUIENTE al de la llegada — se usa el día 5 como referencia de "primera semana".
+  const [y,m] = mesArribo.split('-').map(Number);
+  let ny=y, nm=m+1;
+  if(nm>12){ nm=1; ny+=1; }
+  return new Date(ny, nm-1, 5);
+}
+
 function calcularNacEstimada(M, arancelPct, ivaPct){
   const factor = arancelPct*(1+ivaPct);
   const nacRegistrados = new Set(M.nac.map(n=>n.proyectoComex));
-  const filas = [];
+  const items = [];
   const yaArribadosSinRegistrar = []; // diagnóstico aparte: no se pronostican (ya deberían estar pagados), solo se listan para seguimiento contable
+
   // Escenario 1: proyectos comex CONFIRMADOS que TODAVÍA NO HAN ARRIBADO (navegando) — lo que ya arribó
   // ya debió nacionalizarse; si no aparece en la hoja de Nacionalización es un vacío de registro, no un pendiente futuro.
   M.spAll.forEach(s=>{
@@ -1655,28 +1677,40 @@ function calcularNacEstimada(M, arancelPct, ivaPct){
       if(s.valorFactura) yaArribadosSinRegistrar.push({pedido:s.pedido, proyecto:s.proyecto, valorFactura:s.valorFactura, fechaRealArribo:s.fechaRealArribo});
       return;
     }
-    if(s.estatusProyecto!=='NAVEGANDO' || !s.fechaRealZarpe || !s.valorFactura) return; // 'EN PRODUCCIÓN' aún no tiene fecha de zarpe real para estimar arribo
+    if(s.estatusProyecto!=='NAVEGANDO' || !s.fechaRealZarpe || !s.valorFactura) return;
     const fechaArribo = addDays(s.fechaRealZarpe, M.nav.diasNavegacion(M.ton.paisPorPedido[s.pedido])||45);
-    filas.push({escenario:'Proyecto Comex confirmado (navegando)', pedido:s.pedido, referencia:s.proyecto, valorBase:s.valorFactura,
-      valorNac:s.valorFactura*factor, fecha:fechaArribo, esEstimada:true});
+    items.push({origen:'Proyecto Comex confirmado (navegando)', pedido:s.pedido, referencia:s.proyecto, valorBase:s.valorFactura, fechaArribo, retrasado:false});
   });
-  // Escenario 2: pedidos con parciales incompletos — un registro por cada parcial faltante pronosticado
+  // Escenario 2: pedidos con parciales incompletos — cada parcial faltante pronosticado
   M.grupoB.forEach(p=>{
     p.parciales.forEach(par=>{
-      filas.push({escenario:`Parcial incompleto (${par.n}/${par.deN} pronosticado)`, pedido:p.pedido, referencia:'—', valorBase:par.valorEstimado,
-        valorNac:par.valorEstimado*factor, fecha:par.fechaArriboEstimada, esEstimada:true});
+      items.push({origen:`Parcial incompleto (${par.n}/${par.deN})`, pedido:p.pedido, referencia:'—', valorBase:par.valorEstimado, fechaArribo:par.fechaArriboEstimada, retrasado:par.retrasado});
     });
   });
-  // Escenario 3: pedidos sin ningún parcial — un registro POR CADA parcial pronosticado (no todo el pedido junto)
+  // Escenario 3: pedidos sin ningún parcial — cada parcial pronosticado
   M.grupoA.forEach(p=>{
     p.parciales.forEach(par=>{
-      filas.push({escenario:`Sin parcial (${par.n}/${par.deN} pronosticado)`, pedido:p.pedido, referencia:'—', valorBase:par.valorEstimado,
-        valorNac:par.valorEstimado*factor, fecha:par.fechaArriboEstimada, esEstimada:true});
+      items.push({origen:`Sin parcial (${par.n}/${par.deN})`, pedido:p.pedido, referencia:'—', valorBase:par.valorEstimado, fechaArribo:par.fechaArriboEstimada, retrasado:par.retrasado});
     });
   });
-  filas.sort((a,b)=>(a.fecha||0)-(b.fecha||0));
-  const total = filas.reduce((a,f)=>a+f.valorNac,0);
-  return {filas, total, yaArribadosSinRegistrar};
+
+  // Consolidación mensual: así es como se paga en realidad — todas las llegadas (reales o estimadas) de
+  // un mes se acumulan, y el arancel + IVA de ese acumulado se paga en la primera semana del mes siguiente.
+  const porMes = {};
+  items.forEach(it=>{
+    const m = monthKey(it.fechaArribo); if(!m) return;
+    if(!porMes[m]) porMes[m] = {mesArribo:m, valorBase:0, items:[]};
+    porMes[m].valorBase += it.valorBase;
+    porMes[m].items.push(it);
+  });
+  const filasMes = Object.values(porMes).map(g=>({
+    mesArribo:g.mesArribo, valorBase:g.valorBase, valorNac:g.valorBase*factor,
+    fechaPago: primeraSemanaSiguienteMes(g.mesArribo), items:g.items,
+    tieneRetrasados: g.items.some(it=>it.retrasado)
+  })).sort((a,b)=>a.fechaPago-b.fechaPago);
+
+  const total = filasMes.reduce((a,f)=>a+f.valorNac,0);
+  return {filasMes, total, yaArribadosSinRegistrar};
 }
 
 // ================= VISTA 4 =================
@@ -1690,100 +1724,142 @@ function renderView4(){
   const iva = (parseFloat(document.getElementById('v4_iva').value)||0)/100;
   const nacEst = calcularNacEstimada(M, arancel, iva);
 
-  // 4.1 Proyectos comex pendientes (saldo CALCULADO, no el que trae el Sheet)
-  const pendComex = M.spAll.filter(s=>s.estadoCalculado==='PENDIENTE POR PAGAR').sort((a,b)=>(a.fechaUsada-b.fechaUsada));
-  let html1 = '<tr><th>Proyecto</th><th>Pedido</th><th>Proveedor</th><th>Factura Neta</th><th>Pagado (Saldo)</th><th>Saldo Calculado</th><th>Fecha Pago</th></tr>';
-  pendComex.forEach(s=> html1 += `<tr class="row-bad"><td class="txt">${s.proyecto}</td><td class="txt">${s.pedido}</td><td class="txt">${s.proveedor}</td>
-      <td>${fmt(s.netoFactura)}</td><td>${fmt(s.pagadoSaldo)}</td><td>${fmt(s.saldoCalculado)}</td>
-      <td>${fmtDate(s.fechaUsada)}${s.fechaEsEstimada?' <span class="pill warn">estimada</span>':''}</td></tr>`);
-  const totalComex = pendComex.reduce((a,s)=>a+s.saldoCalculado,0);
-  html1 += totalRow(7, 'TOTAL SALDO PROYECTOS COMEX PENDIENTE', totalComex);
-  document.getElementById('tbl_pend_comex').innerHTML = html1;
+  function poblarMeses(selectId, fechas){
+    const sel = document.getElementById(selectId);
+    if(sel.dataset.poblado) return;
+    const metodos = [...new Set(fechas.filter(Boolean).map(monthKey))].sort();
+    metodos.forEach(m=> sel.innerHTML += `<option value="${m}">${m}</option>`);
+    sel.dataset.poblado = '1';
+  }
 
-  // 4.2 Grupo A — un registro por CADA parcial pronosticado, con filtro de orden y búsqueda
+  // 4.1 Proyectos comex pendientes (saldo CALCULADO, no el que trae el Sheet), con filtro de mes de pago
+  const pendComexAll = M.spAll.filter(s=>s.estadoCalculado==='PENDIENTE POR PAGAR');
+  poblarMeses('f41_mes', pendComexAll.map(s=>s.fechaUsada));
+  function go41(){
+    const fm = document.getElementById('f41_mes').value;
+    const pendComex = pendComexAll.filter(s=>!fm||monthKey(s.fechaUsada)===fm).sort((a,b)=>(a.fechaUsada-b.fechaUsada));
+    let html1 = '<tr><th>Proyecto</th><th>Pedido</th><th>Proveedor</th><th>Factura Neta</th><th>Pagado (Saldo)</th><th>Saldo Calculado</th><th>Fecha Pago</th></tr>';
+    pendComex.forEach(s=> html1 += `<tr class="row-bad"><td class="txt">${s.proyecto}</td><td class="txt">${s.pedido}</td><td class="txt">${s.proveedor}</td>
+        <td>${fmt(s.netoFactura)}</td><td>${fmt(s.pagadoSaldo)}</td><td>${fmt(s.saldoCalculado)}</td>
+        <td>${fmtDate(s.fechaUsada)}${s.fechaEsEstimada?' <span class="pill warn">estimada</span>':''}</td></tr>`);
+    const totalComex = pendComex.reduce((a,s)=>a+s.saldoCalculado,0);
+    html1 += totalRow(7, 'TOTAL SALDO PROYECTOS COMEX PENDIENTE', totalComex);
+    document.getElementById('tbl_pend_comex').innerHTML = html1;
+    return totalComex;
+  }
+  document.getElementById('f41_mes').onchange = go41;
+  const totalComex = go41();
+
+  // 4.2 Grupo A — un registro por CADA parcial pronosticado, con filtro de orden, mes y búsqueda
+  const todosParcialesA = M.grupoA.filter(p=>!p.sinFechaBase).flatMap(p=>p.parciales.map(par=>({...par, pedido:p.pedido, proveedor:p.proveedor, condicionUsada:p.condicionUsada})));
+  poblarMeses('f42_mes', todosParcialesA.map(f=>f.fechaPagoEstimada));
   function goA(){
     const orden = document.getElementById('f42_orden').value;
+    const fm = document.getElementById('f42_mes').value;
     const q = (document.getElementById('f42_buscar').value||'').toLowerCase();
     const sinFecha = M.grupoA.filter(p=>p.sinFechaBase && (!q || p.pedido.toLowerCase().includes(q) || (p.proveedor||'').toLowerCase().includes(q)));
-    let filasA = M.grupoA.filter(p=>!p.sinFechaBase).flatMap(p=>p.parciales.map(par=>({...par, pedido:p.pedido, proveedor:p.proveedor, condicionUsada:p.condicionUsada})))
-      .filter(f=>!q || f.pedido.toLowerCase().includes(q) || (f.proveedor||'').toLowerCase().includes(q));
+    let filasA = todosParcialesA.filter(f=>(!fm||monthKey(f.fechaPagoEstimada)===fm) && (!q || f.pedido.toLowerCase().includes(q) || (f.proveedor||'').toLowerCase().includes(q)));
     filasA = orden==='pedido' ? filasA.sort((a,b)=>a.pedido.localeCompare(b.pedido)||a.n-b.n) : filasA.sort((a,b)=>a.fechaPagoEstimada-b.fechaPagoEstimada);
     let html2 = '<tr><th>Pedido</th><th>Proveedor</th><th>Parcial</th><th>Valor Estimado</th><th>Zarpe Estimado</th><th>Arribo Estimado</th><th>Pago Estimado</th><th>Condición usada</th></tr>';
-    sinFecha.forEach(p=> html2 += `<tr class="row-bad"><td class="txt">${p.pedido}</td><td class="txt">${p.proveedor}</td><td colspan="6" class="txt">⚠ ${p.condicionUsada}</td></tr>`);
+    if(!fm) sinFecha.forEach(p=> html2 += `<tr class="row-bad"><td class="txt">${p.pedido}</td><td class="txt">${p.proveedor}</td><td colspan="6" class="txt">⚠ ${p.condicionUsada}</td></tr>`);
     filasA.forEach(f=>
-      html2 += `<tr><td class="txt">${f.pedido}</td><td class="txt">${f.proveedor}</td><td>${f.n} de ${f.deN}</td>
+      html2 += `<tr class="${f.retrasado?'row-bad':''}"><td class="txt">${f.pedido}</td><td class="txt">${f.proveedor}</td><td>${f.n} de ${f.deN}</td>
         <td>${fmt(f.valorEstimado)}</td><td>${fmtDate(f.fechaZarpeEstimada)}</td><td>${fmtDate(f.fechaArriboEstimada)}</td>
-        <td>${fmtDate(f.fechaPagoEstimada)}</td><td style="font-size:10px;color:var(--ink-soft);">${f.condicionUsada}</td></tr>`);
+        <td>${fmtDate(f.fechaPagoEstimada)}${f.retrasado?' <span class="pill bad">RETRASADO</span>':''}</td><td style="font-size:10px;color:var(--ink-soft);">${f.condicionUsada}</td></tr>`);
     const totalA = filasA.reduce((a,f)=>a+f.valorEstimado,0);
     html2 += totalRow(8, 'TOTAL PEDIDOS SIN PROYECTO PARCIAL (pronóstico de parciales)', totalA);
     document.getElementById('tbl_grupoA').innerHTML = html2;
     return totalA;
   }
-  document.getElementById('f42_orden').onchange = ()=>renderView4();
+  document.getElementById('f42_orden').onchange = goA;
+  document.getElementById('f42_mes').onchange = goA;
   document.getElementById('f42_buscar').oninput = goA;
   const totalA = goA();
 
   // 4.3 Grupo B — TODOS los parciales faltantes, con los mismos filtros
+  const todosParcialesB = M.grupoB.filter(p=>!p.sinFechaBase).flatMap(p=>p.parciales.map(par=>({...par, pedido:p.pedido, proveedor:p.proveedor, condicionUsada:p.condicionUsada})));
+  poblarMeses('f43_mes', todosParcialesB.map(f=>f.fechaPagoEstimada));
   function goB(){
     const orden = document.getElementById('f43_orden').value;
+    const fm = document.getElementById('f43_mes').value;
     const q = (document.getElementById('f43_buscar').value||'').toLowerCase();
     const sinFecha = M.grupoB.filter(p=>p.sinFechaBase && (!q || p.pedido.toLowerCase().includes(q) || (p.proveedor||'').toLowerCase().includes(q)));
-    let filasB = M.grupoB.filter(p=>!p.sinFechaBase).flatMap(p=>p.parciales.map(par=>({...par, pedido:p.pedido, proveedor:p.proveedor, condicionUsada:p.condicionUsada})))
-      .filter(f=>!q || f.pedido.toLowerCase().includes(q) || (f.proveedor||'').toLowerCase().includes(q));
+    let filasB = todosParcialesB.filter(f=>(!fm||monthKey(f.fechaPagoEstimada)===fm) && (!q || f.pedido.toLowerCase().includes(q) || (f.proveedor||'').toLowerCase().includes(q)));
     filasB = orden==='pedido' ? filasB.sort((a,b)=>a.pedido.localeCompare(b.pedido)||a.n-b.n) : filasB.sort((a,b)=>a.fechaPagoEstimada-b.fechaPagoEstimada);
     let html3 = '<tr><th>Pedido</th><th>Proveedor</th><th>Parcial</th><th>Valor Estimado</th><th>Zarpe Estimado</th><th>Arribo Estimado</th><th>Pago Estimado</th><th>Condición usada</th></tr>';
-    sinFecha.forEach(p=> html3 += `<tr class="row-bad"><td class="txt">${p.pedido}</td><td class="txt">${p.proveedor}</td><td colspan="6" class="txt">⚠ ${p.condicionUsada}</td></tr>`);
+    if(!fm) sinFecha.forEach(p=> html3 += `<tr class="row-bad"><td class="txt">${p.pedido}</td><td class="txt">${p.proveedor}</td><td colspan="6" class="txt">⚠ ${p.condicionUsada}</td></tr>`);
     filasB.forEach(f=>
-      html3 += `<tr><td class="txt">${f.pedido}</td><td class="txt">${f.proveedor}</td><td>${f.n} de ${f.deN}</td>
+      html3 += `<tr class="${f.retrasado?'row-bad':''}"><td class="txt">${f.pedido}</td><td class="txt">${f.proveedor}</td><td>${f.n} de ${f.deN}</td>
         <td>${fmt(f.valorEstimado)}</td><td>${fmtDate(f.fechaZarpeEstimada)}</td><td>${fmtDate(f.fechaArriboEstimada)}</td>
-        <td>${fmtDate(f.fechaPagoEstimada)}</td><td style="font-size:10px;color:var(--ink-soft);">${f.condicionUsada}</td></tr>`);
+        <td>${fmtDate(f.fechaPagoEstimada)}${f.retrasado?' <span class="pill bad">RETRASADO</span>':''}</td><td style="font-size:10px;color:var(--ink-soft);">${f.condicionUsada}</td></tr>`);
     const totalB = filasB.reduce((a,f)=>a+f.valorEstimado,0);
     html3 += totalRow(8, 'TOTAL PEDIDOS CON ENTREGAS PARCIALES INCOMPLETAS (todos los parciales faltantes)', totalB);
     document.getElementById('tbl_grupoB').innerHTML = html3;
     return totalB;
   }
-  document.getElementById('f43_orden').onchange = ()=>renderView4();
+  document.getElementById('f43_orden').onchange = goB;
+  document.getElementById('f43_mes').onchange = goB;
   document.getElementById('f43_buscar').oninput = goB;
   const totalB = goB();
 
-  // 4.4 GF pendientes
-  let html4 = '<tr><th>Pedido</th><th>Proyecto Comex</th><th>Banco</th><th>Vencimiento</th><th>Saldo USD</th></tr>';
-  M.gfAbiertos.sort((a,b)=>a.fechaVencimiento-b.fechaVencimiento).forEach(g=>
-    html4 += `<tr class="row-bad"><td class="txt">${g.pedido}</td><td class="txt">${g.proyectoComex}</td><td class="txt">${g.banco}</td><td>${fmtDate(g.fechaVencimiento)}</td><td>${fmt(g.saldoReal)}</td></tr>`);
-  const totalGF = M.gfAbiertos.reduce((a,g)=>a+g.saldoReal,0);
-  html4 += totalRow(5, 'TOTAL GIROS FINANCIEROS POR PAGAR', totalGF);
-  document.getElementById('tbl_gf_pend').innerHTML = html4;
-
-  // 4.6 Nacionalización estimada
-  document.getElementById('v4_nacResumen').innerHTML = `
-    <div class="mini-kpi"><span>Registros estimados</span><b>${nacEst.filas.length}</b></div>
-    <div class="mini-kpi bad"><span>Total nacionalización estimada</span><b>${fmt(nacEst.total)}</b></div>
-    <div class="mini-kpi"><span>Arancel aplicado</span><b>${(arancel*100).toFixed(1)}%</b></div>
-    <div class="mini-kpi"><span>IVA aplicado</span><b>${(iva*100).toFixed(1)}%</b></div>
-  `;
-  let html6 = '<tr><th>Escenario</th><th>Pedido</th><th>Referencia</th><th>Valor Base (Factura/Saldo)</th><th>Nacionalización Estimada</th><th>Fecha de Pago</th></tr>';
-  nacEst.filas.forEach(f=>{
-    html6 += `<tr class="row-bad"><td class="txt">${f.escenario}</td><td class="txt">${f.pedido}</td><td class="txt">${f.referencia}</td>
-      <td>${fmt(f.valorBase)}</td><td>${fmt(f.valorNac)}</td>
-      <td>${fmtDate(f.fecha)}${f.esEstimada?' <span class="pill warn">estimada</span>':''}</td></tr>`;
-  });
-  html6 += totalRow(6, 'TOTAL NACIONALIZACIÓN ESTIMADA (solo arribos pendientes)', nacEst.total);
-  document.getElementById('tbl_nac_estimada').innerHTML = html6;
-  let nota = 'Solo se pronostica nacionalización para arribos <b>pendientes</b> (proyectos navegando, parciales incompletos y pedidos sin parcial) — lo que ya arribó ya debió nacionalizarse.';
-  if(nacEst.yaArribadosSinRegistrar.length){
-    const valorSinReg = nacEst.yaArribadosSinRegistrar.reduce((a,y)=>a+y.valorFactura,0);
-    nota += `<br><br>⚠ <b>${nacEst.yaArribadosSinRegistrar.length} proyecto(s) YA ARRIBARON</b> (factura total ${fmt(valorSinReg)}) y no tienen registro en la hoja de Nacionalización — probablemente ya se pagaron y falta registrarlos, o quedaron pendientes de gestión. No se incluyen en el total de arriba (no son un pendiente futuro); revísalos aparte: `
-      + nacEst.yaArribadosSinRegistrar.slice(0,8).map(y=>`${y.proyecto} (${fmtDate(y.fechaRealArribo)})`).join(', ') + (nacEst.yaArribadosSinRegistrar.length>8?'…':'');
+  // 4.4 GF pendientes, con filtro de mes de vencimiento
+  poblarMeses('f44_mes', M.gfAbiertos.map(g=>g.fechaVencimiento));
+  function go44(){
+    const fm = document.getElementById('f44_mes').value;
+    const gfF = M.gfAbiertos.filter(g=>!fm||monthKey(g.fechaVencimiento)===fm).sort((a,b)=>a.fechaVencimiento-b.fechaVencimiento);
+    let html4 = '<tr><th>Pedido</th><th>Proyecto Comex</th><th>Banco</th><th>Vencimiento</th><th>Saldo USD</th></tr>';
+    gfF.forEach(g=>
+      html4 += `<tr class="row-bad"><td class="txt">${g.pedido}</td><td class="txt">${g.proyectoComex}</td><td class="txt">${g.banco}</td><td>${fmtDate(g.fechaVencimiento)}</td><td>${fmt(g.saldoReal)}</td></tr>`);
+    const totalGF = gfF.reduce((a,g)=>a+g.saldoReal,0);
+    html4 += totalRow(5, 'TOTAL GIROS FINANCIEROS POR PAGAR', totalGF);
+    document.getElementById('tbl_gf_pend').innerHTML = html4;
+    return totalGF;
   }
-  document.getElementById('v4_nacNota').innerHTML = nota;
+  document.getElementById('f44_mes').onchange = go44;
+  const totalGF = go44();
 
-  const granTotal = totalComex + totalA + totalB + totalGF + nacEst.total;
+  // 4.6 Nacionalización estimada — consolidada por mes de pago (primera semana del mes siguiente al arribo)
+  poblarMeses('f46_mes', nacEst.filasMes.map(f=>f.fechaPago));
+  function go46(){
+    const fm = document.getElementById('f46_mes').value;
+    const filasMes = nacEst.filasMes.filter(f=>!fm||monthKey(f.fechaPago)===fm);
+    document.getElementById('v4_nacResumen').innerHTML = `
+      <div class="mini-kpi"><span>Meses de pago proyectados</span><b>${filasMes.length}</b></div>
+      <div class="mini-kpi bad"><span>Total nacionalización estimada</span><b>${fmt(filasMes.reduce((a,f)=>a+f.valorNac,0))}</b></div>
+      <div class="mini-kpi"><span>Arancel aplicado</span><b>${(arancel*100).toFixed(1)}%</b></div>
+      <div class="mini-kpi"><span>IVA aplicado</span><b>${(iva*100).toFixed(1)}%</b></div>
+    `;
+    let html6 = '<tr><th>Mes de Arribo (acumulado)</th><th>Valor Base Acumulado</th><th>Nacionalización</th><th>Fecha de Pago (1ra semana mes sig.)</th><th># Items</th><th>Detalle</th></tr>';
+    filasMes.forEach(f=>{
+      const detalle = f.items.slice(0,4).map(it=>`${it.pedido}${it.retrasado?' (RETRASADO)':''}`).join(', ') + (f.items.length>4?` … (+${f.items.length-4})`:'');
+      html6 += `<tr class="row-bad"><td class="txt"><b>${f.mesArribo}</b></td>
+        <td>${fmt(f.valorBase)}</td><td>${fmt(f.valorNac)}</td>
+        <td>${fmtDate(f.fechaPago)} <span class="pill warn">estimada</span>${f.tieneRetrasados?' <span class="pill bad">incluye retrasados</span>':''}</td>
+        <td>${f.items.length}</td><td class="txt" style="font-size:10px;color:var(--ink-soft);">${detalle}</td></tr>`;
+    });
+    const totalNac = filasMes.reduce((a,f)=>a+f.valorNac,0);
+    html6 += totalRow(6, 'TOTAL NACIONALIZACIÓN ESTIMADA (solo arribos pendientes)', totalNac);
+    document.getElementById('tbl_nac_estimada').innerHTML = html6;
+    let nota = 'Consolidación mensual real: todas las llegadas (reales o estimadas) de un mes se acumulan y se pagan la primera semana del mes siguiente. Solo se pronostica para arribos <b>pendientes</b> — lo que ya arribó ya debió nacionalizarse.';
+    if(nacEst.yaArribadosSinRegistrar.length){
+      const valorSinReg = nacEst.yaArribadosSinRegistrar.reduce((a,y)=>a+y.valorFactura,0);
+      nota += `<br><br>⚠ <b>${nacEst.yaArribadosSinRegistrar.length} proyecto(s) YA ARRIBARON</b> (factura total ${fmt(valorSinReg)}) y no tienen registro en la hoja de Nacionalización — probablemente ya se pagaron y falta registrarlos. No se incluyen en el total (no son un pendiente futuro); revísalos aparte: `
+        + nacEst.yaArribadosSinRegistrar.slice(0,8).map(y=>`${y.proyecto} (${fmtDate(y.fechaRealArribo)})`).join(', ') + (nacEst.yaArribadosSinRegistrar.length>8?'…':'');
+    }
+    document.getElementById('v4_nacNota').innerHTML = nota;
+    return totalNac;
+  }
+  document.getElementById('f46_mes').onchange = go46;
+  const totalNacTodos = nacEst.total; // el resumen general de arriba siempre usa el total SIN filtrar
+  go46();
+
+  const granTotal = totalComex + totalA + totalB + totalGF + totalNacTodos;
   document.getElementById('v4_resumen').innerHTML = `
     <div class="mini-kpi bad"><span>4.1 Saldo Proyectos Comex</span><b>${fmt(totalComex)}</b></div>
     <div class="mini-kpi bad"><span>4.2 Pedidos sin parcial (pronóstico)</span><b>${fmt(totalA)}</b></div>
     <div class="mini-kpi bad"><span>4.3 Parciales incompletos (pronóstico)</span><b>${fmt(totalB)}</b></div>
     <div class="mini-kpi bad"><span>4.4 Giros Financieros</span><b>${fmt(totalGF)}</b></div>
-    <div class="mini-kpi bad"><span>4.6 Nacionalización estimada</span><b>${fmt(nacEst.total)}</b></div>
+    <div class="mini-kpi bad"><span>4.6 Nacionalización estimada</span><b>${fmt(totalNacTodos)}</b></div>
     <div class="mini-kpi"><span>TOTAL GENERAL PENDIENTE</span><b>${fmt(granTotal)}</b></div>
   `;
 
