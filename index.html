@@ -216,7 +216,7 @@
     </div>
     <div class="panel">
       <h2>Estadísticas por mes — año de "Visión del año" (barra superior)</h2>
-      <div class="desc">Por mes de pedido, dentro del año seleccionado arriba: toneladas en cada estado HOY, y cuántos pedidos de ese mes están en producción, con parcial o cerrados HOY.</div>
+      <div class="desc">De lo pedido en cada mes (la misma cohorte), cuánto está HOY arribado, navegando o todavía en producción — las tres se suman al total pedido de ese mes, no son ejes de fecha independientes.</div>
       <div class="scroll"><table id="tbl_pedidos_mes"></table></div>
     </div>
   </div>
@@ -292,7 +292,7 @@
     </div>
     <div class="panel">
       <h2>4.4 · Pedidos con entregas parciales incompletas — proyección de TODOS los parciales faltantes</h2>
-      <div class="note info">Se pronostican todos los parciales que aún faltan para completar el pedido (no solo el inmediato siguiente), encadenando desde el último BL real con la misma lógica de capacidad y tiempos entre parciales de Grupo A. Igual que en 4.2, los parciales retrasados se marcan y su fecha se recalcula desde hoy.</div>
+      <div class="note info">Se pronostican todos los parciales que aún faltan para completar el pedido (no solo el inmediato siguiente), encadenando desde el último BL real con la misma lógica de capacidad y tiempos entre parciales de Grupo A. Igual que en 4.2, los parciales retrasados se marcan y su fecha se recalcula desde hoy. Si el saldo pendiente en toneladas es ≤5% del total del pedido, se considera tolerancia de producción y no se pronostica (evita "parciales fantasma" mientras contabilidad concilia el anticipo).</div>
       <div class="filters">
         <select id="f43_orden">
           <option value="pago">Ordenar por fecha de pago</option>
@@ -1173,7 +1173,15 @@ function buildModel({profRaw, spRaw, pgRaw, gfRaw, nacRaw, pedDetRaw, impRaw}){
 
   // Grupo B: pedidos con parciales incompletos — se pronostican TODOS los parciales que faltan
   // (no solo el inmediato siguiente), igual que en Grupo A, encadenando desde el último BL real.
-  const grupoB = pedidos.filter(p=>p.nProyectosParciales>0 && p.saldoSinFacturar>1 && !p.cerrado && (!p.fechaPedido || p.fechaPedido>=FECHA_CORTE_DATA_CONFIABLE)).map(p=>{
+  const UMBRAL_TON_PENDIENTE = 0.05; // 5%: si el saldo restante en Ton es menor a esto del total pedido, se considera tolerancia de producción, no un parcial pendiente real
+  const grupoB = pedidos.filter(p=>{
+    if(!(p.nProyectosParciales>0 && p.saldoSinFacturar>1 && !p.cerrado && (!p.fechaPedido || p.fechaPedido>=FECHA_CORTE_DATA_CONFIABLE))) return false;
+    if(p.pedidoKg && p.pedidoKg>0){
+      const pctFaltante = (p.saldoKg||0)/p.pedidoKg;
+      if(pctFaltante <= UMBRAL_TON_PENDIENTE) return false; // saldo residual dentro de tolerancia (ej. 2 Ton de 500) — no se pronostica un parcial fantasma
+    }
+    return true;
+  }).map(p=>{
     const nFaltan = Math.max(0, numParcialesPorCapacidad(p.proveedor, p.pedidoKg) - p.nProyectosParciales);
     const condRep = condicionRepresentativaPedido(p.pedido);
     const valorPorParcial = nFaltan>0 ? p.saldoSinFacturar/nFaltan : p.saldoSinFacturar;
@@ -1207,6 +1215,7 @@ function buildModel({profRaw, spRaw, pgRaw, gfRaw, nacRaw, pedDetRaw, impRaw}){
   });
 
   const excluidosPorCorte = pedidos.filter(p=>!p.cerrado && p.fechaPedido && p.fechaPedido<FECHA_CORTE_DATA_CONFIABLE && (p.nProyectosParciales===0 || p.saldoSinFacturar>1));
+  const excluidosPorTolerancia = pedidos.filter(p=>!p.cerrado && p.nProyectosParciales>0 && p.saldoSinFacturar>1 && p.pedidoKg>0 && ((p.saldoKg||0)/p.pedidoKg)<=UMBRAL_TON_PENDIENTE);
 
   const gfAbiertos = gf.filter(g=>g.abiertoReal);
   const motorPagos = buildMotorPagos(prof, ton, nav);
@@ -1307,7 +1316,7 @@ function buildModel({profRaw, spRaw, pgRaw, gfRaw, nacRaw, pedDetRaw, impRaw}){
   return { pedidos, spAll, pg, gf, gfAbiertos, nac, nacMes, grupoA, grupoB, obligaciones, pagosMes, gfMes, pedidosMes, enriquecidos,
            promedios:{GLOBAL_proformaPago, GLOBAL_blPago, GLOBAL_gap1, GLOBAL_gap2Plus, GLOBAL_primerZarpe, GLOBAL_capacidadEmbarque},
            ton, nav, estadProveedor, estadGlobal, MIN_MUESTRA_MODELO: MIN_MUESTRA, VIDA_MEDIA_MODELO: VIDA_MEDIA_DIAS,
-           excluidosPorCorte, FECHA_CORTE_DATA_CONFIABLE,
+           excluidosPorCorte, FECHA_CORTE_DATA_CONFIABLE, excluidosPorTolerancia,
            conteos: {
              proformas_leidas: profRaw.length, proformas_validas: prof.length,
              proyectos_leidos: spRaw.length, proyectos_validos: spAll0.length, proyectos_tras_dedup: spAll.length,
@@ -1495,6 +1504,8 @@ function renderDiag(){
     cerradosAuto.slice(0,10).map(p=>`${p.pedido} (${p.diferenciaEntregaKg>0?'+':''}${fmtTon(p.diferenciaEntregaKg)})`).join(', ') + (cerradosAuto.length>10?'…':''));
   if(MODEL.excluidosPorCorte.length) advs.push(`${MODEL.excluidosPorCorte.length} pedido(s) anteriores a ${fmtDate(MODEL.FECHA_CORTE_DATA_CONFIABLE)} con saldo abierto NO se incluyen en los pronósticos de la Vista 4 (el seguimiento financiero completo no estaba alineado antes de esa fecha) — siguen visibles en la Vista 2 para consulta histórica: ` +
     MODEL.excluidosPorCorte.slice(0,10).map(p=>p.pedido).join(', ') + (MODEL.excluidosPorCorte.length>10?'…':''));
+  if(MODEL.excluidosPorTolerancia.length) advs.push(`${MODEL.excluidosPorTolerancia.length} pedido(s) con saldo pendiente ≤5% de lo pedido en toneladas NO se incluyen en Grupo B (Vista 4) — se consideran tolerancia de producción, no un parcial pendiente real: ` +
+    MODEL.excluidosPorTolerancia.slice(0,10).map(p=>p.pedido).join(', ') + (MODEL.excluidosPorTolerancia.length>10?'…':''));
   const diagPanel = document.getElementById('tbl_diag').closest('.panel');
   let advBox = document.getElementById('adv_toneladas');
   if(!advBox){ advBox = document.createElement('div'); advBox.id='adv_toneladas'; advBox.className='note'; diagPanel.appendChild(advBox); }
@@ -1849,20 +1860,27 @@ function renderEstadisticasMesVista2(M){
   for(let m=1;m<=12;m++){ const k=(anioSel==='todos'?'todos':anioSel)+'-'+String(m).padStart(2,'0'); porMes[k]={tonPedidas:0,tonArribadas:0,tonNavegando:0,tonEnProduccion:0,nEnProduccion:0,nParcial:0,nCerrados:0}; }
   if(anioSel==='todos') return; // esta tabla solo tiene sentido con un año puntual seleccionado
 
+  const mesPedidoPorPedido = {};
   M.pedidos.forEach(p=>{
     if(!enAnio(p.fechaPedido)) return;
     const k = p.mesPedido; if(!porMes[k]) return;
+    mesPedidoPorPedido[p.pedido] = k;
     porMes[k].tonPedidas += (p.pedidoKg||0);
-    if(p.estatusPedido==='EN PRODUCCIÓN'){ porMes[k].tonEnProduccion += (p.pedidoKg||0); porMes[k].nEnProduccion++; }
+    if(p.estatusPedido==='EN PRODUCCIÓN') porMes[k].nEnProduccion++;
     else if(p.estatusPedido==='CON ENTREGA PARCIAL') porMes[k].nParcial++;
     if(p.cerrado) porMes[k].nCerrados++;
   });
+  // Todo lo de abajo se mide HOY sobre la MISMA cohorte de "lo pedido en ese mes" — no en el mes propio
+  // de arribo/zarpe de cada proyecto — para que Pedidas = Arribadas + Navegando + En Producción (reconcilia).
   M.spAll.forEach(s=>{
-    if(enAnio(s.fechaRealArribo)){ const k=monthKey(s.fechaRealArribo); if(porMes[k]) porMes[k].tonArribadas += (s.pesoBrutoKg||s.entregadoKg||0); }
-    if(s.estatusProyecto==='NAVEGANDO' && enAnio(s.fechaRealZarpe)){ const k=monthKey(s.fechaRealZarpe); if(porMes[k]) porMes[k].tonNavegando += (s.entregadoKg||0); }
+    const k = mesPedidoPorPedido[s.pedido]; if(!k) return;
+    const g = porMes[k];
+    if(s.estatusProyecto==='ARRIBADO') g.tonArribadas += (s.pesoBrutoKg||s.entregadoKg||0);
+    else if(s.estatusProyecto==='NAVEGANDO') g.tonNavegando += (s.entregadoKg||0);
   });
+  Object.values(porMes).forEach(g=>{ g.tonEnProduccion = Math.max(0, g.tonPedidas - g.tonArribadas - g.tonNavegando); });
 
-  let html = '<tr><th>Mes</th><th>Ton. Pedidas</th><th>Ton. Arribadas</th><th>Ton. Navegando</th><th>Ton. En Producción</th><th># En Producción</th><th># Con Parcial</th><th># Cerrados</th></tr>';
+  let html = '<tr><th>Mes de Pedido</th><th>Ton. Pedidas</th><th>Ton. Arribadas (hoy)</th><th>Ton. Navegando (hoy)</th><th>Ton. En Producción (hoy)</th><th># En Producción</th><th># Con Parcial</th><th># Cerrados</th></tr>';
   Object.keys(porMes).sort().forEach(k=>{
     const g = porMes[k];
     html += `<tr><td class="txt">${fmtMesLabel(k)}</td><td>${fmtTon(g.tonPedidas)}</td><td>${fmtTon(g.tonArribadas)}</td><td>${fmtTon(g.tonNavegando)}</td><td>${fmtTon(g.tonEnProduccion)}</td><td>${g.nEnProduccion}</td><td>${g.nParcial}</td><td>${g.nCerrados}</td></tr>`;
