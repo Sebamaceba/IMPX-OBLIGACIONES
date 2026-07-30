@@ -135,6 +135,11 @@
       <h2>Resumen: pendientes por pagar (detalle completo en Vista "Pendientes por Pagar")</h2>
       <div class="mini-kpis" id="v1_resumenPend"></div>
     </div>
+    <div class="panel">
+      <h2>Desempeño por proveedor — año de "Visión del año" (barra superior)</h2>
+      <div class="desc">Lead time y días de pago son promedios <b>ponderados por toneladas</b> (no un promedio simple entre pedidos) — así un pedido grande pesa más que uno chico en el promedio, igual que pesa más en la caja real.</div>
+      <div class="scroll"><table id="tbl_proveedor_desempeno"></table></div>
+    </div>
     <div class="grid2">
       <div class="panel">
         <h2>1.1a · Valor de pedidos por mes (USD)</h2>
@@ -198,15 +203,21 @@
       <div class="desc">Agrupable por mes de pedido o por Proyecto en Producción.</div>
       <div class="filters">
         <select id="f2_agrupa"><option value="pedido">Ver por: Proyecto en Producción</option><option value="mes">Ver por: Mes de Pedido</option></select>
+        <select id="f2_orden"><option value="pedido">Ordenar por pedido</option><option value="mesPedido">Ordenar por mes de pedido</option></select>
         <select id="f2_mes"><option value="">Todos los meses</option></select>
         <select id="f2_estado"><option value="">Todos los estados ($)</option><option value="AL DÍA">Al día</option><option value="CON SALDOS PENDIENTES">Con saldos pendientes</option></select>
         <select id="f2_estadoTon"><option value="">Todos los estados (ton.)</option><option value="EN PRODUCCIÓN">En producción</option><option value="CON ENTREGA PARCIAL">Con entrega parcial</option><option value="COMPLETADO">Completado</option></select>
-        <select id="f2_cerrado"><option value="">Cerrados: todos</option><option value="SI">Solo cerrados (automático)</option><option value="NO">Excluir cerrados</option></select>
+        <select id="f2_cerrado"><option value="">Cerrados: todos</option><option value="SI">Solo cerrados (anticipo conciliado)</option><option value="NO">Excluir cerrados</option></select>
         <select id="f2_diferencia"><option value="">Diferencia de entrega: todas</option><option value="SI">Solo con diferencia relevante (&gt;5%)</option></select>
         <input id="f2_buscar" placeholder="Buscar pedido o proveedor...">
       </div>
       <div class="mini-kpis" id="f2_resumen"></div>
       <div class="scroll"><table id="tbl_pedidos"></table></div>
+    </div>
+    <div class="panel">
+      <h2>Estadísticas por mes — año de "Visión del año" (barra superior)</h2>
+      <div class="desc">Por mes de pedido, dentro del año seleccionado arriba: toneladas en cada estado HOY, y cuántos pedidos de ese mes están en producción, con parcial o cerrados HOY.</div>
+      <div class="scroll"><table id="tbl_pedidos_mes"></table></div>
     </div>
   </div>
 
@@ -219,6 +230,7 @@
         <select id="f3_estado"><option value="">Todos los estados de pago</option><option value="PAGADO">Pagado</option><option value="PENDIENTE POR PAGAR">Pendiente por pagar</option></select>
         <select id="f3_estadoProyecto"><option value="">Todos los estados de proyecto</option><option value="EN PRODUCCIÓN">En producción</option><option value="NAVEGANDO">Navegando</option><option value="ARRIBADO">Arribado</option></select>
         <select id="f3_mesZarpe"><option value="">Todos los meses (fecha zarpe)</option></select>
+        <select id="f3_orden"><option value="fechaBL">Ordenar por fecha BL</option><option value="pedido">Ordenar por pedido</option></select>
       </div>
       <div class="mini-kpis" id="f3_resumen"></div>
       <div class="scroll"><table id="tbl_proyectos"></table></div>
@@ -240,7 +252,22 @@
       <div id="flujo6m_total" style="margin-top:10px;font-family:var(--mono);font-size:15px;font-weight:700;color:var(--navy);"></div>
     </div>
     <div class="panel">
-      <h2>4.1 · Proyectos Comex con saldo pendiente</h2>
+      <h2>4.1 · Programación de pagos — consolidado para Tesorería</h2>
+      <div class="desc">Vista tipo tabla dinámica: consolida TODO lo pendiente (proyectos comex, pronósticos de pedidos, giros financieros y nacionalización) por mes o por semana, separando lo confirmado (real) de lo estimado — para armar la programación semanal de pagos.</div>
+      <div class="filters">
+        <select id="f47_vista"><option value="mes">Agrupar por mes</option><option value="semana">Agrupar por semana</option></select>
+        <select id="f47_periodo"><option value="">Todos los períodos</option></select>
+        <select id="f47_tipo_fecha"><option value="ambos">Estimados y reales</option><option value="real">Solo reales/confirmados</option><option value="estimado">Solo estimados</option></select>
+        <button id="f47_descargar" type="button" style="background:var(--navy);color:#fff;border:none;border-radius:6px;padding:8px 14px;font-size:12px;cursor:pointer;">⬇ Descargar a Excel</button>
+      </div>
+      <div class="mini-kpis" id="f47_resumen"></div>
+      <h3 style="margin-top:14px;font-size:13px;color:var(--navy);">Consolidado por período</h3>
+      <div class="scroll"><table id="tbl_pivote_periodo"></table></div>
+      <h3 style="margin-top:18px;font-size:13px;color:var(--navy);">Detalle — por proyecto y por banco</h3>
+      <div class="scroll"><table id="tbl_pivote_detalle"></table></div>
+    </div>
+    <div class="panel">
+      <h2>4.2 · Proyectos Comex con saldo pendiente</h2>
       <div class="filters">
         <select id="f41_mes"><option value="">Todos los meses de pago</option></select>
         <select id="f41_mesZarpe"><option value="">Todos los meses de zarpe</option></select>
@@ -249,8 +276,8 @@
       <div class="scroll"><table id="tbl_pend_comex"></table></div>
     </div>
     <div class="panel">
-      <h2>4.2 · Pedidos sin proyecto parcial — proyección de saldo y fecha</h2>
-      <div class="note info">Número de parciales estimado = techo(valor del pedido ÷ capacidad típica de entrega por embarque de ese proveedor, mediana de USD/parcial en sus pedidos ya completados). El tiempo hasta el 2º parcial se estima aparte del tiempo entre parciales subsiguientes (el primer intervalo suele ser más largo — validado con datos reales). Zarpe, arribo y pago se estiman con estadísticas históricas de ese proveedor y país de origen; si no hay suficiente historial, se usa el respaldo global. Si un parcial estimado ya debió zarpar/llegar y no aparece confirmado en Seguimiento de Proyectos, se marca <b>RETRASADO</b> y su fecha se recalcula desde hoy.</div>
+      <h2>4.3 · Pedidos sin proyecto parcial — proyección de saldo y fecha</h2>
+      <div class="note info">Número de parciales estimado = techo(Toneladas del pedido ÷ capacidad típica de entrega por embarque de ese proveedor, mediana de Ton/parcial en sus pedidos ya completados). El tiempo hasta el 2º parcial se estima aparte del tiempo entre parciales subsiguientes (el primer intervalo suele ser más largo — validado con datos reales). Zarpe, arribo y pago se estiman con estadísticas históricas de ese proveedor y país de origen; si no hay suficiente historial, se usa el respaldo global. Si un parcial estimado ya debió zarpar/llegar y no aparece confirmado en Seguimiento de Proyectos, se marca <b>RETRASADO</b> y su fecha se recalcula desde hoy.</div>
       <div class="filters">
         <select id="f42_orden">
           <option value="pago">Ordenar por fecha de pago</option>
@@ -264,7 +291,7 @@
       <div class="scroll"><table id="tbl_grupoA"></table></div>
     </div>
     <div class="panel">
-      <h2>4.3 · Pedidos con entregas parciales incompletas — proyección de TODOS los parciales faltantes</h2>
+      <h2>4.4 · Pedidos con entregas parciales incompletas — proyección de TODOS los parciales faltantes</h2>
       <div class="note info">Se pronostican todos los parciales que aún faltan para completar el pedido (no solo el inmediato siguiente), encadenando desde el último BL real con la misma lógica de capacidad y tiempos entre parciales de Grupo A. Igual que en 4.2, los parciales retrasados se marcan y su fecha se recalcula desde hoy.</div>
       <div class="filters">
         <select id="f43_orden">
@@ -279,7 +306,7 @@
       <div class="scroll"><table id="tbl_grupoB"></table></div>
     </div>
     <div class="panel">
-      <h2>4.4 · Giros Financieros por pagar</h2>
+      <h2>4.5 · Giros Financieros por pagar</h2>
       <div class="filters">
         <select id="f44_mes"><option value="">Todos los meses de vencimiento</option></select>
         <select id="f44_banco"><option value="">Todos los bancos</option></select>
@@ -287,7 +314,7 @@
       <div class="scroll"><table id="tbl_gf_pend"></table></div>
     </div>
     <div class="panel">
-      <h2>4.5 · Giros Financieros abiertos HOY, por banco</h2>
+      <h2>4.6 · Giros Financieros abiertos HOY, por banco</h2>
       <div class="desc">Mismo total de 4.4, agrupado por banco — cuánto tenemos abierto hoy con cada uno.</div>
       <div class="grid2">
         <div style="height:260px;"><canvas id="c_gfPorBanco_v4"></canvas></div>
@@ -295,7 +322,7 @@
       </div>
     </div>
     <div class="panel">
-      <h2>4.6 · Nacionalización estimada (Arancel + IVA) — consolidada por mes de pago</h2>
+      <h2>4.7 · Nacionalización estimada (Arancel + IVA) — consolidada por mes de pago</h2>
       <div class="desc">Así se paga en la realidad: todas las llegadas (reales o estimadas) de un mes se acumulan, y el arancel + IVA de ese acumulado se paga en la <b>primera semana del mes siguiente</b>. Fórmula: Nacionalización = Valor Acumulado × Arancel% × (1 + IVA%). Incluye proyectos comex navegando, parciales incompletos y pedidos sin parcial — lo que ya arribó y no está registrado se lista aparte, no se pronostica (ya debió pagarse).</div>
       <div class="filters">
         <label style="font-size:11.5px;color:var(--ink-soft);">Arancel % <input id="v4_arancel" type="number" step="0.1" value="5" style="width:60px;"></label>
@@ -305,21 +332,6 @@
       <div class="mini-kpis" id="v4_nacResumen"></div>
       <div class="scroll"><table id="tbl_nac_estimada"></table></div>
       <div class="note" id="v4_nacNota" style="margin-top:8px;"></div>
-    </div>
-    <div class="panel">
-      <h2>4.7 · Programación de pagos — consolidado para Tesorería</h2>
-      <div class="desc">Vista tipo tabla dinámica: consolida TODO lo pendiente (proyectos comex, pronósticos de pedidos, giros financieros y nacionalización) por mes o por semana, separando lo confirmado (real) de lo estimado — para armar la programación semanal de pagos.</div>
-      <div class="filters">
-        <select id="f47_vista"><option value="mes">Agrupar por mes</option><option value="semana">Agrupar por semana</option></select>
-        <select id="f47_periodo"><option value="">Todos los períodos</option></select>
-        <select id="f47_tipo_fecha"><option value="ambos">Estimados y reales</option><option value="real">Solo reales/confirmados</option><option value="estimado">Solo estimados</option></select>
-        <button id="f47_descargar" type="button" style="background:var(--navy);color:#fff;border:none;border-radius:6px;padding:8px 14px;font-size:12px;cursor:pointer;">⬇ Descargar a Excel</button>
-      </div>
-      <div class="mini-kpis" id="f47_resumen"></div>
-      <h3 style="margin-top:14px;font-size:13px;color:var(--navy);">Consolidado por período</h3>
-      <div class="scroll"><table id="tbl_pivote_periodo"></table></div>
-      <h3 style="margin-top:18px;font-size:13px;color:var(--navy);">Detalle — por proyecto y por banco</h3>
-      <div class="scroll"><table id="tbl_pivote_detalle"></table></div>
     </div>
   </div>
 
@@ -1006,8 +1018,12 @@ function buildModel({profRaw, spRaw, pgRaw, gfRaw, nacRaw, pedDetRaw, impRaw}){
     g.mesPedido = monthKey(g.fechaPedido);
     g.saldoSinFacturar = g.valorPedido - g.valorFacturaBruto;
     g.alDia = g.saldoPendienteProyectos<=0.5 ? 'AL DÍA' : 'CON SALDOS PENDIENTES';
-    g.cerradoAutomatico = ton.pedidoCerradoAutomatico[g.pedido] || false;
-    g.cerrado = g.cerradoAutomatico;
+    g.diferenciaTonAutomatica = ton.pedidoCerradoAutomatico[g.pedido] || false; // solo informativo, YA NO determina el cierre (no es confiable: las filas de saldo solo se agregan cuando el proveedor notifica, no de inmediato)
+    // Cierre por conciliación financiera: si la reclasificación acumulada desde los proyectos comex ya
+    // alcanzó (o superó, con una tolerancia mínima de redondeo) el anticipo pagado, el anticipo quedó
+    // totalmente aplicado — no se esperan más proyectos comex para este pedido.
+    const TOLERANCIA_CIERRE = Math.max(1, g.anticipoPagado*0.01);
+    g.cerrado = g.anticipoPagado>0.5 && g.reclasificaciones >= (g.anticipoPagado - TOLERANCIA_CIERRE);
     const t = ton.tonPorPedido[g.pedido];
     g.pedidoKg = t ? t.pedidoKg : null;
     g.entregadoKg = t ? t.entregadoKg : null;
@@ -1082,8 +1098,9 @@ function buildModel({profRaw, spRaw, pgRaw, gfRaw, nacRaw, pedDetRaw, impRaw}){
   function avgPrimerZarpe(prov){ const v = diasPrimerZarpePorProveedor[prov]; return (v&&v.length>=MIN_MUESTRA)? weightedMean(v) : GLOBAL_primerZarpe; }
 
   // Número de proyectos comex (parciales) YA NO es un conteo fijo por proveedor — depende del tamaño del pedido.
-  // Se calcula la capacidad típica de entrega por embarque (mediana de USD/parcial en pedidos ya COMPLETADOS
-  // de ese proveedor) y luego N = techo(valor del pedido nuevo ÷ esa capacidad).
+  // Se calcula la capacidad típica de entrega por embarque (mediana de KG/parcial en pedidos ya COMPLETADOS
+  // de ese proveedor) y luego N = techo(Kg del pedido nuevo ÷ esa capacidad). En Toneladas, no en USD —
+  // la capacidad de un embarque es física (peso), no depende de fluctuaciones del precio del acero.
   function medianArr(arr){
     const s = arr.filter(x=>x!==null && !isNaN(x)).slice().sort((a,b)=>a-b);
     if(!s.length) return null;
@@ -1092,19 +1109,19 @@ function buildModel({profRaw, spRaw, pgRaw, gfRaw, nacRaw, pedDetRaw, impRaw}){
   }
   const capacidadPorProveedor = {};
   pedidos.forEach(p=>{
-    if(p.estatusPedido!=='COMPLETADO' || !p.nProyectosParciales || !p.valorPedido || !p.proveedor) return;
+    if(p.estatusPedido!=='COMPLETADO' || !p.nProyectosParciales || !p.pedidoKg || !p.proveedor) return;
     capacidadPorProveedor[p.proveedor] = capacidadPorProveedor[p.proveedor]||[];
-    capacidadPorProveedor[p.proveedor].push(p.valorPedido / p.nProyectosParciales);
+    capacidadPorProveedor[p.proveedor].push(p.pedidoKg / p.nProyectosParciales);
   });
   const GLOBAL_capacidadEmbarque = medianArr(Object.values(capacidadPorProveedor).flat());
   function capacidadEmbarque(prov){
     const v = capacidadPorProveedor[prov];
     return (v && v.length>=MIN_MUESTRA) ? medianArr(v) : GLOBAL_capacidadEmbarque;
   }
-  function numParcialesPorCapacidad(prov, valorPedido){
+  function numParcialesPorCapacidad(prov, pedidoKg){
     const cap = capacidadEmbarque(prov);
-    if(!cap || !valorPedido) return 1;
-    return Math.max(1, Math.ceil(valorPedido / cap));
+    if(!cap || !pedidoKg) return 1;
+    return Math.max(1, Math.ceil(pedidoKg / cap));
   }
 
   function diasNavegacionPedido(pedido){ return nav.diasNavegacion(ton.paisPorPedido[pedido]); }
@@ -1115,12 +1132,18 @@ function buildModel({profRaw, spRaw, pgRaw, gfRaw, nacRaw, pedDetRaw, impRaw}){
   }
 
   const HOY = new Date();
-  const grupoA = pedidos.filter(p=>p.nProyectosParciales===0 && !p.cerrado).map(p=>{
+  // Corte de datos confiables: antes de esta fecha, la conciliación de pagos/anticipos/giros no estaba
+  // alineada de forma consistente (el seguimiento financiero completo arrancó después que Cuadro Pedidos/
+  // Importaciones, que vienen desde may-2025). Los pedidos anteriores a este corte se EXCLUYEN de los
+  // pronósticos (Grupo A/B) para no arrastrar descuadres viejos al flujo de caja de hoy — pero siguen
+  // visibles en la Vista 2 para consulta histórica. Ajustar aquí si se confirma otra fecha exacta.
+  const FECHA_CORTE_DATA_CONFIABLE = new Date(2025,10,1); // 1-nov-2025
+  const grupoA = pedidos.filter(p=>p.nProyectosParciales===0 && !p.cerrado && (!p.fechaPedido || p.fechaPedido>=FECHA_CORTE_DATA_CONFIABLE)).map(p=>{
     if(!p.fechaPedido){
       return {...p, base:'sin_parcial', sinFechaBase:true,
         condicionUsada:'Sin fecha de proforma/pedido — por diligenciar', parciales:[], saldoProyectado: p.valorPedido-p.anticipoPagado};
     }
-    const n = numParcialesPorCapacidad(p.proveedor, p.valorPedido);
+    const n = numParcialesPorCapacidad(p.proveedor, p.pedidoKg);
     const condRep = condicionRepresentativaPedido(p.pedido);
     const valorPorParcial = p.valorPedido / n;
     const kgPorParcial = p.pedidoKg ? p.pedidoKg / n : null;
@@ -1150,8 +1173,8 @@ function buildModel({profRaw, spRaw, pgRaw, gfRaw, nacRaw, pedDetRaw, impRaw}){
 
   // Grupo B: pedidos con parciales incompletos — se pronostican TODOS los parciales que faltan
   // (no solo el inmediato siguiente), igual que en Grupo A, encadenando desde el último BL real.
-  const grupoB = pedidos.filter(p=>p.nProyectosParciales>0 && p.saldoSinFacturar>1 && !p.cerrado).map(p=>{
-    const nFaltan = Math.max(0, numParcialesPorCapacidad(p.proveedor, p.valorPedido) - p.nProyectosParciales);
+  const grupoB = pedidos.filter(p=>p.nProyectosParciales>0 && p.saldoSinFacturar>1 && !p.cerrado && (!p.fechaPedido || p.fechaPedido>=FECHA_CORTE_DATA_CONFIABLE)).map(p=>{
+    const nFaltan = Math.max(0, numParcialesPorCapacidad(p.proveedor, p.pedidoKg) - p.nProyectosParciales);
     const condRep = condicionRepresentativaPedido(p.pedido);
     const valorPorParcial = nFaltan>0 ? p.saldoSinFacturar/nFaltan : p.saldoSinFacturar;
     const kgPorParcial = (nFaltan>0 && p.saldoKg) ? p.saldoKg/nFaltan : null;
@@ -1182,6 +1205,8 @@ function buildModel({profRaw, spRaw, pgRaw, gfRaw, nacRaw, pedDetRaw, impRaw}){
       fechaEstimadaProximaBL: parciales[0]?.fechaZarpeEstimada, fechaEstimadaPago: parciales[0]?.fechaPagoEstimada,
       fechaArriboEstimada: parciales[0]?.fechaArriboEstimada};
   });
+
+  const excluidosPorCorte = pedidos.filter(p=>!p.cerrado && p.fechaPedido && p.fechaPedido<FECHA_CORTE_DATA_CONFIABLE && (p.nProyectosParciales===0 || p.saldoSinFacturar>1));
 
   const gfAbiertos = gf.filter(g=>g.abiertoReal);
   const motorPagos = buildMotorPagos(prof, ton, nav);
@@ -1279,9 +1304,10 @@ function buildModel({profRaw, spRaw, pgRaw, gfRaw, nacRaw, pedDetRaw, impRaw}){
     capacidad: GLOBAL_capacidadEmbarque, blPago: GLOBAL_blPago, condicionDias: motorPagos.GLOBAL_diasBL
   };
 
-  return { pedidos, spAll, pg, gf, gfAbiertos, nac, nacMes, grupoA, grupoB, obligaciones, pagosMes, gfMes, pedidosMes,
+  return { pedidos, spAll, pg, gf, gfAbiertos, nac, nacMes, grupoA, grupoB, obligaciones, pagosMes, gfMes, pedidosMes, enriquecidos,
            promedios:{GLOBAL_proformaPago, GLOBAL_blPago, GLOBAL_gap1, GLOBAL_gap2Plus, GLOBAL_primerZarpe, GLOBAL_capacidadEmbarque},
            ton, nav, estadProveedor, estadGlobal, MIN_MUESTRA_MODELO: MIN_MUESTRA, VIDA_MEDIA_MODELO: VIDA_MEDIA_DIAS,
+           excluidosPorCorte, FECHA_CORTE_DATA_CONFIABLE,
            conteos: {
              proformas_leidas: profRaw.length, proformas_validas: prof.length,
              proyectos_leidos: spRaw.length, proyectos_validos: spAll0.length, proyectos_tras_dedup: spAll.length,
@@ -1416,21 +1442,21 @@ function renderView8(){
   `;
 
   let html = `<tr><th>Proveedor</th><th>Gap 1→2 parcial</th><th>Gap parciales 2+</th><th>Días a 1er zarpe</th>
-    <th>Capacidad por embarque (USD)</th><th>Días BL→Pago (histórico)</th><th>Días BL→Pago (condición)</th></tr>`;
+    <th>Capacidad por embarque (Ton)</th><th>Días BL→Pago (histórico)</th><th>Días BL→Pago (condición)</th></tr>`;
   M.estadProveedor.forEach(e=>{
     html += `<tr>
       <td class="txt"><b>${e.proveedor}</b></td>
       <td${badge(e.n_gap1)}>${fmtD(e.gap1)} <span style="color:var(--ink-soft);font-size:9.5px;">(n=${e.n_gap1})</span></td>
       <td${badge(e.n_gap2plus)}>${fmtD(e.gap2plus)} <span style="color:var(--ink-soft);font-size:9.5px;">(n=${e.n_gap2plus})</span></td>
       <td${badge(e.n_primerZarpe)}>${fmtD(e.primerZarpe)} <span style="color:var(--ink-soft);font-size:9.5px;">(n=${e.n_primerZarpe})</span></td>
-      <td${badge(e.n_capacidad)}>${fmt(e.capacidad)} <span style="color:var(--ink-soft);font-size:9.5px;">(n=${e.n_capacidad})</span></td>
+      <td${badge(e.n_capacidad)}>${fmtTon(e.capacidad)} <span style="color:var(--ink-soft);font-size:9.5px;">(n=${e.n_capacidad})</span></td>
       <td${badge(e.n_blPago)}>${fmtD(e.blPago)} <span style="color:var(--ink-soft);font-size:9.5px;">(n=${e.n_blPago})</span></td>
       <td${badge(e.n_condicionDias)}>${fmtD(e.condicionDias)} <span style="color:var(--ink-soft);font-size:9.5px;">(n=${e.n_condicionDias})</span></td>
     </tr>`;
   });
   html += `<tr style="background:var(--paper);font-weight:700;"><td class="txt">RESPALDO GLOBAL</td>
     <td>${fmtD(M.estadGlobal.gap1)}</td><td>${fmtD(M.estadGlobal.gap2plus)}</td><td>${fmtD(M.estadGlobal.primerZarpe)}</td>
-    <td>${fmt(M.estadGlobal.capacidad)}</td><td>${fmtD(M.estadGlobal.blPago)}</td><td>${fmtD(M.estadGlobal.condicionDias)}</td></tr>`;
+    <td>${fmtTon(M.estadGlobal.capacidad)}</td><td>${fmtD(M.estadGlobal.blPago)}</td><td>${fmtD(M.estadGlobal.condicionDias)}</td></tr>`;
   document.getElementById('tbl_estad_proveedor').innerHTML = html;
 
   let htmlPais = '<tr><th>País de Origen</th><th># Observaciones</th><th>Promedio (días)</th><th>Mediana (P50)</th><th>P80 (usado en estimaciones)</th><th>Confiable</th></tr>';
@@ -1464,9 +1490,11 @@ function renderDiag(){
   if(t.advertenciasSalto.length) advs.push(`${t.advertenciasSalto.length} grupo(s) Proforma×Producto tienen una fila con cantidad mayor a una anterior (posible pedido adicional bajo la misma proforma, no capturado en el total): ${t.advertenciasSalto.slice(0,10).join(' | ')}${t.advertenciasSalto.length>10?'…':''}`);
   const incons = Object.values(t.porProyectoImport).filter(p=>p.inconsistentePeso).map(p=>p.proyecto);
   if(incons.length) advs.push(`${incons.length} proyecto(s) comex tienen 2 o más contenedores con el MISMO peso bruto exacto en Control de Importaciones (podría ser un total copiado sin actualizar por contenedor, o coincidencia real de cargas similares — se sumó igual, pero conviene validar contra el BL): ${incons.slice(0,10).join(', ')}${incons.length>10?'…':''}`);
-  const cerradosAuto = MODEL.pedidos.filter(p=>p.cerradoAutomatico && Math.abs(p.diferenciaEntregaKg||0)>1);
-  if(cerradosAuto.length) advs.push(`${cerradosAuto.length} pedido(s) se cerraron automáticamente (producción confirmada en la última fila sin continuación) con diferencia entre lo pedido y lo entregado — revisar si es un tema de calidad/cantidad aceptada: ` +
+  const cerradosAuto = MODEL.pedidos.filter(p=>p.cerrado && p.diferenciaEntregaKg!==null && Math.abs(p.diferenciaEntregaKg||0)>1);
+  if(cerradosAuto.length) advs.push(`${cerradosAuto.length} pedido(s) cerrados por conciliación financiera (anticipo ya reclasificado) muestran diferencia entre lo pedido y lo entregado en toneladas — revisar si es un tema de calidad/cantidad aceptada: ` +
     cerradosAuto.slice(0,10).map(p=>`${p.pedido} (${p.diferenciaEntregaKg>0?'+':''}${fmtTon(p.diferenciaEntregaKg)})`).join(', ') + (cerradosAuto.length>10?'…':''));
+  if(MODEL.excluidosPorCorte.length) advs.push(`${MODEL.excluidosPorCorte.length} pedido(s) anteriores a ${fmtDate(MODEL.FECHA_CORTE_DATA_CONFIABLE)} con saldo abierto NO se incluyen en los pronósticos de la Vista 4 (el seguimiento financiero completo no estaba alineado antes de esa fecha) — siguen visibles en la Vista 2 para consulta histórica: ` +
+    MODEL.excluidosPorCorte.slice(0,10).map(p=>p.pedido).join(', ') + (MODEL.excluidosPorCorte.length>10?'…':''));
   const diagPanel = document.getElementById('tbl_diag').closest('.panel');
   let advBox = document.getElementById('adv_toneladas');
   if(!advBox){ advBox = document.createElement('div'); advBox.id='adv_toneladas'; advBox.className='note'; diagPanel.appendChild(advBox); }
@@ -1497,7 +1525,7 @@ function renderKPIs(){
     selAnio.innerHTML = '<option value="todos">Todos los años</option>' + anios.map(a=>`<option value="${a}">${a}</option>`).join('');
     selAnio.value = new Date().getFullYear().toString();
     if(!anios.includes(new Date().getFullYear())) selAnio.value = 'todos';
-    selAnio.onchange = renderKPIs;
+    selAnio.onchange = ()=>{ renderKPIs(); renderView1(); renderView2(); };
   }
   const anioSel = selAnio.value;
   const enAnio = fecha => anioSel==='todos' || (fecha && fecha.getFullYear().toString()===anioSel);
@@ -1588,6 +1616,54 @@ function renderGirosPorBanco(canvasId, tableId, gfAbiertos){
   document.getElementById(tableId).innerHTML = html;
 }
 
+function renderDesempenoProveedor(M){
+  const selAnio = document.getElementById('kpi_anio');
+  const anioSel = selAnio.value;
+  const enAnio = fecha => fecha && (anioSel==='todos' || fecha.getFullYear().toString()===anioSel);
+
+  // Fecha de pago del anticipo por pedido (la más reciente, si hubo varios abonos de anticipo)
+  const anticipoPagoPorPedido = {};
+  M.pg.forEach(r=>{
+    if(!r.pedido || !r.fecha) return;
+    if(!normKey(r.concepto||'').includes('ANTICIPO')) return;
+    if(!anticipoPagoPorPedido[r.pedido] || r.fecha>anticipoPagoPorPedido[r.pedido]) anticipoPagoPorPedido[r.pedido] = r.fecha;
+  });
+
+  const porProveedor = {};
+  M.pedidos.forEach(p=>{
+    if(!p.proveedor || !enAnio(p.fechaPedido)) return;
+    if(!porProveedor[p.proveedor]) porProveedor[p.proveedor] = {proveedor:p.proveedor, tonPedidas:0, tonEntregadas:0, eventosPago:[], eventosLead:[]};
+    const g = porProveedor[p.proveedor];
+    g.tonPedidas += (p.pedidoKg||0);
+    g.tonEntregadas += (p.entregadoKg||0);
+    const fechaAnt = anticipoPagoPorPedido[p.pedido];
+    if(fechaAnt && p.fechaPedido && p.pedidoKg) g.eventosPago.push({dias: daysBetween(p.fechaPedido, fechaAnt), peso: p.pedidoKg});
+  });
+  M.enriquecidos.forEach(e=>{
+    const g = porProveedor[e.proveedor]; if(!g || !enAnio(e.fechaPedido)) return;
+    if(e.fechaRealArribo && e.fechaPedido && e.entregadoKg) g.eventosLead.push({dias: daysBetween(e.fechaPedido, e.fechaRealArribo), peso: e.entregadoKg});
+    if(e.diasProformaPago!==null && e.entregadoKg) g.eventosPago.push({dias: e.diasProformaPago, peso: e.entregadoKg});
+  });
+
+  function promedioPonderado(eventos){
+    const validos = eventos.filter(x=>x.dias!==null && x.dias!==undefined && x.peso>0);
+    const sumPeso = validos.reduce((a,x)=>a+x.peso,0);
+    if(!sumPeso) return null;
+    return validos.reduce((a,x)=>a+x.dias*x.peso,0)/sumPeso;
+  }
+
+  const filas = Object.values(porProveedor).map(g=>({
+    ...g, leadTime: promedioPonderado(g.eventosLead), diasPago: promedioPonderado(g.eventosPago)
+  })).filter(g=>g.tonPedidas>0).sort((a,b)=>b.tonPedidas-a.tonPedidas);
+
+  let html = '<tr><th>Proveedor</th><th>Ton. Pedidas</th><th>Ton. Entregadas</th><th>Lead Time Prom. Pond. (Pedido→Arribo)</th><th>Días Prom. Pond. de Pago (Anticipo + Parciales)</th></tr>';
+  filas.forEach(g=>{
+    html += `<tr><td class="txt">${g.proveedor}</td><td>${fmtTon(g.tonPedidas)}</td><td>${fmtTon(g.tonEntregadas)}</td>
+      <td>${g.leadTime!==null?Math.round(g.leadTime)+' d':'—'}</td><td>${g.diasPago!==null?Math.round(g.diasPago)+' d':'—'}</td></tr>`;
+  });
+  document.getElementById('tbl_proveedor_desempeno').innerHTML = html;
+}
+
 function renderView1(){
   const M = MODEL;
   const todosMeses = [...new Set([...Object.keys(M.pedidosMes), ...Object.keys(M.pagosMes), ...Object.keys(M.gfMes)])]
@@ -1672,6 +1748,7 @@ function renderView1(){
     `De cara adelante, el flujo de caja proyectado para los próximos 12 meses es de <b>${fmt(flujo.total)}</b> (obligaciones confirmadas + proyectadas + nacionalización estimada).`;
 
   renderGirosPorBanco('c_gfPorBanco_v1', 'tbl_gfPorBanco_v1', M.gfAbiertos);
+  renderDesempenoProveedor(M);
 }
 
 // ================= VISTA 2 =================
@@ -1728,6 +1805,11 @@ function renderView2(){
       <div class="mini-kpi warn"><span>Pedidos cerrados</span><b>${nCerrados}</b></div>
     `;
     let rows = modo==='mes' ? aggregateByMonth(base) : base.map(p=>({label:p.pedido, sub:p.proveedor, ...p}));
+    const orden = document.getElementById('f2_orden').value;
+    if(modo!=='mes'){
+      if(orden==='mesPedido') rows.sort((a,b)=> (a.mesPedido||'').localeCompare(b.mesPedido||'') || a.label.localeCompare(b.label));
+      else rows.sort((a,b)=> a.label.localeCompare(b.label));
+    }
     let html = `<tr><th>${modo==='mes'?'Mes':'Pedido'}</th><th># Prof.</th><th>Valor Pedido</th><th>Anticipo Pagado</th>
       <th># Proy.Parc.</th><th>Facturas (bruto)</th><th>Reclasific.</th><th>Notas Créd.</th><th>Anticipo Reconoc.</th>
       <th>Saldo Directo</th><th>Saldo Financ.</th><th>Saldo Pendiente</th><th>Saldo Sin Facturar</th>
@@ -1737,7 +1819,7 @@ function renderView2(){
       const estTon = r.estatusPedido || 'SIN DATO';
       const pillTon = estTon==='COMPLETADO' ? 'ok' : (estTon==='EN PRODUCCIÓN' ? 'warn' : (estTon==='CON ENTREGA PARCIAL' ? 'warn' : 'bad'));
       html += `<tr class="${bad?'row-bad':''}">
-        <td class="txt"><b>${r.label}</b><br><span style="color:var(--ink-soft);font-size:10px;">${r.sub||''}</span></td>
+        <td class="txt"><b>${r.label}</b><br><span style="color:var(--ink-soft);font-size:10px;">${r.sub||''}${modo!=='mes'&&r.mesPedido?' · '+fmtMesLabel(r.mesPedido):''}</span></td>
         <td>${r.nProformas}</td><td>${fmt(r.valorPedido)}</td><td>${fmt(r.anticipoPagado)}</td>
         <td>${r.nProyectosParciales}</td><td>${fmt(r.valorFacturaBruto)}</td><td>${fmt(r.reclasificaciones)}</td>
         <td>${fmt(r.notasCredito||0)}</td>
@@ -1747,13 +1829,45 @@ function renderView2(){
         <td>${fmtTon(r.pedidoKg)}</td><td>${fmtTon(r.entregadoKg)}</td><td>${fmtTon(r.saldoKg)}</td>
         <td><span class="pill ${bad?'bad':'ok'}">${r.alDia}</span></td>
         <td><span class="pill ${pillTon}">${estTon}</span></td>
-        <td>${modo==='mes' ? '—' : (r.cerrado? `<span class="pill ok">Cerrado (auto)</span>${r.diferenciaEntregaKg&&Math.abs(r.diferenciaEntregaKg)>1?`<br><span style="font-size:9px;color:${r.diferenciaEntregaKg>0?'var(--green)':'var(--red)'};">${r.diferenciaEntregaKg>0?'entregó +':'entregó '}${fmtTon(Math.abs(r.diferenciaEntregaKg))}</span>`:''}` : '')}</td></tr>`;
+        <td>${modo==='mes' ? '—' : (r.cerrado? `<span class="pill ok">Cerrado (anticipo conciliado)</span>${r.diferenciaEntregaKg&&Math.abs(r.diferenciaEntregaKg)>1?`<br><span style="font-size:9px;color:${r.diferenciaEntregaKg>0?'var(--green)':'var(--red)'};">${r.diferenciaEntregaKg>0?'entregó +':'entregó '}${fmtTon(Math.abs(r.diferenciaEntregaKg))}</span>`:''}` : '')}</td></tr>`;
     });
     document.getElementById('tbl_pedidos').innerHTML = html;
   }
-  ['f2_agrupa','f2_mes','f2_estado','f2_estadoTon','f2_cerrado','f2_diferencia'].forEach(id=>document.getElementById(id).onchange=go);
+  ['f2_agrupa','f2_orden','f2_mes','f2_estado','f2_estadoTon','f2_cerrado','f2_diferencia'].forEach(id=>document.getElementById(id).onchange=go);
   document.getElementById('f2_buscar').oninput = go;
   go();
+
+  renderEstadisticasMesVista2(M);
+}
+
+function renderEstadisticasMesVista2(M){
+  const selAnio = document.getElementById('kpi_anio');
+  const anioSel = selAnio.value;
+  const enAnio = fecha => fecha && (anioSel==='todos' || fecha.getFullYear().toString()===anioSel);
+
+  const porMes = {};
+  for(let m=1;m<=12;m++){ const k=(anioSel==='todos'?'todos':anioSel)+'-'+String(m).padStart(2,'0'); porMes[k]={tonPedidas:0,tonArribadas:0,tonNavegando:0,tonEnProduccion:0,nEnProduccion:0,nParcial:0,nCerrados:0}; }
+  if(anioSel==='todos') return; // esta tabla solo tiene sentido con un año puntual seleccionado
+
+  M.pedidos.forEach(p=>{
+    if(!enAnio(p.fechaPedido)) return;
+    const k = p.mesPedido; if(!porMes[k]) return;
+    porMes[k].tonPedidas += (p.pedidoKg||0);
+    if(p.estatusPedido==='EN PRODUCCIÓN'){ porMes[k].tonEnProduccion += (p.pedidoKg||0); porMes[k].nEnProduccion++; }
+    else if(p.estatusPedido==='CON ENTREGA PARCIAL') porMes[k].nParcial++;
+    if(p.cerrado) porMes[k].nCerrados++;
+  });
+  M.spAll.forEach(s=>{
+    if(enAnio(s.fechaRealArribo)){ const k=monthKey(s.fechaRealArribo); if(porMes[k]) porMes[k].tonArribadas += (s.pesoBrutoKg||s.entregadoKg||0); }
+    if(s.estatusProyecto==='NAVEGANDO' && enAnio(s.fechaRealZarpe)){ const k=monthKey(s.fechaRealZarpe); if(porMes[k]) porMes[k].tonNavegando += (s.entregadoKg||0); }
+  });
+
+  let html = '<tr><th>Mes</th><th>Ton. Pedidas</th><th>Ton. Arribadas</th><th>Ton. Navegando</th><th>Ton. En Producción</th><th># En Producción</th><th># Con Parcial</th><th># Cerrados</th></tr>';
+  Object.keys(porMes).sort().forEach(k=>{
+    const g = porMes[k];
+    html += `<tr><td class="txt">${fmtMesLabel(k)}</td><td>${fmtTon(g.tonPedidas)}</td><td>${fmtTon(g.tonArribadas)}</td><td>${fmtTon(g.tonNavegando)}</td><td>${fmtTon(g.tonEnProduccion)}</td><td>${g.nEnProduccion}</td><td>${g.nParcial}</td><td>${g.nCerrados}</td></tr>`;
+  });
+  document.getElementById('tbl_pedidos_mes').innerHTML = html;
 }
 
 // ================= VISTA 3 =================
@@ -1772,6 +1886,8 @@ function renderView3(){
     const feP = document.getElementById('f3_estadoProyecto').value;
     const fmZ = document.getElementById('f3_mesZarpe').value;
     let rows = M.spAll.filter(s => (!fm||monthKey(s.fechaBL)===fm) && (!fp||s.pedido===fp) && (!fe||s.estadoCalculado===fe) && (!feP||s.estatusProyecto===feP) && (!fmZ||monthKey(s.fechaRealZarpe)===fmZ));
+    const orden = document.getElementById('f3_orden').value;
+    rows = orden==='pedido' ? rows.slice().sort((a,b)=>a.pedido.localeCompare(b.pedido)) : rows.slice().sort((a,b)=>(a.fechaBL||0)-(b.fechaBL||0));
 
     const pendientesEnVista = rows.filter(s=>s.estadoCalculado==='PENDIENTE POR PAGAR');
     const totalPendiente = pendientesEnVista.reduce((a,s)=>a+s.saldoCalculado,0);
@@ -1782,7 +1898,7 @@ function renderView3(){
     `;
 
     let html = `<tr><th>Pedido</th><th>Proyecto</th><th>Proveedor</th><th>Valor Factura</th><th>Reclasific.</th>
-      <th>Notas Créd.</th><th>Fecha BL</th><th>Saldo Calculado</th><th>Saldo Sheet (ref.)</th><th>Fecha Pago (pend.)</th>
+      <th>Notas Créd.</th><th>Mes BL</th><th>Fecha BL</th><th>Saldo Calculado</th><th>Saldo Sheet (ref.)</th><th>Fecha Pago (pend.)</th>
       <th>Ton. Entregadas</th><th>Peso Bruto Arribo (Ton)</th><th>Fecha Real Arribo</th><th>Estado Pago</th><th>Estado Proyecto</th></tr>`;
     rows.forEach(s=>{
       const bad = s.estadoCalculado==='PENDIENTE POR PAGAR';
@@ -1792,6 +1908,7 @@ function renderView3(){
       html += `<tr class="${bad?'row-bad':''}">
         <td class="txt">${s.pedido}</td><td class="txt">${s.proyecto}</td><td class="txt">${s.proveedor}</td>
         <td>${fmt(s.valorFactura)}</td><td>${fmt(s.reclasificacion)}</td><td>${fmt(s.notasCredito)}</td>
+        <td class="txt">${s.fechaBL?fmtMesLabel(monthKey(s.fechaBL)):'—'}</td>
         <td>${fmtDate(s.fechaBL)}</td><td>${fmt(s.saldoCalculado)}</td>
         <td style="${difiere?'color:var(--amber);font-weight:600;':''}">${fmt(s.saldoUSD)}</td>
         <td>${bad?fmtDate(s.fechaUsada||s.fechaEstPago):'-'}${bad&&s.fuentePago?`<br><span style="color:var(--ink-soft);font-size:9.5px;">${s.fuentePago}</span>`:''}</td>
@@ -1803,7 +1920,7 @@ function renderView3(){
     });
     document.getElementById('tbl_proyectos').innerHTML = html;
   }
-  ['f3_mes','f3_pedido','f3_estado','f3_estadoProyecto','f3_mesZarpe'].forEach(id=>document.getElementById(id).onchange=go);
+  ['f3_mes','f3_pedido','f3_estado','f3_estadoProyecto','f3_mesZarpe','f3_orden'].forEach(id=>document.getElementById(id).onchange=go);
   go();
 }
 
@@ -2152,20 +2269,23 @@ function renderProgramacionPagos(M, nacEst){
     const porPeriodo = {};
     base.forEach(it=>{
       const k = usaSemanaP ? it.semanaKey : it.mesKey;
-      if(!porPeriodo[k]) porPeriodo[k] = {key:k, monday:it.semanaMonday, estimado:0, real:0, comex:0, proyectado:0, gf:0, n:0};
+      if(!porPeriodo[k]) porPeriodo[k] = {key:k, monday:it.semanaMonday, estimado:0, real:0, comexConfirmado:0, comexEstimado:0, gf:0, pronostico:0, nac:0, n:0};
       const g = porPeriodo[k];
       g.n++;
       if(it.esEstimado) g.estimado += it.monto; else g.real += it.monto;
-      if(it.tipo==='Proyecto Comex') g.comex += it.monto;
+      if(it.tipo==='Proyecto Comex'){ if(it.esEstimado) g.comexEstimado += it.monto; else g.comexConfirmado += it.monto; }
       else if(it.tipo==='Giro Financiero') g.gf += it.monto;
-      else g.proyectado += it.monto;
+      else if(it.tipo==='Nacionalización') g.nac += it.monto;
+      else g.pronostico += it.monto; // Pronóstico: sin parcial / parcial incompleto
     });
-    const filasP = Object.values(porPeriodo).sort((a,b)=> usaSemanaP ? a.key.localeCompare(b.key) : a.key.localeCompare(b.key));
-    let htmlP = `<tr><th>${usaSemanaP?'Semana (lunes)':'Mes'}</th><th>Total Estimado</th><th>Total Real</th><th>Proyectos Comex</th><th>Pronósticos + Nac.</th><th>Giros Financieros</th><th># Obligaciones</th></tr>`;
+    const filasP = Object.values(porPeriodo).sort((a,b)=> a.key.localeCompare(b.key));
+    let htmlP = `<tr><th>${usaSemanaP?'Semana (lunes)':'Mes'}</th><th>TOTAL</th><th>Comex Confirmado</th><th>Comex Estimado</th><th>Giros Confirmados</th><th>Pronósticos (sin parcial / incompleto)</th><th>Nacionalización Estimada</th><th># Oblig.</th></tr>`;
     filasP.forEach(g=>{
       const label = usaSemanaP ? fmtDate(g.monday) : fmtMesLabel(g.key);
-      const activo = (usaSemanaP? g.key===selPeriodo.value : g.key===selPeriodo.value);
-      htmlP += `<tr style="${activo?'background:#EEF3F7;font-weight:700;':''}"><td class="txt">${label}</td><td>${fmt(g.estimado)}</td><td>${fmt(g.real)}</td><td>${fmt(g.comex)}</td><td>${fmt(g.proyectado)}</td><td>${fmt(g.gf)}</td><td>${g.n}</td></tr>`;
+      const activo = g.key===selPeriodo.value;
+      const total = g.estimado + g.real;
+      htmlP += `<tr style="${activo?'background:#EEF3F7;font-weight:700;':''}"><td class="txt">${label}</td><td><b>${fmt(total)}</b></td>
+        <td>${fmt(g.comexConfirmado)}</td><td>${fmt(g.comexEstimado)}</td><td>${fmt(g.gf)}</td><td>${fmt(g.pronostico)}</td><td>${fmt(g.nac)}</td><td>${g.n}</td></tr>`;
     });
     document.getElementById('tbl_pivote_periodo').innerHTML = htmlP;
 
