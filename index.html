@@ -941,6 +941,16 @@ function dedupSP(sp){
   });
   return out;
 }
+// Un proyecto comex puede tener varias filas en Seguimiento Proyectos (una por producto/factura dentro
+// del mismo embarque) — correcto para sumar valores en USD, pero Peso Bruto y Kg entregados son una
+// propiedad del EMBARQUE completo (se repiten igual en cada fila). Para sumar toneladas recorriendo
+// spAll hay que usar esta versión deduplicada (1 fila por Nombre Proyecto único) o se cuenta el mismo
+// peso varias veces (bug real detectado: proyectos con 2-4 líneas sumaban su peso bruto 2-4 veces).
+function dedupPorProyectoUnico(sp){
+  const seen = new Set(); const out = [];
+  sp.forEach(s=>{ if(seen.has(s.proyecto)) return; seen.add(s.proyecto); out.push(s); });
+  return out;
+}
 function corregirGF(gf){
   return gf.map(r=>{
     const saldoReal = Math.max(0, r.saldoConTasa - r.abonos);
@@ -1046,15 +1056,19 @@ function buildModel({profRaw, spRaw, pgRaw, gfRaw, nacRaw, pedDetRaw, impRaw}){
       diasProformaPago: fechaPagoReal && g && g.fechaPedido ? daysBetween(g.fechaPedido, fechaPagoReal) : null,
       diasBLPago: fechaPagoReal && s.fechaBL ? daysBetween(s.fechaBL, fechaPagoReal) : null };
   });
+  // Igual que con spAll: un proyecto comex puede tener varias filas (una por línea de factura/producto).
+  // Para estadísticas "por proyecto" (no por línea de factura) hay que deduplicar, si no se cuenta la
+  // misma observación 2-4 veces y además se generan gaps de 0 días falsos (mismo proyecto = misma Fecha BL).
+  const enriquecidosUnico = dedupPorProyectoUnico(enriquecidos);
   const porProveedor = {};
-  enriquecidos.forEach(e=>{
+  enriquecidosUnico.forEach(e=>{
     const k = e.proveedor; if(!k) return;
     porProveedor[k] = porProveedor[k] || {proformaPago:[], blPago:[]};
     const fechaObs = saldoPagoRealPorProyecto[e.proyecto] || e.fechaBL || null; // fecha en que ocurrió el pago real (evento más reciente conocido)
     if(e.diasProformaPago!==null) porProveedor[k].proformaPago.push({valor:e.diasProformaPago, fecha:fechaObs});
     if(e.diasBLPago!==null) porProveedor[k].blPago.push({valor:e.diasBLPago, fecha:fechaObs});
   });
-  const conBL = enriquecidos.filter(e=>e.fechaBL).sort((a,b)=> (a.pedido+a.fechaBL.toISOString()).localeCompare(b.pedido+b.fechaBL.toISOString()));
+  const conBL = enriquecidosUnico.filter(e=>e.fechaBL).sort((a,b)=> (a.pedido+a.fechaBL.toISOString()).localeCompare(b.pedido+b.fechaBL.toISOString()));
   const gap1PorProveedor = {};      // gap entre el 1er y el 2do parcial (suele ser el más largo)
   const gap2PlusPorProveedor = {};  // gaps entre parciales subsiguientes (2do→3ro, 3ro→4to...), agrupados por muestra
   let lastByPedido = {}, posByPedido = {};
@@ -1069,8 +1083,8 @@ function buildModel({profRaw, spRaw, pgRaw, gfRaw, nacRaw, pedDetRaw, impRaw}){
     }
     lastByPedido[e.pedido] = e.fechaBL;
   });
-  const GLOBAL_proformaPago = weightedMean(enriquecidos.filter(e=>e.diasProformaPago!==null).map(e=>({valor:e.diasProformaPago, fecha:saldoPagoRealPorProyecto[e.proyecto]||e.fechaBL})));
-  const GLOBAL_blPago = weightedMean(enriquecidos.filter(e=>e.diasBLPago!==null).map(e=>({valor:e.diasBLPago, fecha:saldoPagoRealPorProyecto[e.proyecto]||e.fechaBL})));
+  const GLOBAL_proformaPago = weightedMean(enriquecidosUnico.filter(e=>e.diasProformaPago!==null).map(e=>({valor:e.diasProformaPago, fecha:saldoPagoRealPorProyecto[e.proyecto]||e.fechaBL})));
+  const GLOBAL_blPago = weightedMean(enriquecidosUnico.filter(e=>e.diasBLPago!==null).map(e=>({valor:e.diasBLPago, fecha:saldoPagoRealPorProyecto[e.proyecto]||e.fechaBL})));
   const GLOBAL_gap1 = weightedMean(Object.values(gap1PorProveedor).flat());
   const GLOBAL_gap2Plus = weightedMean(Object.values(gap2PlusPorProveedor).flat());
 
@@ -1245,6 +1259,7 @@ function buildModel({profRaw, spRaw, pgRaw, gfRaw, nacRaw, pedDetRaw, impRaw}){
     }
   });
   const spPendientes = spAll.filter(s=>s.estadoCalculado==='PENDIENTE POR PAGAR');
+  const spUnico = dedupPorProyectoUnico(spAll); // usar SIEMPRE que se sumen toneladas (peso bruto/kg entregado) a través de varios proyectos
   const obligaciones = [
     ...gfAbiertos.map(g=>({tipo:'Giro Financiero', pedido:g.pedido, referencia:g.proyectoComex, contraparte:g.banco, fecha:g.fechaVencimiento, valor:g.saldoReal})),
     ...spPendientes.map(s=>({tipo:'Obligación Proveedor', pedido:s.pedido, referencia:s.proyecto, contraparte:s.proveedor, fecha:s.fechaUsada, valor:s.saldoCalculado})),
@@ -1313,7 +1328,7 @@ function buildModel({profRaw, spRaw, pgRaw, gfRaw, nacRaw, pedDetRaw, impRaw}){
     capacidad: GLOBAL_capacidadEmbarque, blPago: GLOBAL_blPago, condicionDias: motorPagos.GLOBAL_diasBL
   };
 
-  return { pedidos, spAll, pg, gf, gfAbiertos, nac, nacMes, grupoA, grupoB, obligaciones, pagosMes, gfMes, pedidosMes, enriquecidos,
+  return { pedidos, spAll, spUnico, pg, gf, gfAbiertos, nac, nacMes, grupoA, grupoB, obligaciones, pagosMes, gfMes, pedidosMes, enriquecidos, enriquecidosUnico,
            promedios:{GLOBAL_proformaPago, GLOBAL_blPago, GLOBAL_gap1, GLOBAL_gap2Plus, GLOBAL_primerZarpe, GLOBAL_capacidadEmbarque},
            ton, nav, estadProveedor, estadGlobal, MIN_MUESTRA_MODELO: MIN_MUESTRA, VIDA_MEDIA_MODELO: VIDA_MEDIA_DIAS,
            excluidosPorCorte, FECHA_CORTE_DATA_CONFIABLE, excluidosPorTolerancia,
@@ -1547,8 +1562,11 @@ function renderKPIs(){
   const completados = pedidosAnio.filter(p=>p.estatusPedido==='COMPLETADO');
 
   const comexAnio = M.spAll.filter(s=>enAnio(s.fechaBL||s.fechaRealZarpe));
-  const navegando = comexAnio.filter(s=>s.estatusProyecto==='NAVEGANDO');
-  const arribados = comexAnio.filter(s=>s.estatusProyecto==='ARRIBADO');
+  const comexAnioUnico = M.spUnico.filter(s=>enAnio(s.fechaBL||s.fechaRealZarpe));
+  const navegando = comexAnioUnico.filter(s=>s.estatusProyecto==='NAVEGANDO'); // conteos/toneladas: SIEMPRE con spUnico
+  const arribados = comexAnioUnico.filter(s=>s.estatusProyecto==='ARRIBADO');
+  const navegandoValor = comexAnio.filter(s=>s.estatusProyecto==='NAVEGANDO'); // $ USD: con spAll completo (cada línea de factura suma)
+  const arribadosValor = comexAnio.filter(s=>s.estatusProyecto==='ARRIBADO');
 
   const valorPedidosAnio = pedidosAnio.reduce((a,p)=>a+p.valorPedido,0);
   const tonEnProduccion = enProduccion.reduce((a,p)=>a+(p.pedidoKg||0),0);
@@ -1556,9 +1574,9 @@ function renderKPIs(){
   const tonPendienteParcial = conParcial.reduce((a,p)=>a+(p.saldoKg||0),0);
   const valorPendienteParcial = conParcial.reduce((a,p)=>a+p.saldoPendienteProyectos,0);
   const tonNavegando = navegando.reduce((a,s)=>a+(s.entregadoKg||0),0);
-  const valorNavegando = navegando.reduce((a,s)=>a+(s.valorFactura||0),0);
+  const valorNavegando = navegandoValor.reduce((a,s)=>a+(s.valorFactura||0),0);
   const tonArribado = arribados.reduce((a,s)=>a+(s.pesoBrutoKg||s.entregadoKg||0),0);
-  const valorArribado = arribados.reduce((a,s)=>a+(s.valorFactura||0),0);
+  const valorArribado = arribadosValor.reduce((a,s)=>a+(s.valorFactura||0),0);
 
   // Lead time promedio real: Fecha de Pedido → Fecha Real de Arribo, para proyectos ya arribados con ambas fechas
   const leadTimes = comexAnio.filter(s=>s.estatusProyecto==='ARRIBADO' && s.fechaRealArribo)
@@ -1650,7 +1668,7 @@ function renderDesempenoProveedor(M){
     const fechaAnt = anticipoPagoPorPedido[p.pedido];
     if(fechaAnt && p.fechaPedido && p.pedidoKg) g.eventosPago.push({dias: daysBetween(p.fechaPedido, fechaAnt), peso: p.pedidoKg});
   });
-  M.enriquecidos.forEach(e=>{
+  M.enriquecidosUnico.forEach(e=>{
     const g = porProveedor[e.proveedor]; if(!g || !enAnio(e.fechaPedido)) return;
     if(e.fechaRealArribo && e.fechaPedido && e.entregadoKg) g.eventosLead.push({dias: daysBetween(e.fechaPedido, e.fechaRealArribo), peso: e.entregadoKg});
     if(e.diasProformaPago!==null && e.entregadoKg) g.eventosPago.push({dias: e.diasProformaPago, peso: e.entregadoKg});
@@ -1701,7 +1719,7 @@ function renderView1(){
   M.pedidos.forEach(p=>{ if(!p.mesPedido) return; tonPedidoPorMes[p.mesPedido] = (tonPedidoPorMes[p.mesPedido]||0) + (p.pedidoKg||0); });
   // Toneladas arribadas por mes (kg), por fecha real de arribo de cada proyecto comex
   const tonArriboPorMes = {};
-  M.spAll.forEach(s=>{ const m = monthKey(s.fechaRealArribo); if(!m) return; tonArriboPorMes[m] = (tonArriboPorMes[m]||0) + (s.pesoBrutoKg||s.entregadoKg||0); });
+  M.spUnico.forEach(s=>{ const m = monthKey(s.fechaRealArribo); if(!m) return; tonArriboPorMes[m] = (tonArriboPorMes[m]||0) + (s.pesoBrutoKg||s.entregadoKg||0); });
 
   barChart('c_pedidosMes', meses, [{label:'Valor Pedido', data:meses.map(m=>pM(m).valor), backgroundColor:COLORS.navy}], {}, true);
   barChart('c_tonPedidoMes', meses, [{label:'Toneladas Pedidas', data:meses.map(m=>tonPedidoPorMes[m]||0), backgroundColor:COLORS.gold}], {}, true, fmtTonAxis);
@@ -1872,7 +1890,7 @@ function renderEstadisticasMesVista2(M){
   });
   // Todo lo de abajo se mide HOY sobre la MISMA cohorte de "lo pedido en ese mes" — no en el mes propio
   // de arribo/zarpe de cada proyecto — para que Pedidas = Arribadas + Navegando + En Producción (reconcilia).
-  M.spAll.forEach(s=>{
+  M.spUnico.forEach(s=>{
     const k = mesPedidoPorPedido[s.pedido]; if(!k) return;
     const g = porMes[k];
     if(s.estatusProyecto==='ARRIBADO') g.tonArribadas += (s.pesoBrutoKg||s.entregadoKg||0);
@@ -1961,6 +1979,7 @@ function calcularNacEstimada(M, arancelPct, ivaPct){
   // No se asume que lo ya arribado esté pagado solo porque falta el registro: se incluye igual en el mes real
   // de arribo (o estimado si aún no arriba), y se marca aparte si el arribo real ya pasó hace tiempo, por si
   // es un tema de registro pendiente más que un pago realmente pendiente.
+  const kgYaContado = new Set(); // evita sumar el peso del mismo proyecto más de una vez cuando tiene varias líneas de factura
   M.spAll.forEach(s=>{
     if(nacRegistrados.has(s.proyecto)) return;
     if(!s.valorFactura) return;
@@ -1970,6 +1989,7 @@ function calcularNacEstimada(M, arancelPct, ivaPct){
     } else if(s.estatusProyecto==='NAVEGANDO' && s.fechaRealZarpe){
       fechaArribo = addDays(s.fechaRealZarpe, M.nav.diasNavegacion(M.ton.paisPorPedido[s.pedido])||45); esReal = false; kg = s.entregadoKg;
     } else return; // 'EN PRODUCCIÓN' sin zarpe real: no se puede estimar arribo todavía
+    if(kgYaContado.has(s.proyecto)) kg = 0; else kgYaContado.add(s.proyecto); // el $ sí se suma por cada línea, el Kg (propiedad del embarque) solo una vez
     const diasDesdeArribo = esReal ? daysBetween(fechaArribo, new Date()) : null;
     items.push({origen: esReal?'Arribado (sin registrar en Nacionalización)':'Navegando (estimado)', pedido:s.pedido, referencia:s.proyecto,
       valorBase:s.valorFactura, kg, fechaArribo, retrasado:false, esReal, posibleYaPagado: esReal && diasDesdeArribo>180});
