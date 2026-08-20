@@ -28,6 +28,21 @@
   .sub{font-size:12.5px;opacity:.85;}
   #statusMsg{font-size:12px;margin-top:8px;opacity:.9;}
   .kpi-filterbar{display:flex;align-items:center;gap:8px;padding:10px 36px 0;background:#fff;font-size:12px;color:var(--ink-soft);}
+  .tablero-mando{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;padding:14px 36px;background:linear-gradient(180deg,#fff,var(--paper));border-bottom:1px solid var(--line);}
+  .tablero-card{background:#fff;border-radius:10px;padding:14px 16px;border-left:5px solid var(--slate);box-shadow:0 1px 3px rgba(14,53,82,0.08);cursor:pointer;transition:transform .12s ease;}
+  .tablero-card:hover{transform:translateY(-2px);box-shadow:0 4px 10px rgba(14,53,82,0.14);}
+  .tablero-card.ok{border-left-color:var(--green);} .tablero-card.warn{border-left-color:var(--amber);} .tablero-card.bad{border-left-color:var(--red);}
+  .tablero-card .tc-lab{font-size:11px;color:var(--ink-soft);font-weight:600;text-transform:uppercase;letter-spacing:.03em;}
+  .tablero-card .tc-val{font-size:22px;font-weight:700;color:var(--navy);margin-top:4px;}
+  .tablero-card .tc-sub{font-size:11px;color:var(--ink-soft);margin-top:2px;}
+  .bandeja-alertas{padding:0 36px 14px;background:var(--paper);border-bottom:1px solid var(--line);}
+  .bandeja-alertas.vacia{display:none;}
+  .bandeja-titulo{font-size:12px;font-weight:700;color:var(--navy);padding:10px 0 6px;text-transform:uppercase;letter-spacing:.03em;}
+  .alerta-item{display:flex;align-items:center;gap:10px;background:#fff;border-radius:8px;padding:9px 14px;margin-bottom:6px;font-size:12px;cursor:pointer;border-left:4px solid var(--red);}
+  .alerta-item.warn{border-left-color:var(--amber);}
+  .alerta-item .ai-badge{font-weight:700;color:#fff;background:var(--red);border-radius:5px;padding:2px 8px;font-size:10px;}
+  .alerta-item.warn .ai-badge{background:var(--amber);}
+  .alerta-item:hover{background:#F7FAFC;}
   .kpi-filterbar select{font-family:var(--sans);font-size:12.5px;padding:5px 8px;border:1px solid var(--line);border-radius:6px;background:#fff;color:var(--navy);font-weight:600;}
   .kpis{display:grid;grid-template-columns:repeat(7,1fr);gap:10px;padding:14px 36px 18px;background:#fff;border-bottom:1px solid var(--line);}
   .kpi{border-left:3px solid var(--navy);padding:6px 12px;}
@@ -38,9 +53,12 @@
   .kpi .val{font-family:var(--mono);font-size:18px;font-weight:600;color:var(--navy);margin-top:2px;}
   .kpi.warn{border-left-color:var(--red);}
   .kpi.warn .val{color:var(--red);}
-  nav{display:flex;gap:4px;padding:0 36px;background:#fff;border-bottom:1px solid var(--line);flex-wrap:wrap;}
+  nav{display:flex;gap:4px;padding:6px 36px;background:#fff;border-bottom:1px solid var(--line);flex-wrap:wrap;align-items:center;}
   nav button{border:none;background:none;padding:14px 14px;font-family:var(--sans);font-size:13px;font-weight:600;color:var(--ink-soft);cursor:pointer;border-bottom:3px solid transparent;}
   nav button.active{color:var(--navy);border-bottom-color:var(--amber);}
+  .nav-grupo{display:flex;align-items:center;gap:2px;padding-right:10px;margin-right:8px;border-right:1px solid var(--line);}
+  .nav-grupo:last-child{border-right:none;}
+  .nav-grupo-label{font-size:9.5px;font-weight:700;color:var(--slate);text-transform:uppercase;letter-spacing:0.06em;margin-right:6px;white-space:nowrap;}
   main{padding:24px 36px 60px;max-width:1500px;margin:0 auto;}
   .view{display:none;}
   .view.active{display:block;}
@@ -95,7 +113,7 @@
 </div>
 
 <header>
-  <div class="eyebrow"><span class="dot loading" id="statusDot"></span> Live · conectado a Google Sheets</div>
+  <div class="eyebrow"><span class="dot loading" id="statusDot"></span> Live · conectado a Google Sheets · <span id="ultimaActualizacion" style="font-weight:600;">cargando…</span></div>
   <h1>Tablero de Obligaciones y Caja</h1>
   <div class="sub">Se actualiza cada vez que abres o refrescas esta página, leyendo directo de tu Google Sheets.</div>
   <div id="statusMsg"></div>
@@ -107,16 +125,27 @@
 </div>
 <div class="kpis" id="kpiBar"></div>
 
+<div id="tableroMando"></div>
+<div id="bandejaAlertas"></div>
+
 <nav id="tabBar">
-  <button data-view="v1" class="active">1 · Pedidos y Caja por Mes</button>
-  <button data-view="v2">2 · Trazabilidad Pedidos</button>
-  <button data-view="v6">3 · Seguimiento Contable por Pedido</button>
-  <button data-view="v3">4 · Proyectos Comex</button>
-  <button data-view="v4">5 · Pendientes por Pagar</button>
-  <button data-view="v8">6 · Estadísticas del Modelo</button>
-  <button data-view="v9">9 · Llegadas por Familia</button>
-  <button data-view="v5">7 · Nacionalización</button>
-  <button data-view="v7">8 · Metodología (léeme)</button>
+  <div class="nav-grupo"><span class="nav-grupo-label">Resumen</span>
+    <button data-view="v1" class="active">1 · Pedidos y Caja por Mes</button>
+  </div>
+  <div class="nav-grupo"><span class="nav-grupo-label">Operación</span>
+    <button data-view="v2">2 · Trazabilidad Pedidos</button>
+    <button data-view="v6">3 · Seguimiento Contable por Pedido</button>
+    <button data-view="v3">4 · Proyectos Comex</button>
+    <button data-view="v9">9 · Llegadas por Familia</button>
+  </div>
+  <div class="nav-grupo"><span class="nav-grupo-label">Finanzas</span>
+    <button data-view="v4">5 · Pendientes por Pagar</button>
+    <button data-view="v5">7 · Nacionalización</button>
+  </div>
+  <div class="nav-grupo"><span class="nav-grupo-label">Modelo</span>
+    <button data-view="v8">6 · Estadísticas del Modelo</button>
+    <button data-view="v7">8 · Metodología (léeme)</button>
+  </div>
 </nav>
 
 <main>
@@ -222,8 +251,13 @@
       <div class="scroll"><table id="tbl_pedidos_mes"></table></div>
     </div>
     <div class="panel">
-      <h2>Desempeño por proveedor — año de "Visión del año" (barra superior)</h2>
+      <h2>Desempeño por proveedor — ranking, año de "Visión del año" (barra superior)</h2>
       <div class="desc">Lead time y días de pago son promedios <b>ponderados por toneladas</b> (no un promedio simple entre pedidos) — así un pedido grande pesa más que uno chico en el promedio, igual que pesa más en la caja real.</div>
+      <div class="filters">
+        <label style="font-size:12px;color:var(--ink-soft);">Ordenar ranking por:
+          <select id="v2_rankPor"><option value="tonPedidas">Toneladas pedidas</option><option value="leadTime">Lead Time (menor a mayor = mejor)</option><option value="diasPago">Días de pago (menor a mayor = más rápido para pagar)</option></select>
+        </label>
+      </div>
       <div class="scroll"><table id="tbl_proveedor_desempeno"></table></div>
     </div>
   </div>
@@ -493,6 +527,12 @@
     <div class="panel">
       <h2>3 · Pedidos sin ningún parcial — proyección</h2>
       <div class="scroll"><table id="tbl_llegadas_sinparcial"></table></div>
+    </div>
+    <div class="panel">
+      <h2>3b · Detalle: de qué pedido madre viene cada llegada estimada</h2>
+      <div class="desc">Cada fila es un parcial proyectado (de Grupo A o Grupo B, Vista 4), repartido por Familia — para saber a qué pedido reclamarle si un arribo se atrasa.</div>
+      <div class="filters"><input id="v9_buscar_pedido" placeholder="Buscar pedido, proveedor o proyecto..."></div>
+      <div class="scroll"><table id="tbl_llegadas_detalle_pedido"></table></div>
     </div>
     <div class="panel">
       <h2>4 · Consolidado total (Cierto + Estimado) por mes y Familia</h2>
@@ -1438,6 +1478,8 @@ async function init(){
     setStatus('loading','Calculando el modelo...');
     MODEL = buildModel(raw);
     render();
+    const horaActual = new Date().toLocaleString('es-CO', {day:'2-digit',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'});
+    document.getElementById('ultimaActualizacion').textContent = `Última actualización: ${horaActual}`;
     setStatus('ok', `Última actualización: ${new Date().toLocaleString('es-CO')} · ${MODEL.pedidos.length} pedidos, ${MODEL.spAll.length} proyectos parciales, ${MODEL.pg.length} pagos, ${MODEL.gf.length} giros financieros.`);
     document.getElementById('loadOverlay').style.display='none';
   } catch(err){
@@ -1508,7 +1550,82 @@ function render(){
   renderView6();
   renderView8();
   renderView9();
+  renderTableroMando();
+  renderBandejaAlertas();
   renderDiag();
+}
+
+function irAVista(viewId){
+  document.querySelectorAll('#tabBar button').forEach(b=>b.classList.remove('active'));
+  const btn = document.querySelector(`#tabBar button[data-view="${viewId}"]`);
+  if(btn) btn.classList.add('active');
+  document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
+  const view = document.getElementById(viewId);
+  if(view){ view.classList.add('active'); view.scrollIntoView({behavior:'smooth', block:'start'}); }
+}
+
+// ================= TABLERO DE MANDO (semaforizado, arriba de todo) =================
+function renderTableroMando(){
+  const M = MODEL;
+  const HOY = new Date();
+  const flujo90 = computeFlujoCaja(M, 3); // próximos 3 meses ~ 90 días
+  const meses30 = flujo90.mesesN.slice(0,1), meses60 = flujo90.mesesN.slice(0,2), meses90 = flujo90.mesesN;
+  const sumaMeses = lista => lista.reduce((a,m)=>a+flujo90.porMes[m].comex+flujo90.porMes[m].gf+flujo90.porMes[m].proyA+flujo90.porMes[m].proyB+flujo90.porMes[m].nac,0);
+  const caja30 = sumaMeses(meses30), caja60 = sumaMeses(meses60), caja90 = sumaMeses(meses90);
+
+  const parcialesRetrasados = [...M.grupoA.flatMap(p=>p.parciales), ...M.grupoB.flatMap(p=>p.parciales)].filter(par=>par.retrasado);
+  const tonRetrasadas = parcialesRetrasados.reduce((a,par)=>a+(par.kgEstimado||0),0);
+
+  const tonCierta = M.ton.grupos.reduce((a,g)=>a+ (g.filas.some(f=>f.fechaRealZarpe) ? g.cantidadEntregadaKg : 0), 0);
+  const tonEstimadaTotal = [...M.grupoA.flatMap(p=>p.parciales), ...M.grupoB.flatMap(p=>p.parciales)].reduce((a,par)=>a+(par.kgEstimado||0),0);
+  const pctCierta = (tonCierta+tonEstimadaTotal)>0 ? Math.round(tonCierta/(tonCierta+tonEstimadaTotal)*100) : 0;
+
+  const giros7dias = M.gfAbiertos.filter(g=>g.fechaVencimiento && daysBetween(HOY, g.fechaVencimiento)>=0 && daysBetween(HOY, g.fechaVencimiento)<=7);
+  const totalGiros7 = giros7dias.reduce((a,g)=>a+g.saldoReal,0);
+
+  const cards = [
+    {lab:'Caja necesaria 30 días', val:fmt(caja30), sub:'próximo mes', tipo:caja30>0?'warn':'ok', ir:'v4'},
+    {lab:'Caja necesaria 60 días', val:fmt(caja60), sub:'próximos 2 meses', tipo:'neutral', ir:'v4'},
+    {lab:'Caja necesaria 90 días', val:fmt(caja90), sub:'próximos 3 meses', tipo:'neutral', ir:'v4'},
+    {lab:'Toneladas en riesgo de atraso', val:fmtTon(tonRetrasadas), sub:`${parcialesRetrasados.length} parcial(es) retrasado(s)`, tipo:parcialesRetrasados.length>0?'bad':'ok', ir:'v4'},
+    {lab:'% del pipeline que es cierto', val:pctCierta+'%', sub:'vs. estimado (Vista 9)', tipo:pctCierta>=60?'ok':(pctCierta>=35?'warn':'bad'), ir:'v9'},
+    {lab:'Giros que vencen en 7 días', val:fmt(totalGiros7), sub:`${giros7dias.length} giro(s)`, tipo:giros7dias.length>0?'warn':'ok', ir:'v4'},
+  ];
+  document.getElementById('tableroMando').innerHTML = `<div class="tablero-mando">` + cards.map(c=>
+    `<div class="tablero-card ${c.tipo}" onclick="irAVista('${c.ir}')"><div class="tc-lab">${c.lab}</div><div class="tc-val">${c.val}</div><div class="tc-sub">${c.sub}</div></div>`
+  ).join('') + `</div>`;
+}
+
+// ================= BANDEJA DE ALERTAS (consolidada, un solo lugar) =================
+function renderBandejaAlertas(){
+  const M = MODEL;
+  const alertas = [];
+
+  const parcialesRetrasados = [
+    ...M.grupoA.flatMap(p=>p.parciales.map(par=>({...par, pedido:p.pedido}))),
+    ...M.grupoB.flatMap(p=>p.parciales.map(par=>({...par, pedido:p.pedido}))),
+  ].filter(par=>par.retrasado);
+  if(parcialesRetrasados.length) alertas.push({tipo:'bad', badge:'RETRASADO', texto:`${parcialesRetrasados.length} parcial(es) proyectado(s) ya deberían haber zarpado y no están confirmados en Seguimiento de Proyectos.`, ir:'v4'});
+
+  const giros7 = M.gfAbiertos.filter(g=>g.fechaVencimiento && daysBetween(new Date(), g.fechaVencimiento)>=0 && daysBetween(new Date(), g.fechaVencimiento)<=7);
+  if(giros7.length) alertas.push({tipo:'warn', badge:'GIROS', texto:`${giros7.length} giro(s) financiero(s) vencen en los próximos 7 días (${fmt(giros7.reduce((a,g)=>a+g.saldoReal,0))}).`, ir:'v4'});
+
+  const diferenciasGrandes = M.pedidos.filter(p=>p.cerrado && p.pedidoKg && Math.abs(p.diferenciaEntregaKg||0)/p.pedidoKg>0.05);
+  if(diferenciasGrandes.length) alertas.push({tipo:'warn', badge:'DIFERENCIA', texto:`${diferenciasGrandes.length} pedido(s) cerrado(s) con diferencia >5% entre lo pedido y lo entregado en toneladas.`, ir:'v2'});
+
+  if(M.excluidosPorCorte && M.excluidosPorCorte.length) alertas.push({tipo:'warn', badge:'DATOS VIEJOS', texto:`${M.excluidosPorCorte.length} pedido(s) anteriores al corte de datos confiables con saldo abierto, no incluidos en pronósticos.`, ir:'v2'});
+
+  const arribadosSinNac = (function(){
+    const nacRegistrados = new Set(M.nac.map(n=>n.proyectoComex));
+    return M.spAll.filter(s=>s.estatusProyecto==='ARRIBADO' && !nacRegistrados.has(s.proyecto)).length;
+  })();
+  if(arribadosSinNac>0) alertas.push({tipo:'warn', badge:'NACIONALIZACIÓN', texto:`${arribadosSinNac} proyecto(s) ya arribaron y no tienen registro en la hoja de Nacionalización — posible pago pendiente de registrar.`, ir:'v5'});
+
+  const div = document.getElementById('bandejaAlertas');
+  if(!alertas.length){ div.className = 'bandeja-alertas vacia'; div.innerHTML=''; return; }
+  div.className = 'bandeja-alertas';
+  div.innerHTML = `<div class="bandeja-titulo">⚠ Necesita tu atención (${alertas.length})</div>` +
+    alertas.map(a=>`<div class="alerta-item ${a.tipo}" onclick="irAVista('${a.ir}')"><span class="ai-badge">${a.badge}</span><span>${a.texto}</span></div>`).join('');
 }
 
 // ================= VISTA 8 — ESTADÍSTICAS DEL MODELO =================
@@ -1595,6 +1712,23 @@ function renderView9(){
   document.getElementById('tbl_llegadas_parcial').innerHTML = tParcial.html;
   const tSinParcial = tablaMesFamilia(sinParcial, FAMILIAS_ORDEN);
   document.getElementById('tbl_llegadas_sinparcial').innerHTML = tSinParcial.html;
+
+  // 3b: detalle de cada llegada estimada, con su pedido madre (para trazabilidad operativa)
+  function renderDetallePedido(){
+    const q = (document.getElementById('v9_buscar_pedido').value||'').toLowerCase();
+    const filas = estimadoTodo.filter(it=>!q || (it.pedido||'').toLowerCase().includes(q) || (it.proveedor||'').toLowerCase().includes(q))
+      .sort((a,b)=>(a.fechaArribo||0)-(b.fechaArribo||0));
+    let htmlDet = '<tr><th>Pedido Madre</th><th>Proveedor</th><th>Tipo</th><th>Parcial</th><th>Familia</th><th>Ton. Estimadas</th><th>Fecha Arribo Estimada</th><th>Mes Disponible</th></tr>';
+    filas.forEach(it=>{
+      htmlDet += `<tr class="${it.tipo==='Parcial pendiente'?'':'row-bad'}"><td class="txt">${it.pedido||'—'}</td><td class="txt">${it.proveedor||'—'}</td>
+        <td class="txt">${it.tipo}</td><td>${it.parcial||'—'}</td><td class="txt">${it.familia}</td><td>${fmtTon(it.kg)}</td>
+        <td>${fmtDate(it.fechaArribo)}</td><td>${fmtMesLabel(it.mesDisp)}</td></tr>`;
+    });
+    htmlDet += `<tr style="background:var(--paper);font-weight:700;"><td class="txt" colspan="7">TOTAL</td><td>${fmtTon(filas.reduce((a,it)=>a+it.kg,0))}</td></tr>`;
+    document.getElementById('tbl_llegadas_detalle_pedido').innerHTML = htmlDet;
+  }
+  document.getElementById('v9_buscar_pedido').oninput = renderDetallePedido;
+  renderDetallePedido();
 
   // 4: consolidado (2 filas por mes: CIERTO y ESTIMADO, + fila de total)
   const mesesTodos = [...new Set([...cierto, ...estimadoTodo].map(it=>it.mesDisp).filter(Boolean))].sort();
@@ -1756,18 +1890,20 @@ function renderKPIs(){
   const tonArribado = arribados.reduce((a,s)=>a+(s.pesoBrutoKg||s.entregadoKg||0),0);
   const valorArribado = arribadosValor.reduce((a,s)=>a+(s.valorFactura||0),0);
 
-  // Lead time promedio real: Fecha de Pedido → Fecha Real de Arribo, para proyectos ya arribados con ambas fechas
-  const leadTimes = comexAnio.filter(s=>s.estatusProyecto==='ARRIBADO' && s.fechaRealArribo)
-    .map(s=>{ const p = M.pedidos.find(pp=>pp.pedido===s.pedido); return p&&p.fechaPedido ? daysBetween(p.fechaPedido, s.fechaRealArribo) : null; })
-    .filter(d=>d!==null && d>0);
-  const leadTimeProm = leadTimes.length ? Math.round(leadTimes.reduce((a,b)=>a+b,0)/leadTimes.length) : null;
+  // Lead time promedio REAL, ponderado por toneladas entregadas (igual metodología que "Desempeño por proveedor")
+  const leadEventos = comexAnioUnico.filter(s=>s.estatusProyecto==='ARRIBADO' && s.fechaRealArribo)
+    .map(s=>{ const p = M.pedidos.find(pp=>pp.pedido===s.pedido); const dias = p&&p.fechaPedido ? daysBetween(p.fechaPedido, s.fechaRealArribo) : null;
+      return {dias, peso: s.pesoBrutoKg||s.entregadoKg||0}; })
+    .filter(e=>e.dias!==null && e.dias>0 && e.peso>0);
+  const pesoTotalLead = leadEventos.reduce((a,e)=>a+e.peso,0);
+  const leadTimeProm = pesoTotalLead>0 ? Math.round(leadEventos.reduce((a,e)=>a+e.dias*e.peso,0)/pesoTotalLead) : null;
 
   document.getElementById('kpiBar').innerHTML = `
     <div class="kpi neutral"><div class="lab">Pedidos del período</div><div class="val">${pedidosAnio.length}</div><div class="lab" style="margin-top:2px;">${fmt(valorPedidosAnio)} · ${fmtTon(tonPedidosAnio)}</div></div>
     <div class="kpi warn"><div class="lab">En Producción (sin parcial)</div><div class="val">${enProduccion.length}</div><div class="lab" style="margin-top:2px;">${fmtTon(tonEnProduccion)} · ${fmt(valorEnProduccion)}</div></div>
     <div class="kpi warn"><div class="lab">Pendiente por Entregar (parcial)</div><div class="val">${conParcial.length}</div><div class="lab" style="margin-top:2px;">${fmtTon(tonPendienteParcial)} · ${fmt(valorPendienteParcial)}</div></div>
     <div class="kpi ok"><div class="lab">Pedidos Completados</div><div class="val">${completados.length}</div><div class="lab" style="margin-top:2px;">de ${pedidosAnio.length} del período</div></div>
-    <div class="kpi neutral"><div class="lab">Lead Time Promedio (Pedido→Arribo)</div><div class="val">${leadTimeProm?leadTimeProm+' d':'—'}</div></div>
+    <div class="kpi neutral"><div class="lab">Lead Time Prom. Pond. Ton (Pedido→Arribo)</div><div class="val">${leadTimeProm?leadTimeProm+' d':'—'}</div></div>
     <div class="kpi"><div class="lab">Navegando (Comex)</div><div class="val">${navegando.length}</div><div class="lab" style="margin-top:2px;">${fmtTon(tonNavegando)} · ${fmt(valorNavegando)}</div></div>
     <div class="kpi ok"><div class="lab">Arribados (Comex)</div><div class="val">${arribados.length}</div><div class="lab" style="margin-top:2px;">${fmtTon(tonArribado)} · ${fmt(valorArribado)}</div></div>
   `;
@@ -1846,7 +1982,7 @@ function buildLlegadasPorFamilia(M){
     const pct = composicionFamiliaPedido(p.pedido, 'total'); if(!pct) return;
     p.parciales.forEach(par=>{
       Object.entries(pct).forEach(([familia,frac])=>{
-        estimado.push({familia, kg: (par.kgEstimado||0)*frac, fechaArribo: par.fechaArriboEstimada, proveedor:p.proveedor, tipo:'Sin parcial'});
+        estimado.push({familia, kg: (par.kgEstimado||0)*frac, fechaArribo: par.fechaArriboEstimada, proveedor:p.proveedor, pedido:p.pedido, parcial:`${par.n}/${par.deN}`, tipo:'Sin parcial'});
       });
     });
   });
@@ -1855,7 +1991,7 @@ function buildLlegadasPorFamilia(M){
     const pct = composicionFamiliaPedido(p.pedido, 'saldo'); if(!pct) return;
     p.parciales.forEach(par=>{
       Object.entries(pct).forEach(([familia,frac])=>{
-        estimado.push({familia, kg: (par.kgEstimado||0)*frac, fechaArribo: par.fechaArriboEstimada, proveedor:p.proveedor, tipo:'Parcial pendiente'});
+        estimado.push({familia, kg: (par.kgEstimado||0)*frac, fechaArribo: par.fechaArriboEstimada, proveedor:p.proveedor, pedido:p.pedido, parcial:`${par.n}/${par.deN}`, tipo:'Parcial pendiente'});
       });
     });
   });
@@ -1956,14 +2092,25 @@ function renderDesempenoProveedor(M){
 
   const filas = Object.values(porProveedor).map(g=>({
     ...g, leadTime: promedioPonderado(g.eventosLead), diasPago: promedioPonderado(g.eventosPago)
-  })).filter(g=>g.tonPedidas>0).sort((a,b)=>b.tonPedidas-a.tonPedidas);
+  })).filter(g=>g.tonPedidas>0);
 
-  let html = '<tr><th>Proveedor</th><th>Ton. Pedidas</th><th>Ton. Entregadas</th><th>Lead Time Prom. Pond. (Pedido→Arribo)</th><th>Días Prom. Pond. de Pago (Anticipo + Parciales)</th></tr>';
-  filas.forEach(g=>{
-    html += `<tr><td class="txt">${g.proveedor}</td><td>${fmtTon(g.tonPedidas)}</td><td>${fmtTon(g.tonEntregadas)}</td>
-      <td>${g.leadTime!==null?Math.round(g.leadTime)+' d':'—'}</td><td>${g.diasPago!==null?Math.round(g.diasPago)+' d':'—'}</td></tr>`;
-  });
-  document.getElementById('tbl_proveedor_desempeno').innerHTML = html;
+  const rankSel = document.getElementById('v2_rankPor');
+  function pintar(){
+    const rankPor = rankSel.value;
+    let ordenadas;
+    if(rankPor==='leadTime') ordenadas = filas.slice().filter(g=>g.leadTime!==null).sort((a,b)=>a.leadTime-b.leadTime);
+    else if(rankPor==='diasPago') ordenadas = filas.slice().filter(g=>g.diasPago!==null).sort((a,b)=>a.diasPago-b.diasPago);
+    else ordenadas = filas.slice().sort((a,b)=>b.tonPedidas-a.tonPedidas);
+    let html = '<tr><th>#</th><th>Proveedor</th><th>Ton. Pedidas</th><th>Ton. Entregadas</th><th>Lead Time Prom. Pond. (Pedido→Arribo)</th><th>Días Prom. Pond. de Pago (Anticipo + Parciales)</th></tr>';
+    ordenadas.forEach((g,i)=>{
+      const medalla = i===0?'🥇':i===1?'🥈':i===2?'🥉':(i+1);
+      html += `<tr><td style="text-align:center;">${medalla}</td><td class="txt">${g.proveedor}</td><td>${fmtTon(g.tonPedidas)}</td><td>${fmtTon(g.tonEntregadas)}</td>
+        <td>${g.leadTime!==null?Math.round(g.leadTime)+' d':'—'}</td><td>${g.diasPago!==null?Math.round(g.diasPago)+' d':'—'}</td></tr>`;
+    });
+    document.getElementById('tbl_proveedor_desempeno').innerHTML = html;
+  }
+  rankSel.onchange = pintar;
+  pintar();
 }
 
 function renderView1(){
