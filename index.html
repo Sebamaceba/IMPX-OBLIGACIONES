@@ -114,6 +114,7 @@
   <button data-view="v3">4 · Proyectos Comex</button>
   <button data-view="v4">5 · Pendientes por Pagar</button>
   <button data-view="v8">6 · Estadísticas del Modelo</button>
+  <button data-view="v9">9 · Llegadas por Familia</button>
   <button data-view="v5">7 · Nacionalización</button>
   <button data-view="v7">8 · Metodología (léeme)</button>
 </nav>
@@ -451,6 +452,49 @@
     </div>
   </div>
 
+  <div class="view" id="v9">
+    <div class="panel">
+      <h2>9 · Análisis de Llegadas por Familia — Toneladas mes a mes</h2>
+      <div class="desc">Objetivo S&OP: saber cuánto material llega (y cuándo queda disponible para vender) por Familia de producto, separando lo <b>certero</b> (ya zarpó o ya arribó) de lo <b>estimado</b> (parciales pendientes de pedidos abiertos, y pedidos sin ningún envío todavía) — usando el mismo motor de estadísticas por proveedor, capacidad de embarque y navegación por país ya validado para los pronósticos de pago.</div>
+      <div class="filters">
+        <label style="font-size:12px;color:var(--ink-soft);">Día de "gabela" (después de este día del mes, el arribo cuenta disponible el mes siguiente):
+          <input id="v9_gabela" type="number" min="1" max="28" value="20" style="width:55px;margin-left:6px;"></label>
+      </div>
+      <div id="v9_narrativa" style="margin-top:8px;font-size:12.5px;color:var(--ink-soft);line-height:1.6;"></div>
+    </div>
+
+    <div class="panel">
+      <h2>Toneladas de llegada por mes — total y por Familia</h2>
+      <div class="desc">Apilado por Familia de producto. Etiqueta arriba = total del mes (incluye lo certero + lo estimado).</div>
+      <div style="height:340px;"><canvas id="c_llegadasFamilia"></canvas></div>
+    </div>
+    <div class="panel">
+      <h2>Toneladas de llegada por mes — real vs. certero vs. estimado</h2>
+      <div class="desc">Real = ya arribó físicamente. Confirmado en tránsito = ya zarpó, arribo estimado por navegación. Estimado = parciales pendientes + pedidos sin ningún envío, totalmente proyectado.</div>
+      <div style="height:340px;"><canvas id="c_llegadasCerteza"></canvas></div>
+    </div>
+
+    <div class="panel">
+      <h2>1 · Confirmado (ya tiene zarpe o ya arribó) — lo más certero</h2>
+      <div class="scroll"><table id="tbl_llegadas_confirmado"></table></div>
+    </div>
+    <div class="panel">
+      <h2>2 · Parciales pendientes de pedidos abiertos — proyección</h2>
+      <div class="scroll"><table id="tbl_llegadas_parcial"></table></div>
+    </div>
+    <div class="panel">
+      <h2>3 · Pedidos sin ningún parcial — proyección</h2>
+      <div class="scroll"><table id="tbl_llegadas_sinparcial"></table></div>
+    </div>
+    <div class="panel">
+      <h2>4 · Consolidado total (Cierto + Estimado) por mes y Familia</h2>
+      <div class="filters">
+        <button id="v9_descargar" type="button" style="background:var(--navy);color:#fff;border:none;border-radius:6px;padding:8px 14px;font-size:12px;cursor:pointer;">⬇ Descargar a Excel</button>
+      </div>
+      <div class="scroll"><table id="tbl_llegadas_consolidado"></table></div>
+    </div>
+  </div>
+
 </main>
 
 <footer>Tablero conectado en vivo a Google Sheets · Sheet ID: 1QDs19b...DTLX30 · cálculo 100% en el navegador, sin servidor intermedio.</footer>
@@ -480,6 +524,13 @@ const ANCHORS = {
 };
 
 function normKey(s){ return String(s||'').replace(/\s+/g,' ').trim().toUpperCase(); }
+// La columna FAMILIA del Sheet está vacía — se deriva de "Producto" con este mapeo (confirmado con el cliente).
+const FAMILIA_MAP = {
+  'LAMINAS':'Láminas', 'TUBOS':'Tubos',
+  'BARRAS':'Perfiles', 'ANGULOS':'Perfiles', 'PLATINAS':'Perfiles', 'BARRAS ROSCADAS':'Perfiles',
+};
+const FAMILIAS_ORDEN = ['Láminas','Tubos','Perfiles','Otros Productos'];
+function familiaDeProducto(producto){ return FAMILIA_MAP[normKey(producto)] || 'Otros Productos'; }
 
 function num(v){
   if(v===null||v===undefined||v==='') return 0;
@@ -755,7 +806,7 @@ function buildToneladasModel(pedDetRaw, impRaw, prof, spAll){
   const porGrupo = {};
   rows.forEach(r=>{
     const k = r.proforma+'||'+(r.producto||'');
-    if(!porGrupo[k]) porGrupo[k] = {proforma:r.proforma, producto:r.producto, cantidadPedidaKg:0, cantidadEntregadaKg:0, filas:[]};
+    if(!porGrupo[k]) porGrupo[k] = {proforma:r.proforma, producto:r.producto, familia:familiaDeProducto(r.producto), cantidadPedidaKg:0, cantidadEntregadaKg:0, filas:[]};
     const g = porGrupo[k];
     g.cantidadPedidaKg = Math.max(g.cantidadPedidaKg, r.cantidadPedidaKg||0);
     g.cantidadEntregadaKg += (r.cantidadEntregadaKg||0);
@@ -1448,6 +1499,7 @@ function render(){
   renderView5();
   renderView6();
   renderView8();
+  renderView9();
   renderDiag();
 }
 
@@ -1490,6 +1542,123 @@ function renderView8(){
   });
   htmlPais += `<tr style="background:var(--paper);font-weight:700;"><td class="txt">RESPALDO GLOBAL (todos los países)</td><td colspan="3"></td><td>${fmtD(M.nav.GLOBAL)}</td><td></td></tr>`;
   document.getElementById('tbl_estad_pais').innerHTML = htmlPais;
+}
+
+// ================= VISTA 9 =================
+function tablaMesFamilia(items, familias){
+  const porMes = {};
+  items.forEach(it=>{
+    const m = it.mesDisp; if(!m) return;
+    if(!porMes[m]) porMes[m] = {};
+    porMes[m][it.familia] = (porMes[m][it.familia]||0) + it.kg;
+  });
+  const meses = Object.keys(porMes).sort();
+  let html = '<tr><th>Mes disponible</th>' + familias.map(f=>`<th>${f}</th>`).join('') + '<th>TOTAL</th></tr>';
+  const totalesFamilia = {}; familias.forEach(f=>totalesFamilia[f]=0); let totalGeneral=0;
+  meses.forEach(m=>{
+    const fila = porMes[m];
+    const totalMes = familias.reduce((a,f)=>a+(fila[f]||0),0);
+    totalGeneral += totalMes;
+    html += `<tr><td class="txt">${fmtMesLabel(m)}</td>` + familias.map(f=>{ totalesFamilia[f]+=(fila[f]||0); return `<td>${fmtTon(fila[f]||0)}</td>`; }).join('') + `<td><b>${fmtTon(totalMes)}</b></td></tr>`;
+  });
+  html += `<tr style="background:var(--paper);font-weight:700;"><td class="txt">TOTAL</td>` + familias.map(f=>`<td>${fmtTon(totalesFamilia[f])}</td>`).join('') + `<td>${fmtTon(totalGeneral)}</td></tr>`;
+  return {html, meses, totalesFamilia, totalGeneral};
+}
+
+function renderView9(){
+  const M = MODEL;
+  const diaGabela = parseInt(document.getElementById('v9_gabela').value||'20',10);
+
+  if(!MODEL._llegadasCache) MODEL._llegadasCache = buildLlegadasPorFamilia(M); // no depende del día de gabela, se calcula 1 sola vez
+  const llegadas = MODEL._llegadasCache;
+
+  function conMes(lista){ return lista.map(it=>({...it, mesDisp: mesDisponibilidad(it.fechaArribo, diaGabela)})); }
+  const confirmadoReal = conMes(llegadas.confirmadoReal);
+  const confirmadoTransito = conMes(llegadas.confirmadoTransito);
+  const cierto = confirmadoReal.concat(confirmadoTransito);
+  const parcialPendiente = conMes(llegadas.estimado.filter(it=>it.tipo==='Parcial pendiente'));
+  const sinParcial = conMes(llegadas.estimado.filter(it=>it.tipo==='Sin parcial'));
+  const estimadoTodo = parcialPendiente.concat(sinParcial);
+
+  // 1-3: tablas mes x familia
+  const tConfirmado = tablaMesFamilia(cierto, FAMILIAS_ORDEN);
+  document.getElementById('tbl_llegadas_confirmado').innerHTML = tConfirmado.html;
+  const tParcial = tablaMesFamilia(parcialPendiente, FAMILIAS_ORDEN);
+  document.getElementById('tbl_llegadas_parcial').innerHTML = tParcial.html;
+  const tSinParcial = tablaMesFamilia(sinParcial, FAMILIAS_ORDEN);
+  document.getElementById('tbl_llegadas_sinparcial').innerHTML = tSinParcial.html;
+
+  // 4: consolidado (2 filas por mes: CIERTO y ESTIMADO, + fila de total)
+  const mesesTodos = [...new Set([...cierto, ...estimadoTodo].map(it=>it.mesDisp).filter(Boolean))].sort();
+  function sumFamMes(lista, mes, fam){ return lista.filter(it=>it.mesDisp===mes && it.familia===fam).reduce((a,it)=>a+it.kg,0); }
+  let htmlC = '<tr><th>Mes disponible</th><th>Origen</th>' + FAMILIAS_ORDEN.map(f=>`<th>${f}</th>`).join('') + '<th>TOTAL</th></tr>';
+  let granTotalCierto=0, granTotalEstimado=0;
+  const granTotalFam = {}; FAMILIAS_ORDEN.forEach(f=>granTotalFam[f]=0);
+  mesesTodos.forEach(m=>{
+    const filaCierto = FAMILIAS_ORDEN.map(f=>sumFamMes(cierto,m,f));
+    const filaEstimado = FAMILIAS_ORDEN.map(f=>sumFamMes(estimadoTodo,m,f));
+    const totCierto = filaCierto.reduce((a,b)=>a+b,0), totEstimado = filaEstimado.reduce((a,b)=>a+b,0);
+    granTotalCierto += totCierto; granTotalEstimado += totEstimado;
+    FAMILIAS_ORDEN.forEach((f,i)=>{ granTotalFam[f] += filaCierto[i]+filaEstimado[i]; });
+    htmlC += `<tr style="font-weight:600;"><td class="txt" rowspan="2">${fmtMesLabel(m)}</td><td class="txt">Cierto</td>` + filaCierto.map(v=>`<td>${fmtTon(v)}</td>`).join('') + `<td>${fmtTon(totCierto)}</td></tr>`;
+    htmlC += `<tr><td class="txt" style="color:var(--ink-soft);">Estimación inteligente</td>` + filaEstimado.map(v=>`<td>${fmtTon(v)}</td>`).join('') + `<td>${fmtTon(totEstimado)}</td></tr>`;
+  });
+  htmlC += `<tr style="background:var(--paper);font-weight:700;"><td class="txt" colspan="2">TOTAL GENERAL (Cierto + Estimado)</td>` +
+    FAMILIAS_ORDEN.map(f=>`<td>${fmtTon(granTotalFam[f])}</td>`).join('') + `<td>${fmtTon(granTotalCierto+granTotalEstimado)}</td></tr>`;
+  document.getElementById('tbl_llegadas_consolidado').innerHTML = htmlC;
+
+  // Gráfica 1: apilada por Familia (total arriba)
+  const dataPorFamiliaMes = {};
+  FAMILIAS_ORDEN.forEach(f=> dataPorFamiliaMes[f] = mesesTodos.map(m=>sumFamMes(cierto,m,f)+sumFamMes(estimadoTodo,m,f)));
+  barChart('c_llegadasFamilia', mesesTodos.map(fmtMesLabel), FAMILIAS_ORDEN.map((f,i)=>({label:f, data:dataPorFamiliaMes[f], backgroundColor:CHART_PALETTE[i%CHART_PALETTE.length], stack:'s'})),
+    {scales:{x:{stacked:true}, y:{stacked:true}}, plugins:{datalabels:{display:false}}}, false, fmtTonAxis, true);
+
+  // Gráfica 2: apilada por certeza (real / en tránsito / estimado)
+  const dataReal = mesesTodos.map(m=>sumFamMes(confirmadoReal,m,'Láminas')+sumFamMes(confirmadoReal,m,'Tubos')+sumFamMes(confirmadoReal,m,'Perfiles')+sumFamMes(confirmadoReal,m,'Otros Productos'));
+  const dataTransito = mesesTodos.map(m=>sumFamMes(confirmadoTransito,m,'Láminas')+sumFamMes(confirmadoTransito,m,'Tubos')+sumFamMes(confirmadoTransito,m,'Perfiles')+sumFamMes(confirmadoTransito,m,'Otros Productos'));
+  const dataEstimado = mesesTodos.map(m=>sumFamMes(estimadoTodo,m,'Láminas')+sumFamMes(estimadoTodo,m,'Tubos')+sumFamMes(estimadoTodo,m,'Perfiles')+sumFamMes(estimadoTodo,m,'Otros Productos'));
+  barChart('c_llegadasCerteza', mesesTodos.map(fmtMesLabel), [
+    {label:'Real (ya arribó)', data:dataReal, backgroundColor:COLORS.green, stack:'s'},
+    {label:'Confirmado en tránsito (con zarpe)', data:dataTransito, backgroundColor:COLORS.steel, stack:'s'},
+    {label:'Estimado (parciales + sin parcial)', data:dataEstimado, backgroundColor:COLORS.amber, stack:'s'},
+  ], {scales:{x:{stacked:true}, y:{stacked:true}}, plugins:{datalabels:{display:false}}}, false, fmtTonAxis, true);
+
+  // Narrativa S&OP
+  const proximos3 = mesesTodos.filter(m=>m>=monthKey(new Date())).slice(0,3);
+  const tonProx3Cierto = proximos3.reduce((a,m)=>a+FAMILIAS_ORDEN.reduce((b,f)=>b+sumFamMes(cierto,m,f),0),0);
+  const tonProx3Estimado = proximos3.reduce((a,m)=>a+FAMILIAS_ORDEN.reduce((b,f)=>b+sumFamMes(estimadoTodo,m,f),0),0);
+  const familiaDominante = FAMILIAS_ORDEN.reduce((mejor,f)=> granTotalFam[f]>(granTotalFam[mejor]||0)?f:mejor, FAMILIAS_ORDEN[0]);
+  document.getElementById('v9_narrativa').innerHTML =
+    `En los próximos 3 meses (${proximos3.map(fmtMesLabel).join(', ')||'sin datos'}) hay <b>${fmtTon(tonProx3Cierto)}</b> certeras (ya zarparon o arribaron) `+
+    `y <b>${fmtTon(tonProx3Estimado)}</b> en estimación inteligente (parciales pendientes + sin ningún envío). `+
+    `La familia con mayor volumen total proyectado es <b>${familiaDominante}</b> (${fmtTon(granTotalFam[familiaDominante])}). `+
+    `Con el día de gabela actual (${diaGabela}), un arribo el día ${diaGabela+1} o después queda disponible hasta el mes siguiente — ajusta el número de arriba si tu política de nacionalización/alistamiento es distinta.`;
+
+  document.getElementById('v9_gabela').oninput = renderView9;
+
+  document.getElementById('v9_descargar').onclick = function(){
+    const wb = XLSX.utils.book_new();
+    function hojaDe(lista, nombre){
+      const filas = [['Mes disponible','Familia','Toneladas','Proveedor']];
+      lista.forEach(it=> filas.push([fmtMesLabel(it.mesDisp), it.familia, Number((it.kg/1000).toFixed(2)), it.proveedor||'']));
+      const ws = XLSX.utils.aoa_to_sheet(filas);
+      ws['!cols'] = [{wch:14},{wch:16},{wch:12},{wch:22}];
+      XLSX.utils.book_append_sheet(wb, ws, nombre);
+    }
+    hojaDe(cierto, 'Cierto (zarpe-arribo)');
+    hojaDe(estimadoTodo, 'Estimado (parciales-sin parcial)');
+    // Hoja resumen consolidado
+    const filasResumen = [['Mes disponible','Origen', ...FAMILIAS_ORDEN, 'TOTAL']];
+    mesesTodos.forEach(m=>{
+      const filaCierto = FAMILIAS_ORDEN.map(f=>Number((sumFamMes(cierto,m,f)/1000).toFixed(2)));
+      const filaEstimado = FAMILIAS_ORDEN.map(f=>Number((sumFamMes(estimadoTodo,m,f)/1000).toFixed(2)));
+      filasResumen.push([fmtMesLabel(m), 'Cierto', ...filaCierto, Number(filaCierto.reduce((a,b)=>a+b,0).toFixed(2))]);
+      filasResumen.push([fmtMesLabel(m), 'Estimado', ...filaEstimado, Number(filaEstimado.reduce((a,b)=>a+b,0).toFixed(2))]);
+    });
+    const wsR = XLSX.utils.aoa_to_sheet(filasResumen);
+    XLSX.utils.book_append_sheet(wb, wsR, 'Consolidado');
+    XLSX.writeFile(wb, `Llegadas_por_Familia_${fmtDate(new Date())}.xlsx`);
+  };
 }
 
 function renderDiag(){
@@ -1608,6 +1777,97 @@ function monthRange(from, to){
   return out;
 }
 // Cálculo de flujo de caja reutilizable (Vista 1 resumen ejecutivo y Vista 4 detalle)
+// ================= ANÁLISIS DE LLEGADAS POR FAMILIA (Vista 9) =================
+function getEstadProv(M, proveedor){
+  const found = M.estadProveedor.find(e=>e.proveedor===proveedor);
+  return {
+    gap1: (found && found.gap1!=null) ? found.gap1 : M.estadGlobal.gap1,
+    gap2plus: (found && found.gap2plus!=null) ? found.gap2plus : M.estadGlobal.gap2plus,
+    primerZarpe: (found && found.primerZarpe!=null) ? found.primerZarpe : M.estadGlobal.primerZarpe,
+    capacidad: (found && found.capacidad!=null) ? found.capacidad : M.estadGlobal.capacidad,
+  };
+}
+// Fecha de arribo -> mes en que ese inventario queda DISPONIBLE para la venta, según el "día de gabela":
+// si arriba en o antes de ese día del mes, cuenta para ESE mes; si arriba después, cuenta para el siguiente.
+function mesDisponibilidad(fecha, diaGabela){
+  if(!fecha) return null;
+  let mes = fecha.getMonth(), anio = fecha.getFullYear();
+  if(fecha.getDate() > diaGabela){ mes += 1; if(mes>11){ mes = 0; anio += 1; } }
+  return anio+'-'+String(mes+1).padStart(2,'0');
+}
+
+function buildLlegadasPorFamilia(M){
+  const HOY = new Date();
+  const pedidoPorCodigo = {}; M.pedidos.forEach(p=>{ pedidoPorCodigo[p.pedido] = p; });
+
+  const confirmadoReal = [];      // ya arribó físicamente (Peso Bruto real de Control de Importaciones)
+  const confirmadoTransito = [];  // ya zarpó, arribo estimado (zarpe + navegación) porque aún no registra arribo real
+  const estimado = [];            // parciales pendientes + pedidos sin ningún parcial — todo proyectado
+
+  M.ton.grupos.forEach(g=>{
+    const pedidoCod = M.ton.proformaToPedido[g.proforma];
+    const pedido = pedidoCod ? pedidoPorCodigo[pedidoCod] : null;
+    if(!pedido) return; // proforma sin pedido asociado, no se puede ubicar en el tiempo de forma confiable
+    if(pedido.fechaPedido && pedido.fechaPedido < M.FECHA_CORTE_DATA_CONFIABLE) return; // datos anteriores al corte confiable
+
+    // 1) Lo que YA tiene zarpe (o ya arribó) — la parte más certera
+    const filasConZarpe = g.filas.filter(f=>f.fechaRealZarpe);
+    filasConZarpe.forEach(f=>{
+      const imp = M.ton.porProyectoImport[f.nombreProyecto];
+      const kg = f.cantidadEntregadaKg||0; if(!kg) return;
+      if(imp && imp.fechaRealArribo){
+        confirmadoReal.push({familia:g.familia, kg, fechaArribo:imp.fechaRealArribo, proveedor:pedido.proveedor});
+      } else {
+        const dias = M.nav.diasNavegacion(f.paisOrigen);
+        confirmadoTransito.push({familia:g.familia, kg, fechaArribo: addDays(f.fechaRealZarpe, dias||M.nav.GLOBAL||45), proveedor:pedido.proveedor});
+      }
+    });
+
+    // 2) y 3) Lo que falta de este grupo — parcial pendiente (si ya envió algo) o sin ningún parcial (si no ha enviado nada)
+    if(pedido.cerrado) return; // conciliado financieramente, no se proyecta más saldo
+    const saldoKg = g.saldoKg||0;
+    if(!saldoKg || (g.cantidadPedidaKg && (saldoKg/g.cantidadPedidaKg)<=0.05)) return; // sin saldo, o dentro de tolerancia de producción (5%)
+
+    const est = getEstadProv(M, pedido.proveedor);
+    const pais = (g.filas.find(f=>f.paisOrigen)||{}).paisOrigen;
+    const diasNav = M.nav.diasNavegacion(pais) || M.nav.GLOBAL || 45;
+    const cap = est.capacidad || saldoKg;
+    const n = Math.max(1, Math.ceil(saldoKg/cap));
+    const kgPorEnvio = saldoKg/n;
+    const posicionInicial = filasConZarpe.length; // 0 = nada enviado aún; 1+ = ya van N envíos, este es el siguiente
+    let ancla = posicionInicial>0 ? filasConZarpe.map(f=>f.fechaRealZarpe).sort((a,b)=>b-a)[0] : (g.filas[0].fechaProforma || pedido.fechaPedido || HOY);
+    for(let i=0;i<n;i++){
+      const posicion = posicionInicial + i;
+      let zarpe = posicion===0 ? addDays(ancla, est.primerZarpe||60) : addDays(ancla, (posicion===1?est.gap1:est.gap2plus)||30);
+      if(addDays(zarpe, diasNav) < HOY) zarpe = HOY; // recalcular hacia adelante si ya quedó vencido (retrasado)
+      const arribo = addDays(zarpe, diasNav);
+      estimado.push({familia:g.familia, kg:kgPorEnvio, fechaArribo:arribo, proveedor:pedido.proveedor,
+        tipo: posicionInicial>0?'Parcial pendiente':'Sin parcial'});
+      ancla = zarpe;
+    }
+  });
+
+  return {confirmadoReal, confirmadoTransito, estimado};
+}
+
+// Consolida las 3 listas en una tabla mes x familia, usando el "día de gabela" para el mes de disponibilidad
+function consolidarLlegadasPorMes(llegadas, diaGabela){
+  const meses = {};
+  function agregar(lista, bucket){
+    lista.forEach(it=>{
+      const m = mesDisponibilidad(it.fechaArribo, diaGabela); if(!m) return;
+      if(!meses[m]) meses[m] = {mes:m, cierto:{}, estimado:{}, totalCierto:0, totalEstimado:0};
+      const destino = bucket==='estimado' ? meses[m].estimado : meses[m].cierto;
+      destino[it.familia] = (destino[it.familia]||0) + it.kg;
+      if(bucket==='estimado') meses[m].totalEstimado += it.kg; else meses[m].totalCierto += it.kg;
+    });
+  }
+  agregar(llegadas.confirmadoReal, 'cierto');
+  agregar(llegadas.confirmadoTransito, 'cierto');
+  agregar(llegadas.estimado, 'estimado');
+  return Object.values(meses).sort((a,b)=>a.mes.localeCompare(b.mes));
+}
+
 function computeFlujoCaja(M, horizonte, arancelPct=0.05, ivaPct=0.19){
   const nacEst = calcularNacEstimada(M, arancelPct, ivaPct);
   const hoy = new Date();
