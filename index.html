@@ -809,6 +809,12 @@ function normGF(r){
     saldoConTasa: num(get(r,'SALDO USD CON TASA')),
     abonos: num(get(r,'ABONOS PARCIALES GF USD')),
     interesEstimado: num(get(r,'VALOR INTERES GF USD A LA FECHA DE VENCIMIENTO')),
+    // Informativo junto al interés (pedido por la dueña de la empresa, 10-sep-2026): la tasa del giro no
+    // existía como columna aparte, solo el interés ya calculado en USD. Falta agregar en la hoja de Google
+    // Sheets "Giros Financieros" una columna llamada exactamente 'TASA GF %' con la tasa nominal del giro
+    // (puede escribirse como 8.5, 8.5% o 0.085 — pctFlexible() la interpreta igual). Mientras esa columna
+    // no exista en el Sheet, tasaAnual queda en null y se muestra "—" en vez de romper la vista.
+    tasaAnual: pctFlexible(get(r,'TASA GF %')),
     estado: get(r,'ESTADO DEL PAGO')
   };
 }
@@ -1044,10 +1050,14 @@ function buildMotorPagos(prof, ton, nav){
 function dedupSP(sp){
   // Antes: la clave usaba proyecto+saldo+fecha, lo cual colapsaba por error líneas de producto
   // distintas del mismo Proyecto Comex (ej. varios productos en un mismo envío) si compartían
-  // saldo y fecha. Ahora exige que TODOS los campos sean idénticos para considerarla duplicado real.
+  // saldo y fecha. Luego se exigió que TODOS los campos visibles fueran idénticos para considerarla
+  // duplicado real — pero eso seguía colapsando dos líneas genuinamente distintas (misma Proyecto/
+  // Pedido/Valor Factura/Reclasificación) cuando pertenecían a PROFORMAS distintas dentro del mismo
+  // pedido. Se agrega 'proforma' a la clave: si la proforma es distinta, son dos líneas diferentes
+  // aunque todo lo demás coincida (corrección solicitada por Sebastián, 10-sep-2026).
   const seen = new Set(); const out = [];
   sp.forEach(r=>{
-    const key = JSON.stringify([r.proyecto, r.pedido, r.proveedor, r.valorFactura, r.reclasificacion,
+    const key = JSON.stringify([r.proyecto, r.pedido, r.proforma, r.proveedor, r.valorFactura, r.reclasificacion,
       r.notasCredito, r.fechaBL && r.fechaBL.toISOString(), r.fechaEstPago && r.fechaEstPago.toISOString(),
       r.saldoUSD, r.estadoPago]);
     if(seen.has(key)) return;
@@ -1461,6 +1471,17 @@ function buildModel({profRaw, spRaw, pgRaw, gfRaw, nacRaw, pedDetRaw, impRaw}){
 <script>
 const MESES_ABR = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
 const fmt = n => (n<0?'-$':'$') + Math.abs(n).toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2});
+// Tasa del giro financiero como informativo junto al interés (agregado 10-sep-2026 a pedido de la dueña de la
+// empresa). Acepta la celda escrita como "8.5", "8.5%" o como decimal 0.085 (si Google Sheets exporta el
+// formato porcentaje ya dividido) — valores >1 se interpretan como puntos porcentuales, <=1 como fracción.
+function pctFlexible(v){
+  if(v===null||v===undefined||v==='') return null;
+  const s = String(v).replace(/%/g,'').replace(/,/g,'.').trim();
+  const n = parseFloat(s);
+  if(isNaN(n)) return null;
+  return n>1 ? n/100 : n;
+}
+const fmtPct = v => v===null||v===undefined ? '—' : (v*100).toLocaleString('en-US',{minimumFractionDigits:1,maximumFractionDigits:2}) + '%';
 const fmtTon = v => v===null||v===undefined ? '—' : (v/1000).toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2}) + ' Ton';
 const fmtTonAxis = v => (v/1000)>=1 || (v/1000)<=-1 ? (v/1000).toFixed(1)+'t' : (v?Math.round(v)+'kg':'0');
 const fmtDate = d => { if(!d) return '—'; const dd=new Date(d); return String(dd.getDate()).padStart(2,'0')+'-'+MESES_ABR[dd.getMonth()]+'-'+String(dd.getFullYear()).slice(-2); };
@@ -1789,7 +1810,7 @@ function renderView9(){
       XLSX.utils.book_append_sheet(wb, ws, nombre);
     }
     hojaDe(cierto, 'Cierto (zarpe-arribo)');
-    hojaDe(estimadoTodo, 'Estimado (parciales-sin parcial)');
+    hojaDe(estimadoTodo, 'Estimado (parcial-sin parcial)');
     // Hoja resumen consolidado
     const filasResumen = [['Mes disponible','Origen', ...FAMILIAS_ORDEN, 'TOTAL']];
     mesesTodos.forEach(m=>{
@@ -2464,7 +2485,7 @@ function renderView3(){
 
       if(d.gfRelacionado.length){
         detHtml += `<div class="dp-col dp-giro"><div class="dp-titulo">🏦 Giro Financiero asociado</div>`;
-        d.gfRelacionado.forEach(g=> detHtml += `<div class="dp-item">${g.banco||'—'} · apertura ${fmtDate(g.fechaApertura)} · vence ${fmtDate(g.fechaVencimiento)}<br>Saldo capital <b>${fmt(g.saldoConTasa-g.abonos)}</b> · Interés est. ${fmt(g.interesEstimado||0)}</div>`);
+        d.gfRelacionado.forEach(g=> detHtml += `<div class="dp-item">${g.banco||'—'} · apertura ${fmtDate(g.fechaApertura)} · vence ${fmtDate(g.fechaVencimiento)}<br>Saldo capital <b>${fmt(g.saldoConTasa-g.abonos)}</b> · Interés est. ${fmt(g.interesEstimado||0)} <span style="color:var(--ink-soft);">(tasa ${fmtPct(g.tasaAnual)})</span></div>`);
         detHtml += `</div>`;
       }
       detHtml += `</div>`;
@@ -2679,12 +2700,12 @@ function renderView4(){
     const fm = document.getElementById('f44_mes').value;
     const fb = document.getElementById('f44_banco').value;
     const gfF = M.gfAbiertos.filter(g=>(!fm||monthKey(g.fechaVencimiento)===fm) && (!fb||g.banco===fb)).sort((a,b)=>a.fechaVencimiento-b.fechaVencimiento);
-    let html4 = '<tr><th>Pedido</th><th>Proyecto Comex</th><th>Banco</th><th>Vencimiento</th><th>Saldo Capital USD</th><th>Interés Estimado USD</th></tr>';
+    let html4 = '<tr><th>Pedido</th><th>Proyecto Comex</th><th>Banco</th><th>Vencimiento</th><th>Saldo Capital USD</th><th>Interés Estimado USD</th><th>Tasa</th></tr>';
     gfF.forEach(g=>
-      html4 += `<tr class="row-bad"><td class="txt">${g.pedido}</td><td class="txt">${g.proyectoComex}</td><td class="txt">${g.banco}</td><td>${fmtDate(g.fechaVencimiento)}</td><td>${fmt(g.saldoReal)}</td><td>${fmt(g.interesEstimado||0)}</td></tr>`);
+      html4 += `<tr class="row-bad"><td class="txt">${g.pedido}</td><td class="txt">${g.proyectoComex}</td><td class="txt">${g.banco}</td><td>${fmtDate(g.fechaVencimiento)}</td><td>${fmt(g.saldoReal)}</td><td>${fmt(g.interesEstimado||0)}</td><td style="color:var(--ink-soft);font-size:11px;">${fmtPct(g.tasaAnual)}</td></tr>`);
     const totalGF = gfF.reduce((a,g)=>a+g.saldoReal,0);
     const totalInt = gfF.reduce((a,g)=>a+(g.interesEstimado||0),0);
-    html4 += `<tr style="background:var(--paper);font-weight:700;"><td class="txt" colspan="4">TOTAL GIROS FINANCIEROS POR PAGAR (CAPITAL + INTERÉS ESTIMADO)</td><td>${fmt(totalGF)}</td><td>${fmt(totalInt)}</td></tr>`;
+    html4 += `<tr style="background:var(--paper);font-weight:700;"><td class="txt" colspan="4">TOTAL GIROS FINANCIEROS POR PAGAR (CAPITAL + INTERÉS ESTIMADO)</td><td>${fmt(totalGF)}</td><td>${fmt(totalInt)}</td><td></td></tr>`;
     document.getElementById('tbl_gf_pend').innerHTML = html4;
     return totalGF;
   }
