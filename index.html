@@ -272,6 +272,7 @@
         <label style="font-size:12px;color:var(--ink-soft);">Ordenar ranking por:
           <select id="v2_rankPor"><option value="tonPedidas">Toneladas pedidas</option><option value="leadTime">Lead Time (menor a mayor = mejor)</option><option value="diasPago">Días de pago (menor a mayor = más rápido para pagar)</option></select>
         </label>
+        <button id="v2_descargar" type="button" style="background:var(--navy);color:#fff;border:none;border-radius:6px;padding:8px 14px;font-size:12px;cursor:pointer;">⬇ Descargar a Excel</button>
       </div>
       <div class="scroll"><table id="tbl_proveedor_desempeno"></table></div>
     </div>
@@ -2139,6 +2140,25 @@ function renderDesempenoProveedor(M){
   }
   rankSel.onchange = pintar;
   pintar();
+
+  document.getElementById('v2_descargar').onclick = function(){
+    const rankPor = rankSel.value;
+    let ordenadas;
+    if(rankPor==='leadTime') ordenadas = filas.slice().filter(g=>g.leadTime!==null).sort((a,b)=>a.leadTime-b.leadTime);
+    else if(rankPor==='diasPago') ordenadas = filas.slice().filter(g=>g.diasPago!==null).sort((a,b)=>a.diasPago-b.diasPago);
+    else ordenadas = filas.slice().sort((a,b)=>b.tonPedidas-a.tonPedidas);
+    const wsData = [['Proveedor','Ton. Pedidas','Ton. Entregadas','Lead Time Prom. Pond. dias (Pedido-Arribo)','Dias Prom. Pond. de Pago (Anticipo + Parciales)']];
+    ordenadas.forEach(g=>{
+      wsData.push([g.proveedor, Number(g.tonPedidas.toFixed(2)), Number(g.tonEntregadas.toFixed(2)),
+        g.leadTime!==null?Math.round(g.leadTime):'', g.diasPago!==null?Math.round(g.diasPago):'']);
+    });
+    const ws = XLSX.utils.aoa_to_sheet(wsData);
+    ws['!cols'] = [{wch:26},{wch:14},{wch:14},{wch:20},{wch:22}];
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Desempeno por proveedor');
+    const hoy = new Date();
+    XLSX.writeFile(wb, `Desempeno_Proveedor_${fmtDate(hoy)}.xlsx`);
+  };
 }
 
 function renderView1(){
