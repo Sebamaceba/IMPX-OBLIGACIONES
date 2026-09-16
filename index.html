@@ -2385,7 +2385,7 @@ function renderView10(){
 
     const filas = mesesConDato.map(m=>{
       const ppto = M.pptoPorMes[m] || {};
-      const cubierto = llegadasIdx[m];
+      const cubierto = R.llegadasIdx[m];
       let ventaMes = 0, ventaBase = 0, entradasConfirmadas = 0, invInicio = 0, bandaMinTot = 0, bandaObjetivoTot = 0, esRealAlgunaFamilia = false;
       FAMILIAS_ORDEN.forEach(fam=>{
         const pptoFam = ppto[fam]||0;
@@ -2485,7 +2485,7 @@ function renderView10(){
     XLSX.utils.book_append_sheet(wb, wsDet, 'Pedidos Nuevos');
     const filasNec = [['Mes','Familia','PPTO Ventas (Ton)','Ya cubierto (Ton)','Faltante (Ton)','Pedido nuevo (Ton)']];
     mesesConDato.forEach(m=>{
-      const ppto = M.pptoPorMes[m]; const cubierto = llegadasIdx[m];
+      const ppto = M.pptoPorMes[m]; const cubierto = R.llegadasIdx[m];
       FAMILIAS_ORDEN.forEach(fam=>{
         const necesidad = ppto[fam]||0; if(necesidad<=0) return;
         const cubTon = (cubierto?(cubierto.cierto[fam]||0)+(cubierto.estimado[fam]||0):0)/1000;
@@ -2950,6 +2950,9 @@ function buildPedidosNuevosProyectados(M, opts={}){
   });
 
   return { pedidosNuevos, alertasRetraso, mesesSinPpto, mesesHorizonte, inventarioPorMes, ventaRealDeducidaPorMes,
+           llegadasIdx, // expuesto para que renderView10 (tabla 10.1, gráfico 10.2b, export a Excel) reutilice
+                        // exactamente el mismo índice de llegadas ya calculado aquí, en vez de recalcularlo o
+                        // (el bug real del 16-sep) referenciarlo como si fuera una variable del scope de afuera.
            bandaInventario: {min:BANDA_INVENTARIO_MIN, objetivo:BANDA_INVENTARIO_OBJETIVO, max:BANDA_INVENTARIO_MAX} };
 }
 
@@ -3718,11 +3721,24 @@ function renderProgramacionPagos(M, nacEst){
     items.push({tipo:'Pronóstico: parcial incompleto', referencia:`${p.pedido} (parcial ${par.n}/${par.deN})`, pedido:p.pedido, monto:par.valorEstimado, fecha:par.fechaPagoEstimada, esEstimado:true});
   }));
   M.gfAbiertos.forEach(g=>{
+    // Defensivo (16-sep, hallazgo del smoke test en navegador — hasta ahora Giros Financieros nunca se había
+    // probado con datos reales ni sintéticos, ni en el arnés de Node ni en el navegador): un giro sin fecha de
+    // vencimiento cargada en el Sheet no debe tumbar toda la Programación de Pagos.
+    if(!g.fechaVencimiento) return;
     items.push({tipo:'Giro Financiero', referencia:g.banco||'Sin banco', pedido:g.pedido, monto:g.saldoReal, fecha:g.fechaVencimiento, esEstimado:false, interes:g.interesEstimado||0});
   });
   nacEst.filasMes.forEach(f=>{
+    // Mismo defensivo que arriba, aplicado a Nacionalización.
+    if(!f.fechaPago) return;
     items.push({tipo:'Nacionalización', referencia:`Consolidado ${f.mesArribo}`, pedido:'—', monto:f.valorNac, fecha:f.fechaPago, esEstimado:true});
   });
+  // Última línea de defensa: cualquier item sin fecha válida (de cualquiera de las 5 fuentes de arriba) se
+  // descarta aquí en vez de tumbar getISOWeek() — más seguro que confiar en que cada fuente nueva recuerde
+  // filtrar antes de empujar a `items`. Se muta el array en el sitio (no se reasigna `items`, es const y el
+  // resto de esta función ya lo referencia más abajo) para que todo lo que sigue quede filtrado por igual.
+  const itemsConFecha = items.filter(it=>it.fecha);
+  items.length = 0;
+  items.push(...itemsConFecha);
   items.forEach(it=>{ const w = getISOWeek(it.fecha); it.mesKey = monthKey(it.fecha); it.semanaKey = w.key; it.semanaMonday = w.monday; });
 
   const selVista = document.getElementById('f47_vista');
