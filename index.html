@@ -2963,6 +2963,33 @@ function buildPedidosNuevosProyectados(M, opts={}){
     return filas;
   }
 
+  // 16-sep, decimotercera tanda — INTENTADO Y REVERTIDO EN LA MISMA SESIÓN (historial, se conserva el
+  // diagnóstico): con las capturas reales de la Vista 10.3 (mar-27, un pedido grande cuyo primer parcial
+  // llegaba a tiempo pero el resto se regaba hasta 3 meses después), se probó topar el tamaño de cada pedido
+  // nuevo al máximo que TODOS sus proveedores pueden embarcar en un solo parcial cada uno (`maxKgUnParcial`,
+  // por bisección sobre numParcialesPorCapacidad; `maxPedidoTonUnParcial`, el mínimo de ese tope entre los
+  // proveedores del mix) — para que el pedido llegue completo, en su mes, sin cola, y varios pedidos
+  // consecutivos (uno por revisión mensual) acumulen lo necesario, como pidió Sebastián. Se probó de inmediato
+  // con el arnés de pruebas antes de considerarlo, y reveló un problema distinto y serio: para un proveedor
+  // con pocos pedidos históricos propios (menos que MIN_MUESTRA), capacidadEmbarque() cae al respaldo de la
+  // curva GLOBAL (ajustada sobre TODOS los proveedores agrupados) — y si esa curva GLOBAL termina dominada por
+  // proveedores de una escala muy distinta (en la fixture de prueba, un proveedor sintético con capacidad
+  // mucho menor por Kg pedido), el punto fijo kg=capacidad(kg) que define "cabe en un solo parcial" puede caer
+  // en un valor absurdamente pequeño (~2-4 Ton) frente a una necesidad mensual real de ~900 Ton — un régimen
+  // de la curva (pedidos casi microscópicos) para el que nunca se validó ni se pensó, muy lejos del rango de
+  // pedidos reales donde sí se confirmó R²=0.785. Con ese tope, el motor topaba el pedido en ~4 Ton cada mes
+  // indefinidamente — sub-pedido crónico y permanente, sin converger jamás a la banda: un problema nuevo y
+  // distinto (no over-ordering como en la duodécima tanda, sino under-ordering sostenido), pero igual de real.
+  // Se revirtió por la misma razón que las variantes de la duodécima tanda: preferir devolver una herramienta
+  // con un problema ya diagnosticado (el sawtooth de la partición en parciales) antes que una con uno nuevo,
+  // sin validar contra datos reales, potencialmente más grave. Lo que SÍ se conserva de esta tanda es la
+  // corrección (a) más abajo (netear lo que ya viene en camino para el mes siguiente), que es independiente
+  // de este tope y no depende de extrapolar la curva de capacidad a escalas pequeñas. Pendiente: para retomar
+  // la idea del tope por parcial único, primero hay que validar cómo se comporta capacidadEmbarque() con datos
+  // reales de Imporinox (no solo la fixture sintética) en el extremo de pedidos pequeños, o acotar el tope con
+  // un piso razonable (p.ej. no bajar de la mediana histórica de pedido del proveedor) antes de usarlo para
+  // dimensionar — no algo para decidir a ciegas en una tercera variante más.
+
   mesesHorizonte.forEach(mesNecesidad=>{
     const ppto = M.pptoPorMes[mesNecesidad];
     if(!ppto){ mesesSinPpto.push(mesNecesidad); return; }
@@ -3012,27 +3039,27 @@ function buildPedidosNuevosProyectados(M, opts={}){
       const pptoSiguiente = mesSiguienteKey ? M.pptoPorMes[mesSiguienteKey] : null;
       const ventaBaseSiguiente = (pptoSiguiente && pptoSiguiente[familia]>0) ? pptoSiguiente[familia] : ventaBase;
       const bandaObjetivoSiguiente = BANDA_INVENTARIO_OBJETIVO * ventaBaseSiguiente;
-      const pedidoTonNaive = disparaPedido ? Math.max(0, bandaObjetivoSiguiente - (posicionInicio - necesidadTon)) : 0;
-
-      // 16-sep, duodécima tanda — INTENTADO Y REVERTIDO EN LA MISMA SESIÓN: a pedido de Sebastián ("consolidar
-      // los parciales para cada mes y correr hacia atrás cuánto se tiene que pedir") se probaron DOS variantes
-      // de un dimensionamiento consolidado (una mirando solo el mes siguiente, otra neteando una ventana de 6
-      // meses hacia adelante contra lo ya confirmado/en tránsito). Ambas se verificaron con el mismo arnés de
-      // pruebas antes de considerarlas — y ambas fallaron, en direcciones opuestas: la primera sub-corrigió
-      // (el pedido de un mes no veía que otro pedido de un mes anterior seguía aportando tonelaje varios meses
-      // después, y terminaba sobre-pidiendo para "compensar" un hueco que ya se estaba cerrando solo —
-      // inventario sostenido en 300-380% del mínimo durante más de un año en la fixture de prueba); la
-      // segunda, al netear una ventana de 6 meses SIN ningún pedido nuevo como referencia, acumulaba un
-      // déficit artificialmente enorme en escenarios donde el primer embarque tarda ~3-4 meses en llegar desde
-      // HOY (lead time real de zarpe+navegación) — y terminaba pidiendo pedidos de ~12.000-14.000 Ton en un
-      // solo mes, empeorando el sobre-pedido en vez de resolverlo (500-800% del mínimo sostenido). Ninguna de
-      // las dos se entrega: se vuelve a la fórmula de la décima tanda (objetivo medido contra el mes
-      // siguiente, sin partición en la fórmula de tamaño) — sigue teniendo el equilibrio de ~50-55% ya
-      // reportado cuando el pedido se parte en muchos parciales, pero es un comportamiento YA CONOCIDO Y
-      // COMUNICADO, no uno nuevo y peor. Diseño correcto pendiente: requiere resolver el tamaño y el momento
-      // de VARIOS pedidos en conjunto (no uno a la vez, mes a mes) cuando el lead time es más largo que el
-      // intervalo de revisión — visto en detalle con Sebastián antes de intentar una tercera variante.
-      const pedidoTon = pedidoTonNaive;
+      // 16-sep, duodécima tanda — INTENTADO Y REVERTIDO EN LA MISMA SESIÓN (historial, se conserva el
+      // diagnóstico): a pedido de Sebastián ("consolidar los parciales para cada mes y correr hacia atrás
+      // cuánto se tiene que pedir") se probaron dos variantes de un dimensionamiento consolidado (una mirando
+      // solo el mes siguiente, otra neteando una ventana de 6 meses hacia adelante contra lo ya
+      // confirmado/en tránsito, recalculada desde cero en cada mes). Ambas fallaron, en direcciones opuestas
+      // (300-380% y 500-800% del mínimo sostenido en la fixture de prueba) — se revirtieron ese mismo día.
+      //
+      // 16-sep, decimotercera tanda — corrección parcial que SÍ se conserva (ver comentario extenso más abajo,
+      // junto a `mesesHorizonte.forEach`, sobre el tope por parcial único que se probó y se revirtió el mismo
+      // día): la fórmula no restaba lo que YA viene en camino para el mes siguiente por un pedido nuevo
+      // decidido en una iteración ANTERIOR de este mismo cálculo (`entradasNuevasFuturasPorMes`, el acumulador
+      // que ya existe y ya se prueba) — sin esto, un hueco que un pedido anterior ya estaba cerrando podía "no
+      // verse" y disparar un pedido adicional redundante (el defecto exacto de la Variante 1 de la duodécima
+      // tanda, en miniatura). Se corrige leyendo ese acumulador, NO inventando una ventana de neteo nueva (eso
+      // fue lo que hizo fallar a la Variante 2) — un cambio mínimo y seguro, verificado con el mismo arnés.
+      const entradasYaEnCaminoMesSiguiente = mesSiguienteKey
+        ? ((entradasNuevasFuturasPorMes[mesSiguienteKey] && entradasNuevasFuturasPorMes[mesSiguienteKey][familia]) || 0)
+        : 0;
+      const pedidoTon = disparaPedido
+        ? Math.max(0, bandaObjetivoSiguiente - (posicionInicio - necesidadTon) - entradasYaEnCaminoMesSiguiente)
+        : 0;
       let tonLlegaEsteMes = 0;
       let filasDeEsteMes = [];
 
@@ -3070,6 +3097,10 @@ function buildPedidosNuevosProyectados(M, opts={}){
            llegadasIdx, // expuesto para que renderView10 (tabla 10.1, gráfico 10.2b, export a Excel) reutilice
                         // exactamente el mismo índice de llegadas ya calculado aquí, en vez de recalcularlo o
                         // (el bug real del 16-sep) referenciarlo como si fuera una variable del scope de afuera.
+           // construirParcialesPedido se expone únicamente para que el arnés de pruebas pueda ejercitar la
+           // lógica de partición en parciales de forma aislada, con un tamaño candidato elegido a propósito —
+           // no se usa en ningún otro lugar del Tablero.
+           construirParcialesPedido,
            bandaInventario: {min:BANDA_INVENTARIO_MIN, objetivo:BANDA_INVENTARIO_OBJETIVO, max:BANDA_INVENTARIO_MAX} };
 }
 
