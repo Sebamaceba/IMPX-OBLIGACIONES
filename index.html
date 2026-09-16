@@ -600,8 +600,8 @@
     </div>
 
     <div class="panel">
-      <h2>10.2b · Proyección de niveles de inventario (optimización de capital de trabajo)</h2>
-      <div class="desc">Entradas confirmadas de lo ya pedido (Vista 9) + entradas de los pedidos nuevos que este módulo proyecta colocar (contadas en el mes en que realmente llegarían, no en el mes que buscan cubrir — por eso un pedido retrasado puede mostrar un hueco), menos las salidas por venta presupuestada (PPTO); el resultado es el inventario con el que arrancaría cada mes. Consolidado de las 4 familias (Ton. de bodega, sin contar tránsito ni producción). Líneas punteadas: meta de referencia de 2× a 3× la venta presupuestada de ESE mes — ni por debajo (riesgo de desabasto) ni muy por encima (capital de trabajo atado en exceso de inventario). Es un punto de partida para discutir la política de compra con Sebastián, no una regla ya decidida.</div>
+      <h2>10.2b · Proyección de niveles de inventario (política de reposición 1.8×–2.5×)</h2>
+      <div class="desc">Entradas confirmadas de lo ya pedido (Vista 9) + entradas de los pedidos nuevos que este módulo proyecta colocar (contadas en el mes en que realmente llegarían, no en el mes que buscan cubrir — por eso un pedido retrasado puede mostrar un hueco), menos las salidas por venta presupuestada (PPTO); el resultado es el inventario con el que arrancaría cada mes. Consolidado de las 4 familias (Ton. de bodega, sin contar tránsito ni producción). Política de reposición vigente (corregida el 16-sep con Sebastián): si el inventario de arranque de un mes cae por debajo de 1.8× la venta de ese mes, se dispara un pedido nuevo dimensionado para llevarlo a 2.15× (punto medio); 2.5× es la referencia visual de techo, no un disparador de "des-pedido". La "venta de ese mes" usa venta real deducida (por balance de masa entre inventarios físicos consecutivos) cuando ya se puede calcular, y PPTO presupuestado mientras tanto — ver Vista 10.1 para el detalle por familia.</div>
       <div style="height:340px;"><canvas id="c_v10_inventario"></canvas></div>
       <div id="v10_inventarioNota" style="margin-top:10px;font-size:11.5px;color:var(--ink-soft);"></div>
     </div>
@@ -2296,31 +2296,37 @@ function renderView10(){
     alertasPanel.style.display = 'none';
   }
 
-  // ---- 10.1 Necesidad de compra por mes y familia ----
-  const llegadasPorMes = consolidarLlegadasPorMes(M._llegadasCache, diaGabela);
-  const llegadasIdx = {}; llegadasPorMes.forEach(l=>llegadasIdx[l.mes]=l);
+  // ---- 10.1 Necesidad de compra por mes y familia — ahora sobre política de mínimos/máximos (16-sep,
+  // tercera revisión): "Pedido nuevo proyectado" ya no es "lo que falta para cerrar el gap del mes a cero",
+  // es lo que el motor dispara cuando la posición de inicio de mes cae bajo el mínimo (1.8x la venta de ese
+  // mes), dimensionado hasta el objetivo (2.15x) — ver buildPedidosNuevosProyectados. Esta tabla lee
+  // directamente los campos que ya calculó el motor (R.inventarioPorMes) en vez de recalcular la lógica de
+  // compra aquí — una sola fuente de verdad entre el motor y la tabla. ----
   const mesesConDato = mesesHorizonte.filter(m=>M.pptoPorMes[m]);
   const invIdx = {}; (R.inventarioPorMes||[]).forEach(x=> invIdx[x.mes+'|'+x.familia] = x);
   const hayInventarioReal = (R.inventarioPorMes||[]).some(x=>x.esReal);
-  let htmlN = '<tr><th>Mes</th><th>Familia</th><th>PPTO Ventas (Ton)</th><th>Ya cubierto (Ton)</th><th>Inventario inicial (Ton)</th><th>Faltante a pedir (Ton)</th><th>Pedido nuevo proyectado (Ton)</th></tr>';
-  let totNecesidad=0, totCubierto=0, totInventario=0, totNuevo=0;
+  const hayVentaRealDeducida = (R.inventarioPorMes||[]).some(x=>x.ventaRealDeducida!==null && x.ventaRealDeducida!==undefined);
+  const banda = R.bandaInventario || {min:1.8, objetivo:2.15, max:2.5};
+  let htmlN = `<tr><th>Mes</th><th>Familia</th><th>PPTO Ventas (Ton)</th><th>Venta real deducida (Ton)</th><th>Posición inicio de mes (Ton)</th><th>Mínimo ${banda.min}× / Objetivo ${banda.objetivo}×</th><th>Pedido nuevo proyectado (Ton)</th></tr>`;
+  let totNecesidad=0, totPosicion=0, totNuevo=0;
   mesesConDato.forEach(m=>{
     const ppto = M.pptoPorMes[m];
-    const cubierto = llegadasIdx[m];
     FAMILIAS_ORDEN.forEach(fam=>{
       const necesidad = ppto[fam]||0; if(necesidad<=0) return;
-      const cubKg = cubierto ? (cubierto.cierto[fam]||0)+(cubierto.estimado[fam]||0) : 0;
-      const cubTon = cubKg/1000;
       const inv = invIdx[m+'|'+fam];
-      const invTon = inv ? inv.invInicial : 0;
-      const gapTon = Math.max(0, necesidad - cubTon - invTon);
+      if(!inv) return;
       const nuevoTon = pedidosNuevos.filter(p=>p.mesNecesidad===m && p.familia===fam).reduce((a,p)=>a+p.ton,0);
-      totNecesidad+=necesidad; totCubierto+=cubTon; totInventario+=invTon; totNuevo+=nuevoTon;
-      htmlN += `<tr><td class="txt">${fmtMesLabel(m)}</td><td class="txt">${fam}</td><td>${fmtTonDirecto(necesidad)}</td><td>${fmtTonDirecto(cubTon)}</td><td>${fmtTonDirecto(invTon)}${inv&&!inv.esReal?' <span style="color:var(--ink-soft);font-size:9px;">(proyectado)</span>':''}</td><td>${gapTon>0.01?fmtTonDirecto(gapTon):'—'}</td><td>${nuevoTon>0.01?fmtTonDirecto(nuevoTon):'—'}</td></tr>`;
+      totNecesidad+=necesidad; totPosicion+=inv.posicionInicio; totNuevo+=nuevoTon;
+      const bajoMinimo = inv.disparaPedido;
+      htmlN += `<tr${bajoMinimo?' class="row-bad"':''}><td class="txt">${fmtMesLabel(m)}</td><td class="txt">${fam}</td><td>${fmtTonDirecto(necesidad)}</td><td>${inv.ventaRealDeducida?fmtTonDirecto(inv.ventaRealDeducida):'<span style="color:var(--ink-soft);">—</span>'}</td>` +
+        `<td>${fmtTonDirecto(inv.posicionInicio)}${bajoMinimo?' <span class="pill bad">bajo mínimo</span>':''}</td>` +
+        `<td style="font-size:11px;color:var(--ink-soft);">${fmtTonDirecto(inv.bandaMin)} / ${fmtTonDirecto(inv.bandaObjetivo)}</td>` +
+        `<td>${nuevoTon>0.01?fmtTonDirecto(nuevoTon):'—'}</td></tr>`;
     });
   });
-  htmlN += `<tr style="background:var(--paper);font-weight:700;"><td class="txt" colspan="2">TOTAL</td><td>${fmtTonDirecto(totNecesidad)}</td><td>${fmtTonDirecto(totCubierto)}</td><td>${fmtTonDirecto(totInventario)}</td><td></td><td>${fmtTonDirecto(totNuevo)}</td></tr>`;
-  if(!hayInventarioReal) htmlN += `<tr><td class="txt" colspan="7" style="color:var(--ink-soft);font-size:11.5px;">Todavía no hay ningún mes con inventario inicial REAL cargado en la hoja de PPTO — la columna "Inventario inicial" está en 0 en todos los meses (comportamiento igual al de antes de este cambio). En cuanto Sebastián cargue el primer mes con conteo físico, el modelo empieza a proyectar el inventario hacia adelante desde ahí.</td></tr>`;
+  htmlN += `<tr style="background:var(--paper);font-weight:700;"><td class="txt" colspan="2">TOTAL</td><td>${fmtTonDirecto(totNecesidad)}</td><td></td><td>${fmtTonDirecto(totPosicion)}</td><td></td><td>${fmtTonDirecto(totNuevo)}</td></tr>`;
+  if(!hayInventarioReal) htmlN += `<tr><td class="txt" colspan="7" style="color:var(--ink-soft);font-size:11.5px;">Todavía no hay ningún mes con inventario inicial REAL cargado en la hoja de PPTO — "Posición inicio de mes" se proyecta 100% desde 0 (comportamiento igual al de antes de este cambio). En cuanto Sebastián cargue el primer mes con conteo físico, el modelo empieza a proyectar el inventario hacia adelante desde ahí.</td></tr>`;
+  if(!hayVentaRealDeducida) htmlN += `<tr><td class="txt" colspan="7" style="color:var(--ink-soft);font-size:11.5px;">"Venta real deducida" solo se calcula para un mes cuando hay conteo físico REAL cargado en ESE mes y en el siguiente (dos anclas consecutivas) — con un solo mes ancla cargado todavía no hay ninguno; se activa sola en cuanto Sebastián cargue un segundo mes con conteo físico. Mientras tanto la banda de mínimo/objetivo usa el PPTO de ventas.</td></tr>`;
   if(mesesSinPpto.length) htmlN += `<tr><td class="txt" colspan="7" style="color:var(--ink-soft);font-size:11.5px;">Sin PPTO publicado todavía para: ${mesesSinPpto.map(fmtMesLabel).join(', ')} — no se proyecta pedido nuevo para esos meses hasta que se publique el presupuesto.</td></tr>`;
   document.getElementById('tbl_v10_necesidad').innerHTML = htmlN;
 
@@ -2359,8 +2365,12 @@ function renderView10(){
   document.getElementById('v10_flujoTotal').textContent = `Próximos ${horizonte} meses: ${fmt(totalFwd)} en USD nominal (mercancía + nacionalización estimada, ya pedido + pedidos nuevos proyectados).`;
 
   // ---- 10.2b Proyección de niveles de inventario (16-sep, a pedido de Sebastián: ver el nivel de inventario
-  // resultante de entradas (lo ya pedido + lo que este módulo proyecta pedir) menos salidas (venta PPTO), para
-  // discutir la política de compra frente a una meta de 2-3x la venta mensual en bodega). Consolidado de las
+  // resultante de entradas (lo ya pedido + lo que este módulo proyecta pedir) menos salidas (venta PPTO),
+  // frente a la política de reposición 1.8x mínimo / 2.15x objetivo / 2.5x referencia máxima que Sebastián
+  // corrigió el mismo día al ver el primer borrador (que solo cerraba la brecha a cero, sin colchón mínimo).
+  // Las bandas que se grafican aquí son la SUMA de bandaMin/bandaObjetivo por familia que ya calculó
+  // buildPedidosNuevosProyectados (mismos BANDA_INVENTARIO_MIN/OBJETIVO/MAX, misma ventaBase con venta real
+  // deducida cuando aplica) — una sola fuente de verdad, no una banda recalculada aparte. Consolidado de las
   // 4 familias — el detalle por familia ya vive en la tabla 10.1. El inventario de arranque de cada mes es el
   // MISMO que ya calcula buildPedidosNuevosProyectados (R.inventarioPorMes: real cuando existe, proyectado
   // hacia adelante si no), sumado across familias — una sola fuente de verdad, no un cálculo paralelo. Las
@@ -2376,17 +2386,30 @@ function renderView10(){
     const filas = mesesConDato.map(m=>{
       const ppto = M.pptoPorMes[m] || {};
       const cubierto = llegadasIdx[m];
-      let ventaMes = 0, entradasConfirmadas = 0, invInicio = 0, esRealAlgunaFamilia = false;
+      let ventaMes = 0, ventaBase = 0, entradasConfirmadas = 0, invInicio = 0, bandaMinTot = 0, bandaObjetivoTot = 0, esRealAlgunaFamilia = false;
       FAMILIAS_ORDEN.forEach(fam=>{
-        ventaMes += ppto[fam]||0;
+        const pptoFam = ppto[fam]||0;
+        ventaMes += pptoFam;
         const cubKg = cubierto ? (cubierto.cierto[fam]||0)+(cubierto.estimado[fam]||0) : 0;
         entradasConfirmadas += cubKg/1000;
         const inv = invPorMesFamilia[m] && invPorMesFamilia[m][fam];
-        if(inv){ invInicio += inv.invInicial; if(inv.esReal) esRealAlgunaFamilia = true; }
+        if(inv){
+          invInicio += inv.invInicial;
+          ventaBase += (inv.ventaBase!=null ? inv.ventaBase : pptoFam);
+          bandaMinTot += inv.bandaMin||0;
+          bandaObjetivoTot += inv.bandaObjetivo||0;
+          if(inv.esReal) esRealAlgunaFamilia = true;
+        } else {
+          // familia/mes sin fila en R.inventarioPorMes (p.ej. sin PPTO publicado): banda de referencia sobre PPTO
+          ventaBase += pptoFam;
+          bandaMinTot += BANDA_INVENTARIO_MIN*pptoFam;
+          bandaObjetivoTot += BANDA_INVENTARIO_OBJETIVO*pptoFam;
+        }
       });
       const entradasNuevas = entradasNuevasPorMes[m]||0;
       const invFin = invInicio + entradasConfirmadas + entradasNuevas - ventaMes;
-      return {mes:m, ventaMes, entradasConfirmadas, entradasNuevas, invInicio, invFin, esRealAlgunaFamilia};
+      const bandaMaxTot = BANDA_INVENTARIO_MAX * ventaBase;
+      return {mes:m, ventaMes, ventaBase, entradasConfirmadas, entradasNuevas, invInicio, invFin, bandaMinTot, bandaObjetivoTot, bandaMaxTot, esRealAlgunaFamilia};
     });
 
     const tonFmt = v => v===null||v===undefined ? '' : Math.round(v).toLocaleString('en-US');
@@ -2395,8 +2418,9 @@ function renderView10(){
       {label:'Entradas: pedidos nuevos a colocar', type:'bar', data:filas.map(f=>f.entradasNuevas), backgroundColor:COLORS.gold, stack:'mov'},
       {label:'Salidas por venta (PPTO)', type:'bar', data:filas.map(f=>-f.ventaMes), backgroundColor:COLORS.red, stack:'mov'},
       {label:'Inventario al inicio del mes', type:'line', data:filas.map(f=>f.invInicio), borderColor:COLORS.navy, backgroundColor:COLORS.navy, borderWidth:2.5, pointRadius:3, pointBackgroundColor:COLORS.navy, tension:0.15, fill:false, order:0},
-      {label:'Meta mínima (2× venta del mes)', type:'line', data:filas.map(f=>2*f.ventaMes), borderColor:COLORS.green, borderDash:[6,4], borderWidth:1.5, pointRadius:0, fill:false, order:1},
-      {label:'Meta máxima (3× venta del mes)', type:'line', data:filas.map(f=>3*f.ventaMes), borderColor:COLORS.steel, borderDash:[2,3], borderWidth:1.5, pointRadius:0, fill:false, order:1},
+      {label:`Mínimo (${BANDA_INVENTARIO_MIN}× venta del mes)`, type:'line', data:filas.map(f=>f.bandaMinTot), borderColor:COLORS.green, borderDash:[6,4], borderWidth:1.5, pointRadius:0, fill:false, order:1},
+      {label:`Objetivo de reposición (${BANDA_INVENTARIO_OBJETIVO}× venta del mes)`, type:'line', data:filas.map(f=>f.bandaObjetivoTot), borderColor:COLORS.amber, borderDash:[3,3], borderWidth:1.5, pointRadius:0, fill:false, order:1},
+      {label:`Máximo de referencia (${BANDA_INVENTARIO_MAX}× venta del mes)`, type:'line', data:filas.map(f=>f.bandaMaxTot), borderColor:COLORS.steel, borderDash:[2,3], borderWidth:1.5, pointRadius:0, fill:false, order:1},
     ], {scales:{x:{stacked:true}, y:{stacked:false, ticks:{callback:tonFmt}}}, plugins:{datalabels:{display:false}, tooltip:{callbacks:{label:ctx=>`${ctx.dataset.label}: ${tonFmt(ctx.raw)} Ton`}}}}, false, tonFmt, false);
 
     const primeraConReal = filas.find(f=>f.esRealAlgunaFamilia);
@@ -2774,6 +2798,43 @@ function consolidarLlegadasPorMes(llegadas, diaGabela){
 // rompe nada si Sebastián todavía no ha llenado esas columnas). Sigue sin ser un WMS en vivo: es tan preciso
 // como los conteos físicos que se carguen, con el margen de error de la proyección acumulándose mes a mes
 // entre un conteo real y el siguiente.
+// ---- Venta real deducida por balance de masa (16-sep, tercera revisión, a pedido de Sebastián: "al tener
+// las entradas y el inventario inicial de cada mes puedes deducir las ventas reales") ----
+// Con inventario inicial REAL (conteo físico cargado en la hoja de PPTO) y entradas CIERTAS (ya con fecha
+// real de arribo, no proyectadas) de dos meses consecutivos, se despeja cuánto se vendió de verdad ese mes:
+//   Venta real(mes) = Inv. inicial REAL(mes) + Entradas ciertas(mes) − Inv. inicial REAL(mes+1)
+// Sirve para calibrar el PPTO contra la realidad (Vista 10.1 la muestra al lado del PPTO cuando existe) y,
+// más abajo, como base más precisa que el PPTO para la política de mínimos/máximos — el PPTO es un
+// presupuesto, esto es lo que realmente salió de bodega. Solo es calculable para el mes m si hay conteo
+// físico real cargado TANTO en m como en m+1 (dos anclas consecutivas); con un solo mes ancla cargado (el
+// caso típico mientras Sebastián no haya cargado un segundo mes) no hay ningún mes con este dato todavía —
+// se activa solo, sin tocar nada, en cuanto exista esa segunda ancla.
+function calcularVentaRealDeducidaPorMes(M, mesesHorizonte, llegadasIdx){
+  const out = {};
+  for(let i=0;i<mesesHorizonte.length-1;i++){
+    const mesA = mesesHorizonte[i], mesB = mesesHorizonte[i+1];
+    const invA = M.inventarioInicialPorMes[mesA], invB = M.inventarioInicialPorMes[mesB];
+    if(!invA || !invB) continue;
+    const cubierto = llegadasIdx[mesA];
+    FAMILIAS_ORDEN.forEach(familia=>{
+      const invIniA = invA[familia], invIniB = invB[familia];
+      if(invIniA===null||invIniA===undefined||invIniB===null||invIniB===undefined) return;
+      const entradasCiertoTon = cubierto ? (cubierto.cierto[familia]||0)/1000 : 0;
+      out[mesA] = out[mesA] || {};
+      out[mesA][familia] = invIniA + entradasCiertoTon - invIniB;
+    });
+  }
+  return out;
+}
+
+// Política de mínimos y máximos de inventario (16-sep, tercera revisión, a pedido de Sebastián: "estás
+// pidiendo para reabastecer pero no para el nivel de stock mínimo que queremos tener"). Constantes en el
+// ámbito del módulo (no dentro de la función) para que Vista 10.2b use exactamente los mismos números al
+// dibujar las líneas de referencia — una sola fuente de verdad, no un valor copiado a mano en el HTML.
+const BANDA_INVENTARIO_MIN = 1.8;       // mínimo: Ton. de inventario al INICIO del mes, como múltiplo de la venta de ese mes
+const BANDA_INVENTARIO_OBJETIVO = 2.15; // punto medio de la banda: hasta aquí se dimensiona el pedido cuando se dispara (política order-up-to-S)
+const BANDA_INVENTARIO_MAX = 2.5;       // máximo deseado (referencia visual; el motor no "des-pide" si ya se está por encima, solo dimensiona los pedidos nuevos hacia el objetivo)
+
 function buildPedidosNuevosProyectados(M, opts={}){
   const { horizonteMeses=12, diaGabela=20, arancelPct=0.06, ivaPct=0.19, pctAnticipoRespaldo=0.20 } = opts;
   const HOY = new Date();
@@ -2787,7 +2848,8 @@ function buildPedidosNuevosProyectados(M, opts={}){
   const pedidosNuevos = [];   // una fila por (mes de necesidad, familia, proveedor)
   const mesesSinPpto = [];    // meses del horizonte sin fila de PPTO publicada todavía
   const alertasRetraso = [];  // pedidos cuya fecha de pedido calculada cae en el pasado (no se alcanza a colocar a tiempo)
-  const inventarioPorMes = []; // transparencia: inventario inicial usado cada mes por familia (real o proyectado)
+  const inventarioPorMes = []; // transparencia: posición de inventario, banda mín/objetivo y pedido disparado cada mes por familia (real o proyectado)
+  const ventaRealDeducidaPorMes = calcularVentaRealDeducidaPorMes(M, mesesHorizonte, llegadasIdx);
 
   // Inventario inicial por familia, arrastrado mes a mes (16-sep, a pedido de Sebastián: sin esto, el motor
   // asumía inventario CERO todos los meses y sobreestimaba sistemáticamente cuánto hay que comprar). Regla:
@@ -2805,34 +2867,40 @@ function buildPedidosNuevosProyectados(M, opts={}){
     const cubierto = llegadasIdx[mesNecesidad];
     const invReal = M.inventarioInicialPorMes[mesNecesidad];
     FAMILIAS_ORDEN.forEach(familia=>{
-      const necesidadTon = ppto[familia] || 0;
+      const necesidadTon = ppto[familia] || 0; // PPTO de ventas (Ton) — se sigue usando para el flujo de caja y como respaldo de "venta del mes" cuando no hay venta real deducida
       const cubiertoKg = cubierto ? (cubierto.cierto[familia]||0) + (cubierto.estimado[familia]||0) : 0;
       const cubiertoTon = cubiertoKg/1000;
 
       const tieneInvReal = invReal && invReal[familia]!==null && invReal[familia]!==undefined;
       let invInicial = tieneInvReal ? invReal[familia] : inventarioCorriente[familia];
       if(invInicial===null || invInicial===undefined) invInicial = 0;
-      inventarioPorMes.push({mes:mesNecesidad, familia, invInicial, esReal: !!tieneInvReal});
 
-      if(necesidadTon<=0){
-        inventarioCorriente[familia] = Math.max(0, invInicial + cubiertoTon); // sin venta presupuestada ese mes, el inventario solo crece con lo que llega
-        return;
-      }
-
-      const gapTon = necesidadTon - cubiertoTon - invInicial;
-      if(gapTon <= necesidadTon*0.02){
-        // Gap <2% de la necesidad (o inventario+llegadas ya cubren de sobra): no hace falta pedido nuevo.
-        // El saldo (puede ser superávit real) se arrastra al mes siguiente en vez de perderse.
-        inventarioCorriente[familia] = Math.max(0, invInicial + cubiertoTon - necesidadTon);
-        return;
-      }
+      // Posición de inventario al INICIO del mes: lo que ya hay en bodega + lo que ya va a llegar ESE mes de
+      // pedidos previos, ANTES de vender — es exactamente lo que Sebastián pidió comparar contra la banda de
+      // 1.8x-2.5x ("el mínimo que deberíamos INICIAR el mes"), no el saldo de cierre.
+      const posicionInicio = invInicial + cubiertoTon;
+      const ventaRealMes = ventaRealDeducidaPorMes[mesNecesidad] && ventaRealDeducidaPorMes[mesNecesidad][familia];
+      const ventaBase = (necesidadTon>0 && ventaRealMes>0) ? ventaRealMes : necesidadTon; // venta real deducida cuando existe (más precisa), si no el PPTO
+      const bandaMin = BANDA_INVENTARIO_MIN * ventaBase;
+      const bandaObjetivo = BANDA_INVENTARIO_OBJETIVO * ventaBase;
 
       const mix = M.mixFamiliaProveedor[familia];
-      if(!mix || !mix.length){
-        inventarioCorriente[familia] = Math.max(0, invInicial + cubiertoTon - necesidadTon); // sin proveedores históricos no se puede generar el pedido, pero el inventario se sigue arrastrando igual
-        return; // sin proveedores históricos para esta familia — no se puede proyectar a quién pedirle (se reporta aparte, ver renderView10)
-      }
-      inventarioCorriente[familia] = 0; // el pedido nuevo se dimensiona para cerrar el gap completo -> el inventario de cierre queda ~0 (dentro de la tolerancia del 2%)
+      // Se dispara un pedido nuevo si la posición de inicio de mes cae por debajo del mínimo (política de
+      // punto de reorden s,S) — YA NO si el gap del mes es >0 como antes, que dimensionaba el pedido para
+      // dejar el inventario de cierre en ~0 (sin ningún colchón, el problema que Sebastián detectó en 10.2b).
+      const disparaPedido = necesidadTon>0 && mix && mix.length>0 && posicionInicio < bandaMin - 1e-6;
+      const pedidoTon = disparaPedido ? Math.max(0, bandaObjetivo - posicionInicio) : 0;
+
+      inventarioPorMes.push({mes:mesNecesidad, familia, invInicial, esReal: !!tieneInvReal,
+        posicionInicio, ventaBase, ventaRealDeducida: ventaRealMes>0?ventaRealMes:null, bandaMin, bandaObjetivo, pedidoTon, disparaPedido});
+
+      // Cierre de inventario del mes = posición de inicio + lo que se termine pidiendo (asumiendo que llega
+      // dentro del mismo mes — misma simplificación mensual que ya usaba el modelo) − venta del mes (PPTO,
+      // que es lo que efectivamente se descuenta para la proyección hacia adelante; la venta real deducida es
+      // solo diagnóstico/calibración de la banda, no reemplaza el consumo usado para arrastrar el inventario).
+      inventarioCorriente[familia] = Math.max(0, posicionInicio + pedidoTon - necesidadTon);
+
+      if(!disparaPedido || pedidoTon<=0) return; // no hace falta pedido nuevo este mes, o no hay proveedores históricos para generarlo (se reporta aparte, ver renderView10)
 
       // Fecha objetivo de arribo: dentro del mes de necesidad, respetando el "día de gabela" para que
       // mesDisponibilidad() lo cuente en ese mismo mes — consistente con el criterio ya usado en Vista 9.
@@ -2842,7 +2910,7 @@ function buildPedidosNuevosProyectados(M, opts={}){
       const stats = M.statsProveedor;
 
       mix.forEach(({proveedor, share})=>{
-        const kg = gapTon*1000*share; if(kg<=0) return;
+        const kg = pedidoTon*1000*share; if(kg<=0) return;
         const diasNav = stats.diasNavegacionProveedor(proveedor) || 45;
         const diasPedidoAZarpe = stats.avgPrimerZarpe(proveedor) || 60;
         let fechaZarpe = addDays(fechaArriboObjetivo, -diasNav);
@@ -2881,7 +2949,8 @@ function buildPedidosNuevosProyectados(M, opts={}){
     });
   });
 
-  return { pedidosNuevos, alertasRetraso, mesesSinPpto, mesesHorizonte, inventarioPorMes };
+  return { pedidosNuevos, alertasRetraso, mesesSinPpto, mesesHorizonte, inventarioPorMes, ventaRealDeducidaPorMes,
+           bandaInventario: {min:BANDA_INVENTARIO_MIN, objetivo:BANDA_INVENTARIO_OBJETIVO, max:BANDA_INVENTARIO_MAX} };
 }
 
 function computeFlujoCaja(M, horizonte, arancelPct=0.06, ivaPct=0.19){
