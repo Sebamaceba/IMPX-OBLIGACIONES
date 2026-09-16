@@ -337,7 +337,7 @@
     </div>
     <div class="panel">
       <h2>4.3 · Pedidos sin proyecto parcial — proyección de saldo y fecha</h2>
-      <div class="note info">Número de parciales estimado = techo(Toneladas del pedido ÷ capacidad típica de entrega por embarque de ese proveedor, mediana de Ton/parcial en sus pedidos ya completados). El tiempo hasta el 2º parcial se estima aparte del tiempo entre parciales subsiguientes (el primer intervalo suele ser más largo — validado con datos reales). Zarpe, arribo y pago se estiman con estadísticas históricas de ese proveedor y país de origen; si no hay suficiente historial, se usa el respaldo global. Si un parcial estimado ya debió zarpar/llegar y no aparece confirmado en Seguimiento de Proyectos, se marca <b>RETRASADO</b> y su fecha se recalcula desde hoy. La columna "Ton. Esperadas" usa el mismo motor que la Vista "Llegadas por Familia" (9) — ahí se puede ver el detalle desglosado por Familia de producto y mes de disponibilidad.</div>
+      <div class="note info">Número de parciales estimado = techo(Toneladas del pedido ÷ capacidad de entrega por embarque de ese proveedor, el embarque MÁS GRANDE de Ton/parcial que ha hecho en sus pedidos ya completados). El tiempo hasta el 2º parcial se estima aparte del tiempo entre parciales subsiguientes (el primer intervalo suele ser más largo — validado con datos reales). Zarpe, arribo y pago se estiman con estadísticas históricas de ese proveedor y país de origen; si no hay suficiente historial, se usa el respaldo global. Si un parcial estimado ya debió zarpar/llegar y no aparece confirmado en Seguimiento de Proyectos, se marca <b>RETRASADO</b> y su fecha se recalcula desde hoy. La columna "Ton. Esperadas" usa el mismo motor que la Vista "Llegadas por Familia" (9) — ahí se puede ver el detalle desglosado por Familia de producto y mes de disponibilidad.</div>
       <div class="filters">
         <select id="f42_orden">
           <option value="pago">Ordenar por fecha de pago</option>
@@ -464,7 +464,7 @@
 
       <h3 style="margin-top:22px;color:var(--navy);">4 · Cómo se pronostican pedidos que TODAVÍA no tienen ningún embarque (Vista 4.2)</h3>
       <ul>
-        <li><b>Número de parciales esperados:</b> NO es un número fijo por proveedor. Se calcula la "capacidad típica de entrega por embarque" de ese proveedor (mediana de USD por parcial en sus pedidos ya completados) y se divide el valor del pedido nuevo entre esa capacidad, redondeando hacia arriba. Un pedido grande genera más parciales estimados que uno chico, para el mismo proveedor.</li>
+        <li><b>Número de parciales esperados:</b> NO es un número fijo por proveedor. Se calcula la "capacidad de entrega por embarque" de ese proveedor (el embarque MÁS GRANDE, en Toneladas, que ha hecho en sus pedidos ya completados — cambiado de la mediana al máximo el 16-sep, para no partir un pedido grande en muchos envíos chicos cuando el proveedor ya demostró poder consolidar en uno más grande) y se divide el peso del pedido nuevo entre esa capacidad, redondeando hacia arriba. Un pedido grande genera más parciales estimados que uno chico, para el mismo proveedor — o menos, si es más chico que el embarque más grande ya demostrado.</li>
         <li><b>Fecha del 1er parcial:</b> fecha de pedido + días típicos de ese proveedor hasta su primer zarpe histórico.</li>
         <li><b>Fecha del 2do parcial:</b> zarpe del 1º + el intervalo específico "1º al 2º parcial" de ese proveedor (medido aparte, porque suele ser más largo que los siguientes).</li>
         <li><b>Fecha del 3er parcial en adelante:</b> cada uno se estima sumando el mismo promedio "entre parciales subsiguientes" al zarpe anterior — no se sigue diferenciando parcial por parcial porque, a partir del 3º, casi ningún proveedor tiene muestra histórica suficiente para confiar en un número propio por posición.</li>
@@ -475,7 +475,7 @@
 
       <h3 style="margin-top:22px;color:var(--navy);">5 · Cómo "aprende" el modelo con datos nuevos, y qué tan reciente es "reciente"</h3>
       <p>El tablero <b>no guarda ningún valor calculado</b> — cada vez que se abre, recalcula todos los promedios con el historial completo disponible en el Sheet hasta ese momento. Si mañana se cierra un pedido nuevo, la próxima carga del tablero ya lo incluye automáticamente, sin tocar código.</p>
-      <p>Para las estadísticas de comportamiento (días entre parciales, días a primer zarpe, días BL→pago), en vez de usar un promedio simple o cortar los datos por fecha, se usa un <b>promedio ponderado por antigüedad</b>: cada observación pesa menos mientras más vieja es, siguiendo la fórmula <span style="font-family:var(--mono);">peso = 0.5 <sup>(días desde la observación ÷ 270)</sup></span> — es decir, una observación de hace 9 meses pesa la mitad que una de hoy, una de hace 18 meses pesa un cuarto, y así sucesivamente, <u>sin descartar nunca del todo</u> el dato viejo. Esto permite que el modelo reaccione más rápido si un proveedor mejora o empeora su comportamiento reciente, sin perder toda la memoria histórica de golpe. La capacidad de embarque (tamaño típico en USD) es la única estadística que, por ahora, sigue usando la mediana simple sin ponderar por recencia.</p>
+      <p>Para las estadísticas de comportamiento (días entre parciales, días a primer zarpe, días BL→pago), en vez de usar un promedio simple o cortar los datos por fecha, se usa un <b>promedio ponderado por antigüedad</b>: cada observación pesa menos mientras más vieja es, siguiendo la fórmula <span style="font-family:var(--mono);">peso = 0.5 <sup>(días desde la observación ÷ 270)</sup></span> — es decir, una observación de hace 9 meses pesa la mitad que una de hoy, una de hace 18 meses pesa un cuarto, y así sucesivamente, <u>sin descartar nunca del todo</u> el dato viejo. Esto permite que el modelo reaccione más rápido si un proveedor mejora o empeora su comportamiento reciente, sin perder toda la memoria histórica de golpe. La capacidad de embarque (tamaño máximo demostrado en Toneladas) es la única estadística que, por ahora, sigue sin ponderar por recencia — usa el máximo histórico simple, sin importar si el embarque grande fue reciente o de hace tiempo.</p>
       <p><b>Regla de muestra mínima:</b> si un proveedor tiene menos de 5 observaciones históricas para una estadística dada, no se confía en su propio número — se usa el promedio/mediana global de todos los proveedores como respaldo, para evitar que 1 o 2 datos atípicos de un proveedor con poco historial distorsionen la proyección.</p>
 
       <h3 style="margin-top:22px;color:var(--navy);">6 · Nacionalización estimada (Vista 4.6)</h3>
@@ -564,7 +564,7 @@
     <div class="panel">
       <h2>10 · Pedidos Nuevos Proyectados — Flujo de Caja de Compras (histórico + gerencial)</h2>
       <div class="desc">Cuánto pedir, a qué proveedor y cuándo, para cubrir el PPTO de ventas por Familia en la parte que <b>NO</b> alcanza a cubrir lo que ya está pedido (Vista 9). Usa las mismas estadísticas empíricas por proveedor ya validadas en el resto del Tablero (lead time real Pedido→Zarpe→Arribo, día de pago del saldo anclado al ZARPE, no al arribo) — reemplaza el modelaje que tenía el Kardex de Excel.</div>
-      <div class="note info">Simplificación explícita: el Tablero no tiene una foto de inventario en vivo (solo compras/pagos/llegadas). La "necesidad de compra" de un mes = PPTO de ventas de ese mes menos lo que ya va a llegar ese mismo mes — equivale a asumir que el inventario de seguridad se mantiene aprox. constante. Si se necesita modelar niveles de stock reales, hay que conectar el saldo de Kardex/WMS (hoy no vive en ninguna de las dos herramientas).</div>
+      <div class="note info">"Necesidad de compra" de un mes = PPTO de ventas de ese mes − lo que ya va a llegar ese mismo mes (Vista 9) − inventario inicial de ese mes. El inventario inicial se toma del conteo físico real que Sebastián carga en la hoja de PPTO cuando existe para ese mes; si no existe todavía, el propio modelo lo proyecta hacia adelante desde el último mes con dato real (inventario inicial del mes siguiente = inventario inicial + llegadas − PPTO del mes anterior). Sin ningún conteo físico cargado, el inventario queda en 0 en todos los meses (igual que antes de este cambio — no genera compras de menos por error).</div>
       <div class="filters">
         <label style="font-size:12px;color:var(--ink-soft);">Horizonte:
           <select id="v10_horizonte"><option value="6">Próximos 6 meses</option><option value="12" selected>Próximos 12 meses</option><option value="24">Próximos 24 meses</option></select>
@@ -582,7 +582,7 @@
 
     <div class="panel">
       <h2>10.1 · Necesidad de compra por mes y Familia — parte gerencial</h2>
-      <div class="desc">PPTO de ventas (Ton) vs. lo que ya va a llegar (cierto + estimado, Vista 9) vs. el faltante a cubrir con pedidos nuevos.</div>
+      <div class="desc">PPTO de ventas (Ton) vs. lo que ya va a llegar (cierto + estimado, Vista 9) vs. inventario inicial (real o proyectado) vs. el faltante a cubrir con pedidos nuevos.</div>
       <div class="scroll"><table id="tbl_v10_necesidad"></table></div>
     </div>
 
@@ -605,7 +605,7 @@
 
     <div class="panel">
       <h2>10.4 · Mezcla Familia → Proveedor usada para repartir los pedidos nuevos</h2>
-      <div class="desc">Calculada en vivo desde "Cuadro Pedidos" (histórico real, no una tabla copiada de Excel) — proveedores con menos del 3% del Kg histórico de su familia se excluyen por no ser representativos.</div>
+      <div class="desc">Calculada en vivo desde "Cuadro Pedidos" (histórico real, no una tabla copiada de Excel) — proveedores con menos del 3% del Kg histórico de su familia se excluyen por no ser representativos. El % sigue siendo principalmente por volumen histórico; cuando dos proveedores quedan empatados en volumen (a menos de 15% uno del otro), se desempata a favor de quien tiene menor Lead Time (Pedido→Arribo) — la columna "¿Desempatado?" marca dónde ocurrió ese intercambio.</div>
       <div class="scroll"><table id="tbl_v10_mix"></table></div>
     </div>
   </div>
@@ -833,6 +833,42 @@ function buildPptoPorMes(pptoRaw){
   const out = {};
   (pptoRaw||[]).forEach(r=>{
     const p = normPpto(r);
+    if(p) out[p.mesKey] = p;
+  });
+  return out;
+}
+
+// ---- Inventario inicial por mes (Ton) — 16-sep, a pedido de Sebastián ----
+// Se agrega en la MISMA hoja/pestaña del PPTO (mismo gid), como columnas adicionales por familia, una fila
+// por mes igual que el PPTO. OJO — esto es importante y se lo advertí a Sebastián: esas columnas NO pueden
+// llamarse "LAMINAS"/"TUBOS"/"PERFILES"/"OTROS"/"TOTAL" a secas, porque esos encabezados YA existen en la
+// misma fila para el PPTO de ventas — fetchAndParse() arma cada fila como un objeto {ENCABEZADO: valor},
+// así que un encabezado repetido pisa silenciosamente al primero (obj[h]=row[idx] con el mismo "h" dos
+// veces dejaría el valor de inventario escrito encima del valor de PPTO, o viceversa, sin ningún error
+// visible). Por eso las columnas de inventario deben tener un encabezado DISTINTO — se usa el prefijo
+// "INV INICIAL " (con alias "INVENTARIO INICIAL " por si acaso) delante de cada familia.
+function normInventarioInicial(r){
+  const anio = num(get(r,'AÑO','ANO'));
+  const mesNombre = normKey(get(r,'MES'));
+  const mesNum = MESES_ES[mesNombre];
+  if(!anio || !mesNum) return null;
+  const soloSiHayDato = v => { // distingue celda VACÍA (sin dato real todavía) de un 0 confirmado
+    if(v===null || v===undefined) return null;
+    const s = String(v).trim(); if(s==='') return null;
+    const n = num(v); return isNaN(n) ? null : n;
+  };
+  const laminas = soloSiHayDato(get(r,'INV INICIAL LAMINAS','INVENTARIO INICIAL LAMINAS'));
+  const tubos = soloSiHayDato(get(r,'INV INICIAL TUBOS','INVENTARIO INICIAL TUBOS'));
+  const perfiles = soloSiHayDato(get(r,'INV INICIAL PERFILES','INVENTARIO INICIAL PERFILES'));
+  const otros = soloSiHayDato(get(r,'INV INICIAL OTROS','INVENTARIO INICIAL OTROS'));
+  if(laminas===null && tubos===null && perfiles===null && otros===null) return null; // mes sin ningún dato real de inventario todavía
+  return { mesKey: `${anio}-${String(mesNum).padStart(2,'0')}`,
+    'Láminas': laminas, 'Tubos': tubos, 'Perfiles': perfiles, 'Otros Productos': otros };
+}
+function buildInventarioInicialPorMes(pptoRaw){
+  const out = {};
+  (pptoRaw||[]).forEach(r=>{
+    const p = normInventarioInicial(r);
     if(p) out[p.mesKey] = p;
   });
   return out;
@@ -1187,6 +1223,7 @@ function buildModel({profRaw, spRaw, pgRaw, gfRaw, nacRaw, pedDetRaw, impRaw, pp
   const ton = buildToneladasModel(pedDetRaw||[], impRaw||[], prof, spAll0);
   const nav = buildNavegacionStats(ton);
   const pptoPorMes = buildPptoPorMes(pptoRaw||[]);
+  const inventarioInicialPorMes = buildInventarioInicialPorMes(pptoRaw||[]);
 
   // ---- Saldo pendiente CALCULADO de forma independiente, por Proyecto Comex ----
   // = (Valor Factura - Reclasificación - Notas Crédito) - Σ pagos de concepto SALDO hechos a ESE Proyecto Comex
@@ -1238,6 +1275,16 @@ function buildModel({profRaw, spRaw, pgRaw, gfRaw, nacRaw, pedDetRaw, impRaw, pp
     else if((p.formaPago||'').includes('FINANCIADO')) g.saldoPagadoFinanciado = (g.saldoPagadoFinanciado||0)+p.valor;
   });
 
+  // Umbral de "saldo residual inmaterial" en toneladas: si lo que falta por entregar de un pedido es una
+  // fracción mínima de lo pedido, se considera tolerancia de producción/redondeo — "toneladas no atendidas"
+  // que ya no se van a atender como un parcial real — y NO una entrega parcial pendiente genuina. Un solo
+  // umbral (declarado aquí, una sola vez) gobierna dos cosas que antes usaban criterios distintos y
+  // desalineados: (a) qué pedidos NO se proyectan como parciales futuros en el flujo de caja (Grupo B, más
+  // abajo) y (b) el "Estado Ton." que se muestra en Vista 2/KPIs, que antes solo pasaba a COMPLETADO con un
+  // margen de 0.5 Kg (prácticamente cero) — por eso pedidos con ~1 Ton de remanente seguían apareciendo como
+  // "CON ENTREGA PARCIAL" y se contaban en la tarjeta "Parcial Pendiente", aunque en la práctica ya no había
+  // nada más que esperar de ellos (detectado por Sebastián, 16-sep, revisando Vista 2 con datos reales).
+  const UMBRAL_TON_PENDIENTE = 0.05; // 5% del total pedido
   const pedidos = Object.values(byPedido).map(g=>{
     g.nProyectosParciales = g.nProyectosParciales||0;
     g.valorFacturaBruto = g.valorFacturaBruto||0;
@@ -1261,32 +1308,26 @@ function buildModel({profRaw, spRaw, pgRaw, gfRaw, nacRaw, pedDetRaw, impRaw, pp
     g.saldoKg = t ? Math.max(0, t.pedidoKg - t.entregadoKg) : null;
     g.diferenciaEntregaKg = t ? t.diferenciaKg : null; // + = entregó de más, - = entregó de menos (informativo, no bloquea el cierre)
     g.estatusPedido = t ? estatusPedidoTon(t.pedidoKg, t.entregadoKg) : 'SIN DATO DE TONELADAS';
+    // Saldo residual inmaterial (ver UMBRAL_TON_PENDIENTE arriba): pasa a COMPLETADO por tolerancia de
+    // toneladas aunque el pedido no esté "Cerrado" financieramente — son cosas independientes (cierre =
+    // conciliación de anticipo; esto = ya no queda tonelaje real por atender). Se deja marcado en
+    // g.saldoResidualInmaterial para que Vista 2 lo muestre de forma transparente (no como un "COMPLETADO"
+    // silencioso e indistinguible de una entrega 100% exacta).
+    g.saldoResidualInmaterial = false;
+    if(g.estatusPedido==='CON ENTREGA PARCIAL' && g.pedidoKg>0){
+      const pctFaltante = (g.saldoKg||0)/g.pedidoKg;
+      if(pctFaltante<=UMBRAL_TON_PENDIENTE){
+        g.saldoResidualInmaterial = true;
+        g.estatusPedido = 'COMPLETADO';
+      }
+    }
     if(g.cerrado && g.estatusPedido==='CON ENTREGA PARCIAL') g.estatusPedido = 'COMPLETADO'; // cerrado automático/manual prevalece sobre "parcial" aunque falte Kg
     return g;
   });
 
-  // ---- MIX empírico Familia -> Proveedor (Kg), para repartir los "Pedidos Nuevos Proyectados" (Vista 10) ----
-  // Reemplaza la tabla estática que se había copiado a mano en el Excel (top-5 proveedores por familia,
-  // tomada de Arquitectura) por el MISMO cálculo pero derivado en vivo de "Cuadro Pedidos" (ton.grupos, ya
-  // agrupado por proforma+producto con la familia correctamente inferida vía familiaDeProducto — la columna
-  // FAMILIA del Sheet viene vacía, ver comentario junto a esa función). Una sola fuente de verdad: no hay que
-  // copiar/pegar números entre el Excel y el Tablero cada vez que cambia la mezcla real de proveedores.
-  const kgPorFamiliaProveedor = {};
-  ton.grupos.forEach(g=>{
-    const pedidoCod = ton.proformaToPedido[g.proforma]; if(!pedidoCod) return;
-    const ped = byPedido[pedidoCod]; if(!ped || !ped.proveedor) return;
-    kgPorFamiliaProveedor[g.familia] = kgPorFamiliaProveedor[g.familia] || {};
-    kgPorFamiliaProveedor[g.familia][ped.proveedor] = (kgPorFamiliaProveedor[g.familia][ped.proveedor]||0) + (g.cantidadPedidaKg||0);
-  });
-  const MIX_SHARE_MINIMO = 0.03; // proveedores con <3% del Kg histórico de la familia se excluyen (cola larga, poco representativa para asignar pedidos nuevos)
-  const mixFamiliaProveedor = {};
-  Object.entries(kgPorFamiliaProveedor).forEach(([familia, porProv])=>{
-    const total = Object.values(porProv).reduce((a,b)=>a+b,0); if(!total) return;
-    const relevantes = Object.entries(porProv).filter(([,kg])=>kg/total >= MIX_SHARE_MINIMO);
-    const usar = relevantes.length ? relevantes : Object.entries(porProv); // si ninguno llega al mínimo (familia con muy pocos datos), se usan todos
-    const totalUsar = usar.reduce((a,[,kg])=>a+kg,0);
-    mixFamiliaProveedor[familia] = usar.map(([proveedor,kg])=>({proveedor, share: kg/totalUsar, kgHistorico: kg})).sort((a,b)=>b.share-a.share);
-  });
+  // (El MIX empírico Familia -> Proveedor, usado para repartir los "Pedidos Nuevos Proyectados" de Vista 10,
+  // se calcula más abajo — después de tener disponible el Lead Time por proveedor, que ahora participa como
+  // criterio de desempate. Ver bloque "MIX empírico Familia -> Proveedor" tras enriquecidosUnico.)
 
   const saldoPagoRealPorProyecto = {};
   pg.filter(p=>p.concepto==='SALDO').forEach(p=>{
@@ -1304,6 +1345,66 @@ function buildModel({profRaw, spRaw, pgRaw, gfRaw, nacRaw, pedDetRaw, impRaw, pp
   // Para estadísticas "por proyecto" (no por línea de factura) hay que deduplicar, si no se cuenta la
   // misma observación 2-4 veces y además se generan gaps de 0 días falsos (mismo proyecto = misma Fecha BL).
   const enriquecidosUnico = dedupPorProyectoUnico(enriquecidos);
+
+  // ---- Lead Time promedio por proveedor (Pedido→Arribo), ponderado por Ton — misma metodología que la
+  // tabla "Desempeño por proveedor" (Vista 2) — se usa más abajo como criterio de DESEMPATE en el MIX
+  // Familia→Proveedor (16-sep, a pedido de Sebastián). Exige la misma muestra mínima (MIN_MUESTRA) que el
+  // resto de estadísticas del modelo: si un proveedor no tiene suficiente historial de arribos reales, no se
+  // usa su Lead Time para desempatar nada (no hay evidencia suficiente para preferirlo o no).
+  const leadTimeEventosPorProveedor = {};
+  enriquecidosUnico.forEach(e=>{
+    if(!e.proveedor || !e.fechaRealArribo || !e.fechaPedido || !e.entregadoKg) return;
+    const dias = daysBetween(e.fechaPedido, e.fechaRealArribo); if(dias===null || dias<=0) return;
+    leadTimeEventosPorProveedor[e.proveedor] = leadTimeEventosPorProveedor[e.proveedor] || [];
+    leadTimeEventosPorProveedor[e.proveedor].push({dias, peso: e.entregadoKg});
+  });
+  function leadTimePromedioProveedor(prov){
+    const eventos = leadTimeEventosPorProveedor[prov];
+    if(!eventos || eventos.length<MIN_MUESTRA) return null;
+    const sumPeso = eventos.reduce((a,x)=>a+x.peso,0); if(!sumPeso) return null;
+    return eventos.reduce((a,x)=>a+x.dias*x.peso,0)/sumPeso;
+  }
+
+  // ---- MIX empírico Familia -> Proveedor (Kg), para repartir los "Pedidos Nuevos Proyectados" (Vista 10) ----
+  // El criterio PRINCIPAL sigue siendo el volumen histórico (Kg) — derivado en vivo de "Cuadro Pedidos"
+  // (ton.grupos, ya agrupado por proforma+producto con la familia correctamente inferida vía
+  // familiaDeProducto — la columna FAMILIA del Sheet viene vacía, ver comentario junto a esa función). Una
+  // sola fuente de verdad: no hay que copiar/pegar números entre el Excel y el Tablero.
+  // 16-sep: además, cuando dos proveedores de la misma familia quedan prácticamente EMPATADOS en volumen
+  // (share histórico a menos de MIX_BANDA_EMPATE uno del otro), se desempata a favor de quien tiene menor
+  // Lead Time (Pedido→Arribo) — decisión de Sebastián: "escoger a los mejores proveedores en volumen y
+  // entrega". Es un INTERCAMBIO de participación solo entre los dos empatados (una pasada sobre pares
+  // adyacentes ya ordenados por volumen), no una redistribución completa del mix por desempeño — el volumen
+  // sigue siendo el criterio dominante para proveedores que no están empatados entre sí.
+  const kgPorFamiliaProveedor = {};
+  ton.grupos.forEach(g=>{
+    const pedidoCod = ton.proformaToPedido[g.proforma]; if(!pedidoCod) return;
+    const ped = byPedido[pedidoCod]; if(!ped || !ped.proveedor) return;
+    kgPorFamiliaProveedor[g.familia] = kgPorFamiliaProveedor[g.familia] || {};
+    kgPorFamiliaProveedor[g.familia][ped.proveedor] = (kgPorFamiliaProveedor[g.familia][ped.proveedor]||0) + (g.cantidadPedidaKg||0);
+  });
+  const MIX_SHARE_MINIMO = 0.03; // proveedores con <3% del Kg histórico de la familia se excluyen (cola larga, poco representativa para asignar pedidos nuevos)
+  const MIX_BANDA_EMPATE = 0.15; // 15%: diferencia relativa de share por debajo de la cual dos proveedores se consideran "empatados en volumen"
+  const mixFamiliaProveedor = {};
+  Object.entries(kgPorFamiliaProveedor).forEach(([familia, porProv])=>{
+    const total = Object.values(porProv).reduce((a,b)=>a+b,0); if(!total) return;
+    const relevantes = Object.entries(porProv).filter(([,kg])=>kg/total >= MIX_SHARE_MINIMO);
+    const usar = relevantes.length ? relevantes : Object.entries(porProv); // si ninguno llega al mínimo (familia con muy pocos datos), se usan todos
+    const totalUsar = usar.reduce((a,[,kg])=>a+kg,0);
+    const lista = usar.map(([proveedor,kg])=>({proveedor, share: kg/totalUsar, kgHistorico: kg, leadTime: leadTimePromedioProveedor(proveedor), empateAjustado:false}))
+      .sort((a,b)=>b.share-a.share);
+    for(let i=0;i<lista.length-1;i++){
+      const a = lista[i], b = lista[i+1];
+      if(a.leadTime===null || b.leadTime===null) continue; // sin muestra suficiente de alguno de los dos: no se desempata
+      const diffRel = Math.abs(a.share-b.share) / Math.max(a.share,b.share);
+      if(diffRel<=MIX_BANDA_EMPATE && b.leadTime<a.leadTime){
+        const tmp = a.share; lista[i].share = b.share; lista[i+1].share = tmp;
+        lista[i].empateAjustado = true; lista[i+1].empateAjustado = true;
+      }
+    }
+    mixFamiliaProveedor[familia] = lista;
+  });
+
   const porProveedor = {};
   enriquecidosUnico.forEach(e=>{
     const k = e.proveedor; if(!k) return;
@@ -1404,14 +1505,20 @@ function buildModel({profRaw, spRaw, pgRaw, gfRaw, nacRaw, pedDetRaw, impRaw, pp
   function avgPrimerZarpe(prov){ const v = diasPrimerZarpePorProveedor[prov]; return (v&&v.length>=MIN_MUESTRA)? weightedMean(v) : GLOBAL_primerZarpe; }
 
   // Número de proyectos comex (parciales) YA NO es un conteo fijo por proveedor — depende del tamaño del pedido.
-  // Se calcula la capacidad típica de entrega por embarque (mediana de KG/parcial en pedidos ya COMPLETADOS
-  // de ese proveedor) y luego N = techo(Kg del pedido nuevo ÷ esa capacidad). En Toneladas, no en USD —
-  // la capacidad de un embarque es física (peso), no depende de fluctuaciones del precio del acero.
-  function medianArr(arr){
-    const s = arr.filter(x=>x!==null && !isNaN(x)).slice().sort((a,b)=>a-b);
-    if(!s.length) return null;
-    const mid = Math.floor(s.length/2);
-    return s.length%2 ? s[mid] : (s[mid-1]+s[mid])/2;
+  // Se calcula la capacidad típica de entrega por embarque y luego N = techo(Kg del pedido nuevo ÷ esa
+  // capacidad). En Toneladas, no en USD — la capacidad de un embarque es física (peso), no depende de
+  // fluctuaciones del precio del acero.
+  // 16-sep: se cambió de MEDIANA a MÁXIMO histórico de Kg/embarque por proveedor (decisión de Sebastián,
+  // tras ver en Vista 9 cadenas de parciales estirándose hasta nov-27/ene-28 para pedidos grandes). La mediana
+  // castigaba a un proveedor con un embarque grande "irrepetible": si la mayoría de sus pedidos históricos
+  // fueron chicos (varios embarques pequeños por razones administrativas, no por límite físico) pero UNA vez
+  // consolidó en un embarque grande, la mediana ignoraba esa evidencia y de todos modos partía el pedido
+  // nuevo en muchos embarques chicos, encadenados mes a mes. Usar el MÁXIMO ya demostrado por ese proveedor
+  // asume que, ante un pedido grande, puede consolidar en su embarque más grande conocido — reduce el número
+  // de parciales proyectados sin inventar ningún dato nuevo (solo usa el propio historial del proveedor).
+  function maxArr(arr){
+    const s = arr.filter(x=>x!==null && !isNaN(x) && x>0);
+    return s.length ? Math.max(...s) : null;
   }
   const capacidadPorProveedor = {};
   pedidos.forEach(p=>{
@@ -1419,10 +1526,10 @@ function buildModel({profRaw, spRaw, pgRaw, gfRaw, nacRaw, pedDetRaw, impRaw, pp
     capacidadPorProveedor[p.proveedor] = capacidadPorProveedor[p.proveedor]||[];
     capacidadPorProveedor[p.proveedor].push(p.pedidoKg / p.nProyectosParciales);
   });
-  const GLOBAL_capacidadEmbarque = medianArr(Object.values(capacidadPorProveedor).flat());
+  const GLOBAL_capacidadEmbarque = maxArr(Object.values(capacidadPorProveedor).flat());
   function capacidadEmbarque(prov){
     const v = capacidadPorProveedor[prov];
-    return (v && v.length>=MIN_MUESTRA) ? medianArr(v) : GLOBAL_capacidadEmbarque;
+    return (v && v.length>=MIN_MUESTRA) ? maxArr(v) : GLOBAL_capacidadEmbarque;
   }
   function numParcialesPorCapacidad(prov, pedidoKg){
     const cap = capacidadEmbarque(prov);
@@ -1507,7 +1614,9 @@ function buildModel({profRaw, spRaw, pgRaw, gfRaw, nacRaw, pedDetRaw, impRaw, pp
 
   // Grupo B: pedidos con parciales incompletos — se pronostican TODOS los parciales que faltan
   // (no solo el inmediato siguiente), igual que en Grupo A, encadenando desde el último BL real.
-  const UMBRAL_TON_PENDIENTE = 0.05; // 5%: si el saldo restante en Ton es menor a esto del total pedido, se considera tolerancia de producción, no un parcial pendiente real
+  // (UMBRAL_TON_PENDIENTE ya se declaró arriba, junto a donde se calcula g.estatusPedido/saldoResidualInmaterial —
+  // el chequeo de abajo queda como defensa adicional, pero en la práctica estos pedidos ya ni siquiera llegan
+  // aquí como 'CON ENTREGA PARCIAL' porque su estatus se promovió a COMPLETADO más arriba.)
   const grupoB = pedidos.filter(p=>{
     if(!(p.nProyectosParciales>0 && p.saldoSinFacturar>1 && !p.cerrado && (!p.fechaPedido || p.fechaPedido>=FECHA_CORTE_DATA_CONFIABLE))) return false;
     if(p.pedidoKg && p.pedidoKg>0){
@@ -1656,7 +1765,7 @@ function buildModel({profRaw, spRaw, pgRaw, gfRaw, nacRaw, pedDetRaw, impRaw, pp
                               avgAnticipoPago, avgPctAnticipo, numParcialesPorCapacidad, capacidadEmbarque, diasNavegacionPedido,
                               diasNavegacionProveedor, paisTipicoProveedor, condicionRepresentativaPedido },
            mixFamiliaProveedor,
-           ton, nav, pptoPorMes, estadProveedor, estadGlobal, MIN_MUESTRA_MODELO: MIN_MUESTRA, VIDA_MEDIA_MODELO: VIDA_MEDIA_DIAS,
+           ton, nav, pptoPorMes, inventarioInicialPorMes, estadProveedor, estadGlobal, MIN_MUESTRA_MODELO: MIN_MUESTRA, VIDA_MEDIA_MODELO: VIDA_MEDIA_DIAS,
            excluidosPorCorte, FECHA_CORTE_DATA_CONFIABLE, excluidosPorTolerancia,
            conteos: {
              proformas_leidas: profRaw.length, proformas_validas: prof.length,
@@ -1799,9 +1908,12 @@ function renderTableroMando(){
   const M = MODEL;
   const HOY = new Date();
   const flujo90 = computeFlujoCaja(M, 3); // próximos 3 meses ~ 90 días
-  const meses30 = flujo90.mesesN.slice(0,1), meses60 = flujo90.mesesN.slice(0,2), meses90 = flujo90.mesesN;
+  // Solo se muestra Caja 30 días (a pedido de Sebastián, 16-sep: las tarjetas de 60/90 días se retiran del
+  // Tablero de Mando por ser menos accionables día a día que el horizonte inmediato de 30 días; el detalle
+  // completo de 90 días sigue disponible en Vista 4/Vista 1, que sí muestran el flujo mes a mes).
+  const meses30 = flujo90.mesesN.slice(0,1);
   const sumaMeses = lista => lista.reduce((a,m)=>a+flujo90.porMes[m].comex+flujo90.porMes[m].gf+flujo90.porMes[m].proyA+flujo90.porMes[m].proyB+flujo90.porMes[m].nac,0);
-  const caja30 = sumaMeses(meses30), caja60 = sumaMeses(meses60), caja90 = sumaMeses(meses90);
+  const caja30 = sumaMeses(meses30);
 
   const parcialesRetrasados = [...M.grupoA.flatMap(p=>p.parciales), ...M.grupoB.flatMap(p=>p.parciales)].filter(par=>par.retrasado);
   const tonRetrasadas = parcialesRetrasados.reduce((a,par)=>a+(par.kgEstimado||0),0);
@@ -1815,8 +1927,6 @@ function renderTableroMando(){
 
   const cards = [
     {lab:'Caja 30 días', val:fmt(caja30), sub:'próximo mes', tipo:'neutral'},
-    {lab:'Caja 60 días', val:fmt(caja60), sub:'próximos 2 meses', tipo:'neutral'},
-    {lab:'Caja 90 días', val:fmt(caja90), sub:'próximos 3 meses', tipo:'neutral'},
     {lab:'Ton. en riesgo de atraso', val:fmtTon(tonRetrasadas), sub:`${parcialesRetrasados.length} parcial(es) retrasado(s)`, tipo:parcialesRetrasados.length>0?'bad':'ok'},
     {lab:'% del pipeline cierto', val:pctCierta+'%', sub:'vs. estimado (Vista 9)', tipo:pctCierta>=60?'ok':(pctCierta>=35?'warn':'bad')},
     {lab:'Giros vencen en 7 días', val:fmt(totalGiros7), sub:`${giros7dias.length} giro(s)`, tipo:giros7dias.length>0?'warn':'ok'},
@@ -2057,8 +2167,10 @@ function renderView10(){
   const llegadasPorMes = consolidarLlegadasPorMes(M._llegadasCache, diaGabela);
   const llegadasIdx = {}; llegadasPorMes.forEach(l=>llegadasIdx[l.mes]=l);
   const mesesConDato = mesesHorizonte.filter(m=>M.pptoPorMes[m]);
-  let htmlN = '<tr><th>Mes</th><th>Familia</th><th>PPTO Ventas (Ton)</th><th>Ya cubierto (Ton)</th><th>Faltante a pedir (Ton)</th><th>Pedido nuevo proyectado (Ton)</th></tr>';
-  let totNecesidad=0, totCubierto=0, totNuevo=0;
+  const invIdx = {}; (R.inventarioPorMes||[]).forEach(x=> invIdx[x.mes+'|'+x.familia] = x);
+  const hayInventarioReal = (R.inventarioPorMes||[]).some(x=>x.esReal);
+  let htmlN = '<tr><th>Mes</th><th>Familia</th><th>PPTO Ventas (Ton)</th><th>Ya cubierto (Ton)</th><th>Inventario inicial (Ton)</th><th>Faltante a pedir (Ton)</th><th>Pedido nuevo proyectado (Ton)</th></tr>';
+  let totNecesidad=0, totCubierto=0, totInventario=0, totNuevo=0;
   mesesConDato.forEach(m=>{
     const ppto = M.pptoPorMes[m];
     const cubierto = llegadasIdx[m];
@@ -2066,14 +2178,17 @@ function renderView10(){
       const necesidad = ppto[fam]||0; if(necesidad<=0) return;
       const cubKg = cubierto ? (cubierto.cierto[fam]||0)+(cubierto.estimado[fam]||0) : 0;
       const cubTon = cubKg/1000;
-      const gapTon = Math.max(0, necesidad - cubTon);
+      const inv = invIdx[m+'|'+fam];
+      const invTon = inv ? inv.invInicial : 0;
+      const gapTon = Math.max(0, necesidad - cubTon - invTon);
       const nuevoTon = pedidosNuevos.filter(p=>p.mesNecesidad===m && p.familia===fam).reduce((a,p)=>a+p.ton,0);
-      totNecesidad+=necesidad; totCubierto+=cubTon; totNuevo+=nuevoTon;
-      htmlN += `<tr><td class="txt">${fmtMesLabel(m)}</td><td class="txt">${fam}</td><td>${fmtTonDirecto(necesidad)}</td><td>${fmtTonDirecto(cubTon)}</td><td>${gapTon>0.01?fmtTonDirecto(gapTon):'—'}</td><td>${nuevoTon>0.01?fmtTonDirecto(nuevoTon):'—'}</td></tr>`;
+      totNecesidad+=necesidad; totCubierto+=cubTon; totInventario+=invTon; totNuevo+=nuevoTon;
+      htmlN += `<tr><td class="txt">${fmtMesLabel(m)}</td><td class="txt">${fam}</td><td>${fmtTonDirecto(necesidad)}</td><td>${fmtTonDirecto(cubTon)}</td><td>${fmtTonDirecto(invTon)}${inv&&!inv.esReal?' <span style="color:var(--ink-soft);font-size:9px;">(proyectado)</span>':''}</td><td>${gapTon>0.01?fmtTonDirecto(gapTon):'—'}</td><td>${nuevoTon>0.01?fmtTonDirecto(nuevoTon):'—'}</td></tr>`;
     });
   });
-  htmlN += `<tr style="background:var(--paper);font-weight:700;"><td class="txt" colspan="2">TOTAL</td><td>${fmtTonDirecto(totNecesidad)}</td><td>${fmtTonDirecto(totCubierto)}</td><td colspan="1"></td><td>${fmtTonDirecto(totNuevo)}</td></tr>`;
-  if(mesesSinPpto.length) htmlN += `<tr><td class="txt" colspan="6" style="color:var(--ink-soft);font-size:11.5px;">Sin PPTO publicado todavía para: ${mesesSinPpto.map(fmtMesLabel).join(', ')} — no se proyecta pedido nuevo para esos meses hasta que se publique el presupuesto.</td></tr>`;
+  htmlN += `<tr style="background:var(--paper);font-weight:700;"><td class="txt" colspan="2">TOTAL</td><td>${fmtTonDirecto(totNecesidad)}</td><td>${fmtTonDirecto(totCubierto)}</td><td>${fmtTonDirecto(totInventario)}</td><td></td><td>${fmtTonDirecto(totNuevo)}</td></tr>`;
+  if(!hayInventarioReal) htmlN += `<tr><td class="txt" colspan="7" style="color:var(--ink-soft);font-size:11.5px;">Todavía no hay ningún mes con inventario inicial REAL cargado en la hoja de PPTO — la columna "Inventario inicial" está en 0 en todos los meses (comportamiento igual al de antes de este cambio). En cuanto Sebastián cargue el primer mes con conteo físico, el modelo empieza a proyectar el inventario hacia adelante desde ahí.</td></tr>`;
+  if(mesesSinPpto.length) htmlN += `<tr><td class="txt" colspan="7" style="color:var(--ink-soft);font-size:11.5px;">Sin PPTO publicado todavía para: ${mesesSinPpto.map(fmtMesLabel).join(', ')} — no se proyecta pedido nuevo para esos meses hasta que se publique el presupuesto.</td></tr>`;
   document.getElementById('tbl_v10_necesidad').innerHTML = htmlN;
 
   // ---- 10.2 Flujo de caja de compras: histórico reciente + ya pedido + pedidos nuevos ----
@@ -2138,10 +2253,10 @@ function renderView10(){
   pintarDetalle();
 
   // ---- 10.4 Mix Familia -> Proveedor ----
-  let htmlMix = '<tr><th>Familia</th><th>Proveedor</th><th>% del Kg histórico (re-normalizado)</th><th>Kg histórico</th></tr>';
+  let htmlMix = '<tr><th>Familia</th><th>Proveedor</th><th>% asignado</th><th>Kg histórico</th><th>Lead Time Prom.</th><th>¿Desempatado?</th></tr>';
   FAMILIAS_ORDEN.forEach(fam=>{
     (M.mixFamiliaProveedor[fam]||[]).forEach(m=>{
-      htmlMix += `<tr><td class="txt">${fam}</td><td class="txt">${m.proveedor}</td><td>${fmtPct(m.share)}</td><td>${fmtTon(m.kgHistorico)}</td></tr>`;
+      htmlMix += `<tr><td class="txt">${fam}</td><td class="txt">${m.proveedor}</td><td>${fmtPct(m.share)}</td><td>${fmtTon(m.kgHistorico)}</td><td>${m.leadTime!==null&&m.leadTime!==undefined?Math.round(m.leadTime)+' d':'—'}</td><td>${m.empateAjustado?'✓ por menor Lead Time':''}</td></tr>`;
     });
   });
   document.getElementById('tbl_v10_mix').innerHTML = htmlMix;
@@ -2206,7 +2321,7 @@ function renderDiag(){
     cerradosAuto.slice(0,10).map(p=>`${p.pedido} (${p.diferenciaEntregaKg>0?'+':''}${fmtTon(p.diferenciaEntregaKg)})`).join(', ') + (cerradosAuto.length>10?'…':''));
   if(MODEL.excluidosPorCorte.length) advs.push(`${MODEL.excluidosPorCorte.length} pedido(s) anteriores a ${fmtDate(MODEL.FECHA_CORTE_DATA_CONFIABLE)} con saldo abierto NO se incluyen en los pronósticos de la Vista 4 (el seguimiento financiero completo no estaba alineado antes de esa fecha) — siguen visibles en la Vista 2 para consulta histórica: ` +
     MODEL.excluidosPorCorte.slice(0,10).map(p=>p.pedido).join(', ') + (MODEL.excluidosPorCorte.length>10?'…':''));
-  if(MODEL.excluidosPorTolerancia.length) advs.push(`${MODEL.excluidosPorTolerancia.length} pedido(s) con saldo pendiente ≤5% de lo pedido en toneladas NO se incluyen en Grupo B (Vista 4) — se consideran tolerancia de producción, no un parcial pendiente real: ` +
+  if(MODEL.excluidosPorTolerancia.length) advs.push(`${MODEL.excluidosPorTolerancia.length} pedido(s) con saldo pendiente ≤5% de lo pedido en toneladas se tratan como "saldo residual inmaterial" (16-sep): NO se incluyen en Grupo B (Vista 4) y su Estado Ton. en Vista 2/KPIs se muestra como COMPLETADO en vez de CON ENTREGA PARCIAL — son toneladas no atendidas por tolerancia de producción, no un parcial pendiente real (el pedido puede seguir sin aparecer "Cerrado" financieramente, eso depende solo de la conciliación de anticipo): ` +
     MODEL.excluidosPorTolerancia.slice(0,10).map(p=>p.pedido).join(', ') + (MODEL.excluidosPorTolerancia.length>10?'…':''));
   const arribadosSinNacDiag = (function(){
     const nacRegistrados = new Set(MODEL.nac.map(n=>n.proyectoComex));
@@ -2215,13 +2330,16 @@ function renderDiag(){
   if(arribadosSinNacDiag.length) advs.push(`${arribadosSinNacDiag.length} proyecto(s) ya arribaron y no tienen registro en la hoja de Nacionalización — posible pago pendiente de registrar (ver Vista 7 · Nacionalización): ` +
     arribadosSinNacDiag.slice(0,10).map(s=>s.proyecto).join(', ') + (arribadosSinNacDiag.length>10?'…':''));
 
-  // Pedidos con MUCHOS parciales proyectados (Vista 4, Grupo A/B) — señal de que "capacidad de embarque"
-  // (mediana histórica de Kg/parcial de ese proveedor en pedidos YA completados) puede no ser representativa
-  // para ESTE pedido, si es mucho más grande de lo típico: numParcialesPorCapacidad = techo(Kg del pedido ÷
-  // capacidad), y cada parcial adicional encadena ~1 mes más (avgEntreParciales) — con 12-15 parciales
-  // proyectados, la cadena fácilmente se va 1-1.5 años hacia adelante. Esto NO es necesariamente un error de
-  // dato: puede ser un pedido genuinamente grande para ese proveedor — pero merece revisión puntual, no
-  // asumir que el pronóstico está bien solo porque no lanza ningún error.
+  // Pedidos con MUCHOS parciales proyectados (Vista 4, Grupo A/B) — señal de que la "capacidad de embarque"
+  // de ese proveedor (16-sep: MÁXIMO histórico de Kg/embarque en sus pedidos YA completados — antes era la
+  // mediana, cambiado a pedido de Sebastián para no partir en muchos envíos chicos un pedido grande cuando el
+  // proveedor ya demostró poder consolidar en embarques más grandes) puede seguir sin ser representativa para
+  // ESTE pedido, si es aún más grande que cualquier cosa que ese proveedor haya embarcado antes:
+  // numParcialesPorCapacidad = techo(Kg del pedido ÷ capacidad), y cada parcial adicional encadena ~1 mes
+  // más (avgEntreParciales) — con varios parciales proyectados, la cadena se puede ir bastante hacia
+  // adelante. Esto NO es necesariamente un error de dato: puede ser un pedido genuinamente grande para ese
+  // proveedor — pero merece revisión puntual, no asumir que el pronóstico está bien solo porque no lanza
+  // ningún error.
   const UMBRAL_PARCIALES_SOSPECHOSO = 4;
   const conMuchosParciales = [
     ...MODEL.grupoA.filter(p=>!p.sinFechaBase && (p.numParcialesEstimados||0)>=UMBRAL_PARCIALES_SOSPECHOSO).map(p=>({...p, n:p.numParcialesEstimados})),
@@ -2229,11 +2347,11 @@ function renderDiag(){
   ].sort((a,b)=>b.n-a.n);
   if(conMuchosParciales.length){
     const capPorProv = {}; (MODEL.estadProveedor||[]).forEach(e=>capPorProv[e.proveedor]=e.capacidad);
-    advs.push(`${conMuchosParciales.length} pedido(s) proyectan ${UMBRAL_PARCIALES_SOSPECHOSO} o más parciales pendientes — revisar si la "capacidad de embarque" típica de ese proveedor (mediana histórica de sus pedidos ya completados) sigue siendo representativa para un pedido de este tamaño, o si en la práctica se consolidaría en menos envíos más grandes: ` +
+    advs.push(`${conMuchosParciales.length} pedido(s) proyectan ${UMBRAL_PARCIALES_SOSPECHOSO} o más parciales pendientes — revisar si el pedido es de verdad así de grande, o si en la práctica se consolidaría en menos envíos (la capacidad de embarque ya usa el MÁXIMO histórico de ese proveedor, no un promedio): ` +
       conMuchosParciales.slice(0,10).map(p=>{
         const ultimoParcial = p.parciales[p.parciales.length-1];
         const cap = capPorProv[p.proveedor];
-        return `${p.pedido} (${p.proveedor}: ${fmtTon(p.pedidoKg||0)} pedidas ÷ capacidad típica ${cap?fmtTon(cap):'sin dato'}/embarque → ${p.n} parciales proyectados, el último llegando ${fmtDate(ultimoParcial?.fechaArriboEstimada)})`;
+        return `${p.pedido} (${p.proveedor}: ${fmtTon(p.pedidoKg||0)} pedidas ÷ capacidad máxima demostrada ${cap?fmtTon(cap):'sin dato'}/embarque → ${p.n} parciales proyectados, el último llegando ${fmtDate(ultimoParcial?.fechaArriboEstimada)})`;
       }).join('; ') + (conMuchosParciales.length>10?'…':''));
   }
   const diagPanel = document.getElementById('tbl_diag').closest('.panel');
@@ -2309,6 +2427,18 @@ function renderKPIs(){
   // FACTURADO por embarque, que puede diferir del valor de la proforma completa).
   const tonEnProduccion = Math.max(0, tonPedidosAnio - tonNavegando - tonArribado);
 
+  // "Toneladas entradas este año" (calendario, 16-sep a pedido de Sebastián): NO es lo mismo que "Arribados"
+  // de arriba. "Arribados" es por COHORTE (pedidos colocados en el año seleccionado que ya llegaron, sin
+  // importar cuándo llegaron). Esta métrica es por FECHA REAL DE ARRIBO dentro del año seleccionado (o el
+  // año calendario actual si el filtro está en "Todos los años"), sin importar en qué año se colocó el
+  // pedido — responde literalmente "cuánto ha entrado este año" físicamente a bodega. Se muestra como dato
+  // ADICIONAL dentro de la misma tarjeta "Pedidos del período", no reemplaza el balance de arriba.
+  const anioArriboRef = anioSel==='todos' ? new Date().getFullYear() : parseInt(anioSel,10);
+  const arribadosAnioCalendario = M.spUnico.filter(s=>s.fechaRealArribo && s.fechaRealArribo.getFullYear()===anioArriboRef);
+  const arribadosAnioCalendarioValor = M.spAll.filter(s=>s.fechaRealArribo && s.fechaRealArribo.getFullYear()===anioArriboRef);
+  const tonEntradoAnioCalendario = arribadosAnioCalendario.reduce((a,s)=>a+(s.pesoBrutoKg||s.entregadoKg||0),0);
+  const valorEntradoAnioCalendario = arribadosAnioCalendarioValor.reduce((a,s)=>a+(s.valorFactura||0),0);
+
   // Lead time promedio REAL, ponderado por toneladas entregadas (igual metodología que "Desempeño por proveedor")
   const leadEventos = comexAnioUnico.filter(s=>s.estatusProyecto==='ARRIBADO' && s.fechaRealArribo)
     .map(s=>{ const p = M.pedidos.find(pp=>pp.pedido===s.pedido); const dias = p&&p.fechaPedido ? daysBetween(p.fechaPedido, s.fechaRealArribo) : null;
@@ -2318,7 +2448,7 @@ function renderKPIs(){
   const leadTimeProm = pesoTotalLead>0 ? Math.round(leadEventos.reduce((a,e)=>a+e.dias*e.peso,0)/pesoTotalLead) : null;
 
   document.getElementById('kpiBar').innerHTML = `
-    <div class="kpi neutral"><div class="lab">Pedidos del período</div><div class="val">${pedidosAnio.length}</div><div class="sub"><b class="ton">${fmtTon(tonPedidosAnio)}</b> · ${fmt(valorPedidosAnio)}</div></div>
+    <div class="kpi neutral"><div class="lab">Pedidos del período</div><div class="val">${pedidosAnio.length}</div><div class="sub"><b class="ton">${fmtTon(tonPedidosAnio)}</b> · ${fmt(valorPedidosAnio)}</div><div class="sub" style="margin-top:5px;padding-top:5px;border-top:1px dashed var(--line);">Entrado en ${anioArriboRef} (todas las cohortes): <b class="ton">${fmtTon(tonEntradoAnioCalendario)}</b> · ${fmt(valorEntradoAnioCalendario)}</div></div>
     <div class="kpi warn"><div class="lab">En Producción</div><div class="val">${enProduccion.length}</div><div class="sub"><b class="ton">${fmtTon(tonEnProduccion)}</b> · ${fmt(valorEnProduccion)}</div></div>
     <div class="kpi warn"><div class="lab">Parcial Pendiente</div><div class="val">${conParcial.length}</div><div class="sub"><b class="ton">${fmtTon(tonPendienteParcial)}</b> · ${fmt(valorPendienteParcial)}</div></div>
     <div class="kpi ok"><div class="lab">Completados</div><div class="val">${completados.length}</div><div class="sub">de ${pedidosAnio.length} del período</div></div>
@@ -2445,12 +2575,16 @@ function consolidarLlegadasPorMes(llegadas, diaGabela){
 // por proveedor ya validadas en las Vistas 4 y 9 (avgPrimerZarpe, avgBlPago, diasNavegacion...) — nada de
 // Solver, nada de supuestos fijos de "3 meses" o "-2 meses".
 //
-// SIMPLIFICACIÓN EXPLÍCITA (para que quede clara, no escondida): el Tablero no tiene una foto de inventario en
-// vivo (solo compras/pagos/llegadas — no niveles de stock). Por eso la "necesidad neta de compra" de un mes se
-// calcula como PPTO de ventas de ese mes MENOS lo que ya va a llegar ese mismo mes (cierto + estimado de lo ya
-// pedido) — equivale a asumir que el inventario de seguridad se mantiene aprox. constante mes a mes. Si se
-// quiere modelar niveles de stock reales (mínimos/máximos, cobertura en días), hace falta conectar el saldo de
-// Kardex/WMS, que hoy no vive en ninguna de las dos herramientas — queda como mejora futura, no silenciada.
+// INVENTARIO INICIAL (16-sep, a pedido de Sebastián): la "necesidad neta de compra" de un mes se calcula
+// como PPTO de ventas de ese mes MENOS lo que ya va a llegar ese mismo mes (cierto + estimado de lo ya
+// pedido) MENOS el inventario inicial de ese mes/familia. El inventario inicial usa el conteo físico real
+// que Sebastián carga en la hoja de PPTO (columnas "INV INICIAL <familia>") cuando existe para ese mes; si
+// no existe todavía, el modelo lo proyecta hacia adelante desde el último mes con dato real (ver el bloque
+// "Inventario inicial por familia" más abajo). Sin ningún conteo físico cargado en el Sheet, el inventario
+// queda en 0 en todos los meses — el comportamiento es idéntico al de antes de este cambio (aditivo, no
+// rompe nada si Sebastián todavía no ha llenado esas columnas). Sigue sin ser un WMS en vivo: es tan preciso
+// como los conteos físicos que se carguen, con el margen de error de la proyección acumulándose mes a mes
+// entre un conteo real y el siguiente.
 function buildPedidosNuevosProyectados(M, opts={}){
   const { horizonteMeses=12, diaGabela=20, arancelPct=0.06, ivaPct=0.19, pctAnticipoRespaldo=0.20 } = opts;
   const HOY = new Date();
@@ -2464,19 +2598,52 @@ function buildPedidosNuevosProyectados(M, opts={}){
   const pedidosNuevos = [];   // una fila por (mes de necesidad, familia, proveedor)
   const mesesSinPpto = [];    // meses del horizonte sin fila de PPTO publicada todavía
   const alertasRetraso = [];  // pedidos cuya fecha de pedido calculada cae en el pasado (no se alcanza a colocar a tiempo)
+  const inventarioPorMes = []; // transparencia: inventario inicial usado cada mes por familia (real o proyectado)
 
+  // Inventario inicial por familia, arrastrado mes a mes (16-sep, a pedido de Sebastián: sin esto, el motor
+  // asumía inventario CERO todos los meses y sobreestimaba sistemáticamente cuánto hay que comprar). Regla:
+  // el dato REAL (conteo físico que Sebastián carga en la hoja de PPTO, columnas de inventario inicial)
+  // manda siempre que exista para ese mes/familia; si no existe todavía, se usa el saldo que el propio
+  // modelo proyecta hacia adelante desde el último mes con dato real:
+  //   Inventario inicial(mes) = Inventario inicial(mes-1) + Llegadas(mes-1) − PPTO(mes-1)
+  // Antes de tener CUALQUIER ancla real (ej. si Sebastián nunca ha cargado un mes), no hay base para
+  // proyectar inventario y se asume 0 — exactamente el comportamiento de antes de este cambio, así que un
+  // Tablero sin ningún dato de inventario cargado sigue funcionando igual que hoy (cambio 100% aditivo).
+  const inventarioCorriente = {};
   mesesHorizonte.forEach(mesNecesidad=>{
     const ppto = M.pptoPorMes[mesNecesidad];
     if(!ppto){ mesesSinPpto.push(mesNecesidad); return; }
     const cubierto = llegadasIdx[mesNecesidad];
+    const invReal = M.inventarioInicialPorMes[mesNecesidad];
     FAMILIAS_ORDEN.forEach(familia=>{
-      const necesidadTon = ppto[familia] || 0; if(necesidadTon<=0) return;
+      const necesidadTon = ppto[familia] || 0;
       const cubiertoKg = cubierto ? (cubierto.cierto[familia]||0) + (cubierto.estimado[familia]||0) : 0;
-      const gapTon = necesidadTon - (cubiertoKg/1000);
-      if(gapTon <= necesidadTon*0.02) return; // gap <2% de la necesidad del mes: tolerancia, no justifica un pedido nuevo
+      const cubiertoTon = cubiertoKg/1000;
+
+      const tieneInvReal = invReal && invReal[familia]!==null && invReal[familia]!==undefined;
+      let invInicial = tieneInvReal ? invReal[familia] : inventarioCorriente[familia];
+      if(invInicial===null || invInicial===undefined) invInicial = 0;
+      inventarioPorMes.push({mes:mesNecesidad, familia, invInicial, esReal: !!tieneInvReal});
+
+      if(necesidadTon<=0){
+        inventarioCorriente[familia] = Math.max(0, invInicial + cubiertoTon); // sin venta presupuestada ese mes, el inventario solo crece con lo que llega
+        return;
+      }
+
+      const gapTon = necesidadTon - cubiertoTon - invInicial;
+      if(gapTon <= necesidadTon*0.02){
+        // Gap <2% de la necesidad (o inventario+llegadas ya cubren de sobra): no hace falta pedido nuevo.
+        // El saldo (puede ser superávit real) se arrastra al mes siguiente en vez de perderse.
+        inventarioCorriente[familia] = Math.max(0, invInicial + cubiertoTon - necesidadTon);
+        return;
+      }
 
       const mix = M.mixFamiliaProveedor[familia];
-      if(!mix || !mix.length) return; // sin proveedores históricos para esta familia — no se puede proyectar a quién pedirle (se reporta aparte, ver renderView10)
+      if(!mix || !mix.length){
+        inventarioCorriente[familia] = Math.max(0, invInicial + cubiertoTon - necesidadTon); // sin proveedores históricos no se puede generar el pedido, pero el inventario se sigue arrastrando igual
+        return; // sin proveedores históricos para esta familia — no se puede proyectar a quién pedirle (se reporta aparte, ver renderView10)
+      }
+      inventarioCorriente[familia] = 0; // el pedido nuevo se dimensiona para cerrar el gap completo -> el inventario de cierre queda ~0 (dentro de la tolerancia del 2%)
 
       // Fecha objetivo de arribo: dentro del mes de necesidad, respetando el "día de gabela" para que
       // mesDisponibilidad() lo cuente en ese mismo mes — consistente con el criterio ya usado en Vista 9.
@@ -2525,7 +2692,7 @@ function buildPedidosNuevosProyectados(M, opts={}){
     });
   });
 
-  return { pedidosNuevos, alertasRetraso, mesesSinPpto, mesesHorizonte };
+  return { pedidosNuevos, alertasRetraso, mesesSinPpto, mesesHorizonte, inventarioPorMes };
 }
 
 function computeFlujoCaja(M, horizonte, arancelPct=0.06, ivaPct=0.19){
@@ -2806,7 +2973,7 @@ function renderView2(){
         <td style="${r.saldoSinFacturar<0?'color:var(--red);':''}">${fmt(r.saldoSinFacturar)}</td>
         <td>${fmtTon(r.pedidoKg)}</td><td>${fmtTon(r.entregadoKg)}</td><td>${fmtTon(r.saldoKg)}</td>
         <td><span class="pill ${bad?'bad':'ok'}">${r.alDia}</span></td>
-        <td><span class="pill ${pillTon}">${estTon}</span></td>
+        <td><span class="pill ${pillTon}">${estTon}</span>${modo!=='mes'&&r.saldoResidualInmaterial?`<br><span style="font-size:9px;color:var(--ink-soft);">saldo residual ${fmtTon(r.saldoKg)} (≤5%, no atendido — tolerancia)</span>`:''}</td>
         <td>${modo==='mes' ? '—' : (r.cerrado? `<span class="pill ok">Cerrado (anticipo conciliado)</span>${r.diferenciaEntregaKg&&Math.abs(r.diferenciaEntregaKg)>1?`<br><span style="font-size:9px;color:${r.diferenciaEntregaKg>0?'var(--green)':'var(--red)'};">${r.diferenciaEntregaKg>0?'entregó +':'entregó '}${fmtTon(Math.abs(r.diferenciaEntregaKg))}</span>`:''}` : '')}</td></tr>`;
     });
     document.getElementById('tbl_pedidos').innerHTML = html;
