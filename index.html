@@ -601,7 +601,12 @@
 
     <div class="panel">
       <h2>10.2b · Proyección de niveles de inventario (política de reposición 1.8×–2.5×)</h2>
-      <div class="desc">Entradas confirmadas de lo ya pedido (Vista 9) + entradas de los pedidos nuevos que este módulo proyecta colocar (contadas en el mes en que realmente llegarían, no en el mes que buscan cubrir — por eso un pedido retrasado puede mostrar un hueco), menos las salidas por venta presupuestada (PPTO); el resultado es el inventario con el que arrancaría cada mes. Consolidado de las 4 familias (Ton. de bodega, sin contar tránsito ni producción). Política de reposición vigente (corregida el 16-sep con Sebastián): si el inventario de arranque de un mes cae por debajo de 1.8× la venta de ese mes, se dispara un pedido nuevo dimensionado para llevarlo a 2.15× (punto medio); 2.5× es la referencia visual de techo, no un disparador de "des-pedido". La "venta de ese mes" usa venta real deducida (por balance de masa entre inventarios físicos consecutivos) cuando ya se puede calcular, y PPTO presupuestado mientras tanto — ver Vista 10.1 para el detalle por familia.</div>
+      <div class="desc">Entradas confirmadas de lo ya pedido (Vista 9) + entradas de los pedidos nuevos que este módulo proyecta colocar (contadas en el mes en que realmente llegarían, no en el mes que buscan cubrir — por eso un pedido retrasado puede mostrar un hueco), menos las salidas por venta presupuestada (PPTO); el resultado es el inventario con el que arrancaría cada mes. Ton. de bodega, sin contar tránsito ni producción. Política de reposición vigente (corregida el 16-sep con Sebastián): si el inventario de arranque de un mes cae por debajo de 1.8× la venta de ese mes, se dispara un pedido nuevo dimensionado para llevarlo a 2.15× (punto medio); 2.5× es la referencia visual de techo, no un disparador de "des-pedido". La "venta de ese mes" usa venta real deducida (por balance de masa entre inventarios físicos consecutivos) cuando ya se puede calcular, y PPTO presupuestado mientras tanto — ver Vista 10.1 para el detalle por familia.</div>
+      <div style="margin:8px 0;"><label style="font-size:12px;color:var(--ink-soft);margin-right:6px;">Ver:</label>
+        <select id="f10_inventario_familia" style="padding:4px 8px;border-radius:6px;border:1px solid var(--line);">
+          <option value="">General (4 familias)</option>
+        </select>
+      </div>
       <div style="height:340px;"><canvas id="c_v10_inventario"></canvas></div>
       <div id="v10_inventarioNota" style="margin-top:10px;font-size:11.5px;color:var(--ink-soft);"></div>
     </div>
@@ -2377,17 +2382,26 @@ function renderView10(){
   // entradas de "pedidos nuevos" se cuentan en el mes en que realmente LLEGARÍAN (fechaArribo), no en el mes
   // que buscaban cubrir (mesNecesidad) — así un pedido retrasado (ver panel de alertas arriba) se ve reflejado
   // como un hueco real en el mes que necesitaba cobertura, en vez de aparecer cubierto artificialmente.
-  (function renderInventarioConsolidado(){
+  const selFamInv = document.getElementById('f10_inventario_familia');
+  if(!selFamInv.dataset.poblado){
+    FAMILIAS_ORDEN.forEach(fam=> selFamInv.innerHTML += `<option value="${fam}">${fam}</option>`);
+    selFamInv.dataset.poblado = '1';
+    selFamInv.onchange = renderInventarioConsolidado;
+  }
+  function renderInventarioConsolidado(){
+    const filtroFam = selFamInv.value; // '' = General (4 familias), o una familia puntual
+    const familiasAMostrar = filtroFam ? [filtroFam] : FAMILIAS_ORDEN;
     const invPorMesFamilia = {}; // 'mes' -> {familia: invInicial}
     (R.inventarioPorMes||[]).forEach(x=>{ invPorMesFamilia[x.mes] = invPorMesFamilia[x.mes]||{}; invPorMesFamilia[x.mes][x.familia] = x; });
     const entradasNuevasPorMes = {};
-    pedidosNuevos.forEach(p=>{ const m = monthKey(p.fechaArribo); entradasNuevasPorMes[m] = (entradasNuevasPorMes[m]||0) + p.ton; });
+    pedidosNuevos.filter(p=>!filtroFam || p.familia===filtroFam)
+      .forEach(p=>{ const m = monthKey(p.fechaArribo); entradasNuevasPorMes[m] = (entradasNuevasPorMes[m]||0) + p.ton; });
 
     const filas = mesesConDato.map(m=>{
       const ppto = M.pptoPorMes[m] || {};
       const cubierto = R.llegadasIdx[m];
       let ventaMes = 0, ventaBase = 0, entradasConfirmadas = 0, invInicio = 0, bandaMinTot = 0, bandaObjetivoTot = 0, esRealAlgunaFamilia = false;
-      FAMILIAS_ORDEN.forEach(fam=>{
+      familiasAMostrar.forEach(fam=>{
         const pptoFam = ppto[fam]||0;
         ventaMes += pptoFam;
         const cubKg = cubierto ? (cubierto.cierto[fam]||0)+(cubierto.estimado[fam]||0) : 0;
@@ -2424,11 +2438,13 @@ function renderView10(){
     ], {scales:{x:{stacked:true}, y:{stacked:false, ticks:{callback:tonFmt}}}, plugins:{datalabels:{display:false}, tooltip:{callbacks:{label:ctx=>`${ctx.dataset.label}: ${tonFmt(ctx.raw)} Ton`}}}}, false, tonFmt, false);
 
     const primeraConReal = filas.find(f=>f.esRealAlgunaFamilia);
+    const etiquetaFam = filtroFam ? `de ${filtroFam}` : '(al menos una familia con dato cargado ese mes)';
     const nota = !primeraConReal
       ? 'Todavía no hay ningún mes con inventario inicial REAL cargado en la hoja de PPTO — toda la línea de inventario es 100% proyectada por el modelo a partir de entradas y salidas, arrancando en 0. En cuanto Sebastián cargue el primer mes con conteo físico, la proyección se ancla ahí (ver Vista 10.1 para el detalle real vs. proyectado por familia).'
-      : `El inventario se ancla a un conteo físico real a partir de ${fmtMesLabel(primeraConReal.mes)} (al menos una familia con dato cargado ese mes); los meses sin conteo físico siguen siendo proyección del modelo, no un dato medido.`;
+      : `El inventario se ancla a un conteo físico real a partir de ${fmtMesLabel(primeraConReal.mes)} ${etiquetaFam}; los meses sin conteo físico siguen siendo proyección del modelo, no un dato medido.`;
     document.getElementById('v10_inventarioNota').textContent = nota;
-  })();
+  }
+  renderInventarioConsolidado();
 
   // ---- 10.3 Detalle ----
   function poblarSelect(id, valores){
@@ -2861,6 +2877,16 @@ function buildPedidosNuevosProyectados(M, opts={}){
   // proyectar inventario y se asume 0 — exactamente el comportamiento de antes de este cambio, así que un
   // Tablero sin ningún dato de inventario cargado sigue funcionando igual que hoy (cambio 100% aditivo).
   const inventarioCorriente = {};
+  // Pipeline de pedidos NUEVOS ya disparados en meses anteriores de este mismo cálculo, indexado por el mes en
+  // que REALMENTE llegarían (mesArribo, con lead time real de zarpe+navegación ya aplicado) — no por el mes en
+  // que se dispararon. Corrección del 16-sep, cuarta revisión (Sebastián, viendo que en 10.2b el inventario
+  // seguía sin recuperarse meses después de disparado un pedido): antes de esto, la línea de abajo que arrastra
+  // `inventarioCorriente` sumaba el `pedidoTon` completo en el MISMO mes en que se disparaba, como si llegara
+  // instantáneamente — inconsistente con el gráfico 10.2b, que sí cuenta las entradas nuevas en su mes real de
+  // arribo. Esa inconsistencia hacía que el motor "creyera" haberse recuperado antes de tiempo y dejara de
+  // disparar pedidos adicionales que sí hacían falta, mientras el gráfico (con la fecha real) seguía mostrando
+  // el hueco. Ahora ambos usan exactamente la misma fecha de arribo — una sola fuente de verdad.
+  const entradasNuevasFuturasPorMes = {}; // mesArribo -> familia -> Ton
   mesesHorizonte.forEach(mesNecesidad=>{
     const ppto = M.pptoPorMes[mesNecesidad];
     if(!ppto){ mesesSinPpto.push(mesNecesidad); return; }
@@ -2868,8 +2894,11 @@ function buildPedidosNuevosProyectados(M, opts={}){
     const invReal = M.inventarioInicialPorMes[mesNecesidad];
     FAMILIAS_ORDEN.forEach(familia=>{
       const necesidadTon = ppto[familia] || 0; // PPTO de ventas (Ton) — se sigue usando para el flujo de caja y como respaldo de "venta del mes" cuando no hay venta real deducida
-      const cubiertoKg = cubierto ? (cubierto.cierto[familia]||0) + (cubierto.estimado[familia]||0) : 0;
-      const cubiertoTon = cubiertoKg/1000;
+      const cubiertoYaPedidoKg = cubierto ? (cubierto.cierto[familia]||0) + (cubierto.estimado[familia]||0) : 0;
+      // Entradas de pedidos NUEVOS disparados en un mes anterior de este mismo cálculo que maduran (llegan) ESTE
+      // mes — el "kardex a futuro" que faltaba: sin esto, el motor no veía venir sus propios pedidos en tránsito.
+      const entradasNuevasEsteMesTon = (entradasNuevasFuturasPorMes[mesNecesidad] && entradasNuevasFuturasPorMes[mesNecesidad][familia]) || 0;
+      const cubiertoTon = cubiertoYaPedidoKg/1000 + entradasNuevasEsteMesTon;
 
       const tieneInvReal = invReal && invReal[familia]!==null && invReal[familia]!==undefined;
       let invInicial = tieneInvReal ? invReal[familia] : inventarioCorriente[familia];
@@ -2894,11 +2923,14 @@ function buildPedidosNuevosProyectados(M, opts={}){
       inventarioPorMes.push({mes:mesNecesidad, familia, invInicial, esReal: !!tieneInvReal,
         posicionInicio, ventaBase, ventaRealDeducida: ventaRealMes>0?ventaRealMes:null, bandaMin, bandaObjetivo, pedidoTon, disparaPedido});
 
-      // Cierre de inventario del mes = posición de inicio + lo que se termine pidiendo (asumiendo que llega
-      // dentro del mismo mes — misma simplificación mensual que ya usaba el modelo) − venta del mes (PPTO,
-      // que es lo que efectivamente se descuenta para la proyección hacia adelante; la venta real deducida es
-      // solo diagnóstico/calibración de la banda, no reemplaza el consumo usado para arrastrar el inventario).
-      inventarioCorriente[familia] = Math.max(0, posicionInicio + pedidoTon - necesidadTon);
+      // Cierre de inventario del mes = posición de inicio (que YA incluye cualquier pedido nuevo anterior que
+      // haya madurado este mes, ver arriba) − venta del mes (PPTO, que es lo que efectivamente se descuenta
+      // para la proyección hacia adelante; la venta real deducida es solo diagnóstico/calibración de la banda,
+      // no reemplaza el consumo usado para arrastrar el inventario). El `pedidoTon` que se dispara EN ESTE mes
+      // NO se suma aquí — todavía no ha llegado (llega en `fechaArribo`, con el lead time real del proveedor,
+      // ver el registro en `entradasNuevasFuturasPorMes` más abajo) — sumarlo aquí fue el bug que Sebastián
+      // detectó (el inventario "se recuperaba" en la proyección antes de que el pedido llegara de verdad).
+      inventarioCorriente[familia] = Math.max(0, posicionInicio - necesidadTon);
 
       if(!disparaPedido || pedidoTon<=0) return; // no hace falta pedido nuevo este mes, o no hay proveedores históricos para generarlo (se reporta aparte, ver renderView10)
 
@@ -2945,6 +2977,12 @@ function buildPedidosNuevosProyectados(M, opts={}){
         };
         pedidosNuevos.push(fila);
         if(retrasado) alertasRetraso.push(fila);
+        // Registrar esta entrada en el mes en que REALMENTE llega, para que cuando el bucle externo llegue a
+        // ese mes (si cae dentro del horizonte), la sume a `cubiertoTon` de esa familia — así el motor "ve
+        // venir" sus propios pedidos en tránsito (el "kardex a futuro" que pidió Sebastián), en vez de asumir
+        // que llegaron instantáneamente o de ignorarlos hasta que el bucle ya pasó por ese mes.
+        entradasNuevasFuturasPorMes[mesArribo] = entradasNuevasFuturasPorMes[mesArribo] || {};
+        entradasNuevasFuturasPorMes[mesArribo][familia] = (entradasNuevasFuturasPorMes[mesArribo][familia]||0) + fila.ton;
       });
     });
   });
