@@ -495,6 +495,17 @@
         <li>Solo ~32% de los proyectos comex confirmados tienen condición de pago explícita registrada en la proforma; el resto usa el respaldo estadístico del proveedor.</li>
         <li>El Panel de Diagnóstico (dentro de cada vista con datos) siempre muestra las advertencias de calidad de datos detectadas — vale la pena revisarlo periódicamente, no solo cuando algo se ve raro.</li>
       </ul>
+
+      <h3 style="margin-top:22px;color:var(--navy);">9 · Motor de compra proyectada (Vista 10): cómo decide cuánto y cuándo pedir</h3>
+      <p><b>Qué compara cada mes.</b> Para cada Familia, se calcula la <b>posición de inicio de mes</b> = inventario inicial (real si Sebastián lo cargó ese mes en PPTO, o proyectado por el modelo si no) + lo que ya va a llegar ESE mismo mes de pedidos anteriores (ya confirmados en Vista 9, o pedidos nuevos disparados en un mes anterior de este mismo cálculo que maduran justo ahora). Si esa posición cae por debajo de <b>1.8×</b> la venta base de ese mes (mínimo), se dispara un pedido nuevo dimensionado para llevar la posición hasta <b>2.15×</b> (objetivo); <b>2.5×</b> es solo una referencia visual de techo, no dispara nada. La "venta base" usa venta real deducida (por balance de masa entre dos inventarios físicos consecutivos) cuando ya existe, y el PPTO presupuestado mientras tanto.</p>
+
+      <p><b>Cómo se reparte y se fecha un pedido disparado.</b> El pedido nuevo del mes para una Familia se reparte entre sus proveedores históricos según el MIX de volumen ya calculado (con desempate por lead time, punto 4 más arriba) — es decir, un solo "pedido nuevo" mensual casi siempre se convierte en <b>2 o 3 órdenes de compra independientes</b>, una por proveedor, cada una con su propia fecha. Cada orden se fecha hacia atrás desde una fecha objetivo de arribo (día 20 del mes que necesita cubrir, mismo "día de gabela" de Vista 9): arribo objetivo → zarpe (arribo − días de navegación del proveedor) → fecha de pedido (zarpe − días típicos de ese proveedor entre pedido y su primer zarpe). Si esa fecha de pedido calculada ya quedó en el pasado, la orden se marca <b>retrasada</b>: se re-ancla la fecha de pedido a HOY y el zarpe/arribo se recalculan hacia adelante desde ahí, así que la mercancía llegará después del mes que necesitaba cubrir (panel "⚠ Pedidos que ya deberían haberse colocado").</p>
+
+      <p><b>Dimensionamiento del pedido: contra la venta del mes que viene, no la de este mes (corregido el 16-sep, décima revisión).</b> El objetivo (2.15×) no se mide contra la venta de ESTE mes — que está a punto de consumirse — sino contra la venta del mes SIGUIENTE, porque lo que importa es que el inventario de CIERRE de este mes (que se convierte en el de ARRANQUE del mes siguiente) alcance para lo que viene. Sebastián lo señaló con un ejemplo concreto: arrancar con 2.500 Ton, recibir 1.400 y vender 1.100 deja un cierre de 2.800 Ton — 2× la venta presupuestada del mes siguiente (1.400 Ton), un nivel calculable y razonable, no "pedir de más". Antes de esta corrección, medir el objetivo contra la venta de ESTE mismo mes producía el problema descrito más abajo (un pedido que alcanza el objetivo y luego se consume un mes completo de venta cierra por debajo del mínimo del mes siguiente, casi sin importar qué tan bien calculado esté). Anclar el objetivo a la venta del mes que viene resuelve esto sin inflar el multiplicador: el pedido se dimensiona exactamente para lo que hace falta. Si el mes siguiente todavía no tiene PPTO publicado (borde del horizonte), se usa la venta base de este mismo mes como respaldo.</p>
+
+      <p><b>Partición en parciales según capacidad de embarque (aplicado el 16-sep, a pedido de Sebastián: "apliquémosle la curva, esto aumenta la asertividad").</b> Cada orden que le toca a un proveedor ya NO se asume como un embarque único sin importar su tamaño — se reutiliza exactamente la misma curva de capacidad de embarque que Vista 9 usa para pedidos reales sin parcial todavía (punto 4 más arriba: capacidad evaluada en el tamaño específico de esta orden, ajustada por regresión al historial de ese proveedor). El primer parcial se fecha hacia atrás desde la fecha objetivo de arribo (como antes); si la orden requiere más de un parcial, los siguientes se encadenan hacia ADELANTE desde el zarpe del primero, usando los mismos intervalos históricos entre parciales de ese proveedor (Vista 9) — así una orden grande para un proveedor con capacidad de embarque chica se refleja llegando fraccionada y más espaciada en el tiempo, no de un solo golpe, igual que ocurriría en la realidad. El anticipo se paga una sola vez (con el primer parcial, que es el que abre la orden completa); los parciales siguientes se facturan por su propio saldo. La tabla 10.3 y la exportación a Excel ahora muestran una columna "Parcial" (ej. "2 de 3") para que quede visible cuándo una orden se dividió.</p>
+
+      <p><b>Cómo se arrastra el inventario mes a mes (el "kardex a futuro").</b> El cierre de inventario de un mes = posición de inicio − venta del mes (PPTO), <u>más</u> lo que un parcial recién disparado (o de una orden anterior) alcanza a aportar DENTRO de ese mismo mes. Lo que llegue en un mes FUTURO (proveedor retrasado, o un parcial 2° o posterior de una orden grande, que por naturaleza llega después del primero) se registra aparte y solo se acredita cuando el cálculo llega cronológicamente a ese mes futuro — así el motor "ve venir" sus propios pedidos en tránsito en vez de asumir que llegan instantáneamente o de perderlos de vista. <span style="color:var(--red);">Bug corregido el 16-sep (novena revisión):</span> antes de esta corrección, el tonelaje de un pedido NO retrasado de un solo embarque (el caso más común, que por construcción siempre llegaba dentro del mismo mes que necesitaba cubrir) se registraba bajo una clave de mes que el cálculo ya había leído, y por lo tanto nunca se acreditaba al inventario interno del motor — aunque sí aparecía como barra de "entrada" en el gráfico 10.2b. Esto hacía que el gráfico mostrara grandes entradas de pedidos nuevos cada mes mientras la línea de inventario se quedaba pegada en cero, sin ninguna relación visible entre ambas cosas.</p>
     </div>
   </div>
 
@@ -565,7 +576,7 @@
     <div class="panel">
       <h2>10 · Pedidos Nuevos Proyectados — Flujo de Caja de Compras (histórico + gerencial)</h2>
       <div class="desc">Cuánto pedir, a qué proveedor y cuándo, para cubrir el PPTO de ventas por Familia en la parte que <b>NO</b> alcanza a cubrir lo que ya está pedido (Vista 9). Usa las mismas estadísticas empíricas por proveedor ya validadas en el resto del Tablero (lead time real Pedido→Zarpe→Arribo, día de pago del saldo anclado al ZARPE, no al arribo) — reemplaza el modelaje que tenía el Kardex de Excel.</div>
-      <div class="note info">"Necesidad de compra" de un mes = PPTO de ventas de ese mes − lo que ya va a llegar ese mismo mes (Vista 9) − inventario inicial de ese mes. El inventario inicial se toma del conteo físico real que Sebastián carga en la hoja de PPTO cuando existe para ese mes; si no existe todavía, el propio modelo lo proyecta hacia adelante desde el último mes con dato real (inventario inicial del mes siguiente = inventario inicial + llegadas − PPTO del mes anterior). Sin ningún conteo físico cargado, el inventario queda en 0 en todos los meses (igual que antes de este cambio — no genera compras de menos por error).</div>
+      <div class="note info">Política vigente: se dispara un pedido nuevo cuando la <b>posición de inicio de mes</b> (inventario inicial + lo que ya va a llegar ese mismo mes) cae bajo <b>1.8×</b> la venta de ese mes, dimensionado para llevarla a <b>2.15×</b> (2.5× es solo referencia de techo). El inventario inicial se toma del conteo físico real cargado en PPTO cuando existe; si no, el modelo lo proyecta hacia adelante desde el último mes con dato real. <a href="#" onclick="event.preventDefault(); irAVista('v7');" style="color:var(--navy);text-decoration:underline;">Ver metodología completa →</a></div>
       <div class="filters">
         <label style="font-size:12px;color:var(--ink-soft);">Horizonte:
           <select id="v10_horizonte"><option value="6">Próximos 6 meses</option><option value="12" selected>Próximos 12 meses</option><option value="24">Próximos 24 meses</option></select>
@@ -601,7 +612,7 @@
 
     <div class="panel">
       <h2>10.2b · Proyección de niveles de inventario (política de reposición 1.8×–2.5×)</h2>
-      <div class="desc">Entradas confirmadas de lo ya pedido (Vista 9) + entradas de los pedidos nuevos que este módulo proyecta colocar (contadas en el mes en que realmente llegarían, no en el mes que buscan cubrir — por eso un pedido retrasado puede mostrar un hueco), menos las salidas por venta presupuestada (PPTO); el resultado es el inventario con el que arrancaría cada mes. Ton. de bodega, sin contar tránsito ni producción. Política de reposición vigente (corregida el 16-sep con Sebastián): si el inventario de arranque de un mes cae por debajo de 1.8× la venta de ese mes, se dispara un pedido nuevo dimensionado para llevarlo a 2.15× (punto medio); 2.5× es la referencia visual de techo, no un disparador de "des-pedido". La "venta de ese mes" usa venta real deducida (por balance de masa entre inventarios físicos consecutivos) cuando ya se puede calcular, y PPTO presupuestado mientras tanto — ver Vista 10.1 para el detalle por familia.</div>
+      <div class="desc">Inventario con el que arrancaría cada mes (Ton. de bodega, sin tránsito ni producción), frente al mínimo/objetivo/máximo de reposición. <a href="#" id="v10_2b_link_metodologia" style="color:var(--navy);text-decoration:underline;">Ver metodología completa (cómo se calcula, y por qué la línea puede quedar por debajo del mínimo varios meses seguidos) →</a></div>
       <div style="margin:8px 0;"><label style="font-size:12px;color:var(--ink-soft);margin-right:6px;">Ver:</label>
         <select id="f10_inventario_familia" style="padding:4px 8px;border-radius:6px;border:1px solid var(--line);">
           <option value="">General (4 familias)</option>
@@ -1908,6 +1919,10 @@ const CHART_PALETTE = [COLORS.navy, COLORS.gold, COLORS.steel, COLORS.slate, COL
 let MODEL = null;
 let charts = {};
 
+function irAVista(viewId){
+  const btn = [...document.querySelectorAll('#tabBar button')].find(b=>b.dataset.view===viewId);
+  if(btn) btn.click();
+}
 document.querySelectorAll('#tabBar button').forEach(btn=>{
   btn.onclick = () => {
     document.querySelectorAll('#tabBar button').forEach(b=>b.classList.remove('active'));
@@ -1916,6 +1931,7 @@ document.querySelectorAll('#tabBar button').forEach(btn=>{
     document.getElementById(btn.dataset.view).classList.add('active');
   };
 });
+document.getElementById('v10_2b_link_metodologia').onclick = (e)=>{ e.preventDefault(); irAVista('v7'); };
 
 function setStatus(state, msg){
   const dot = document.getElementById('statusDot');
@@ -2459,13 +2475,13 @@ function renderView10(){
     const fFam = document.getElementById('f10_familia').value;
     const fProv = document.getElementById('f10_proveedor').value;
     const filas = pedidosNuevos.filter(p=>(!fFam||p.familia===fFam)&&(!fProv||p.proveedor===fProv)).sort((a,b)=>a.fechaPedido-b.fechaPedido);
-    let html = '<tr><th>Familia</th><th>Proveedor</th><th>Mes a cubrir</th><th>Ton.</th><th>Fecha Pedido</th><th>Fecha Zarpe</th><th>Fecha Arribo</th><th>Pago Anticipo</th><th>Pago Saldo</th><th>Nacionalización (fecha / USD)</th><th>Valor USD</th><th>% Anticipo</th></tr>';
+    let html = '<tr><th>Familia</th><th>Proveedor</th><th>Mes a cubrir</th><th>Parcial</th><th>Ton.</th><th>Fecha Pedido</th><th>Fecha Zarpe</th><th>Fecha Arribo</th><th>Pago Anticipo</th><th>Pago Saldo</th><th>Nacionalización (fecha / USD)</th><th>Valor USD</th><th>% Anticipo</th></tr>';
     filas.forEach(p=>{
-      html += `<tr class="${p.retrasado?'row-bad':''}"><td class="txt">${p.familia}</td><td class="txt">${p.proveedor}</td><td class="txt">${fmtMesLabel(p.mesNecesidad)}</td><td>${fmtTon(p.kg)}</td>
+      html += `<tr class="${p.retrasado?'row-bad':''}"><td class="txt">${p.familia}</td><td class="txt">${p.proveedor}</td><td class="txt">${fmtMesLabel(p.mesNecesidad)}</td><td class="txt">${p.deParciales>1?`${p.parcial} de ${p.deParciales}`:'único'}</td><td>${fmtTon(p.kg)}</td>
         <td>${fmtDate(p.fechaPedido)}</td><td>${fmtDate(p.fechaZarpe)}</td><td>${fmtDate(p.fechaArribo)}</td><td>${fmtDate(p.fechaPagoAnticipo)}</td><td>${fmtDate(p.fechaPagoSaldo)}</td><td>${fmtDate(p.fechaNac)} / ${fmt(p.montoNacUsd)}</td>
         <td>${fmt(p.valorUsd)}</td><td>${fmtPct(p.pctAnticipo)}</td></tr>`;
     });
-    html += `<tr style="background:var(--paper);font-weight:700;"><td class="txt" colspan="3">TOTAL</td><td>${fmtTon(filas.reduce((a,p)=>a+p.kg,0))}</td><td colspan="6"></td><td>${fmt(filas.reduce((a,p)=>a+p.valorUsd,0))}</td><td></td></tr>`;
+    html += `<tr style="background:var(--paper);font-weight:700;"><td class="txt" colspan="4">TOTAL</td><td>${fmtTon(filas.reduce((a,p)=>a+p.kg,0))}</td><td colspan="6"></td><td>${fmt(filas.reduce((a,p)=>a+p.valorUsd,0))}</td><td></td></tr>`;
     document.getElementById('tbl_v10_detalle').innerHTML = html;
   }
   document.getElementById('f10_familia').onchange = pintarDetalle;
@@ -2492,8 +2508,8 @@ function renderView10(){
   // ---- Descargar a Excel ----
   document.getElementById('v10_descargar').onclick = function(){
     const wb = XLSX.utils.book_new();
-    const filasDet = [['Familia','Proveedor','Mes a cubrir','Ton','Fecha Pedido','Fecha Zarpe','Fecha Arribo','Pago Anticipo','Pago Saldo','Fecha Nacionalización','Monto Anticipo USD','Monto Saldo USD','Monto Nacionalización USD','Valor Total USD','% Anticipo','Retrasado']];
-    pedidosNuevos.forEach(p=> filasDet.push([p.familia, p.proveedor, fmtMesLabel(p.mesNecesidad), Number(p.ton.toFixed(3)),
+    const filasDet = [['Familia','Proveedor','Mes a cubrir','Parcial','Ton','Fecha Pedido','Fecha Zarpe','Fecha Arribo','Pago Anticipo','Pago Saldo','Fecha Nacionalización','Monto Anticipo USD','Monto Saldo USD','Monto Nacionalización USD','Valor Total USD','% Anticipo','Retrasado']];
+    pedidosNuevos.forEach(p=> filasDet.push([p.familia, p.proveedor, fmtMesLabel(p.mesNecesidad), `${p.parcial} de ${p.deParciales}`, Number(p.ton.toFixed(3)),
       fmtDate(p.fechaPedido), fmtDate(p.fechaZarpe), fmtDate(p.fechaArribo), fmtDate(p.fechaPagoAnticipo), fmtDate(p.fechaPagoSaldo), fmtDate(p.fechaNac),
       Number(p.montoAnticipoUsd.toFixed(2)), Number(p.montoSaldoUsd.toFixed(2)), Number(p.montoNacUsd.toFixed(2)),
       Number(p.valorUsd.toFixed(2)), Number((p.pctAnticipo*100).toFixed(1)), p.retrasado?'SÍ':'NO']));
@@ -2887,6 +2903,66 @@ function buildPedidosNuevosProyectados(M, opts={}){
   // disparar pedidos adicionales que sí hacían falta, mientras el gráfico (con la fecha real) seguía mostrando
   // el hueco. Ahora ambos usan exactamente la misma fecha de arribo — una sola fuente de verdad.
   const entradasNuevasFuturasPorMes = {}; // mesArribo -> familia -> Ton
+
+  // Construye los parciales de UN pedido candidato (una familia, un mes de necesidad, un tamaño en Ton a
+  // probar), sin efectos secundarios (no toca alertasRetraso/entradasNuevasFuturasPorMes/pedidosNuevos) — se
+  // reutiliza tanto para "probar" tamaños candidatos (ver dimensionamiento con partición consolidada, más
+  // abajo) como para construir, una vez elegido el tamaño final, las filas reales que sí se registran. Una
+  // sola fuente de verdad para la lógica de fechas y partición en parciales (16-sep, duodécima tanda —
+  // antes de esto la misma lógica estaba escrita una sola vez dentro del bucle principal, sin forma de
+  // "probarla" con un tamaño distinto sin comprometerse a él).
+  function construirParcialesPedido(mix, pedidoTonCandidato, mesNecesidad, fechaArriboObjetivo, familia){
+    const stats = M.statsProveedor;
+    const filas = [];
+    mix.forEach(({proveedor, share})=>{
+      const kgTotalProveedor = pedidoTonCandidato*1000*share; if(kgTotalProveedor<=0) return;
+      const diasNav = stats.diasNavegacionProveedor(proveedor) || 45;
+      const diasPedidoAZarpe = stats.avgPrimerZarpe(proveedor) || 60;
+      const nParciales = Math.max(1, stats.numParcialesPorCapacidad(proveedor, kgTotalProveedor));
+      const kgPorParcial = kgTotalProveedor / nParciales;
+      let zarpeAnterior = null;
+      let fechaPedidoOrden = null;
+      for(let i=0;i<nParciales;i++){
+        let fechaZarpe, fechaPedido, retrasado = false;
+        if(i===0){
+          fechaZarpe = addDays(fechaArriboObjetivo, -diasNav);
+          fechaPedido = addDays(fechaZarpe, -diasPedidoAZarpe);
+          if(fechaPedido < HOY){
+            retrasado = true;
+            fechaPedido = HOY;
+            fechaZarpe = addDays(fechaPedido, diasPedidoAZarpe);
+          }
+          fechaPedidoOrden = fechaPedido;
+        } else {
+          fechaZarpe = addDays(zarpeAnterior, stats.avgEntreParciales(proveedor, i) || 30);
+          fechaPedido = null;
+          if(fechaZarpe < HOY){ retrasado = true; fechaZarpe = HOY; }
+        }
+        zarpeAnterior = fechaZarpe;
+        const fechaArribo = addDays(fechaZarpe, diasNav);
+        const fechaPagoSaldo = addDays(fechaZarpe, stats.avgBlPago(proveedor) ?? 15);
+        const fechaPagoAnticipo = fechaPedido ? addDays(fechaPedido, stats.avgAnticipoPago(proveedor) ?? 0) : null;
+        const pctAnt = stats.avgPctAnticipo(proveedor);
+        const pctAnticipo = (pctAnt===null || pctAnt===undefined || isNaN(pctAnt)) ? pctAnticipoRespaldo : pctAnt;
+        const precioUsdTon = PRECIOS_REF_USD_TON[familia] || 0;
+        const valorUsd = (kgPorParcial/1000) * precioUsdTon;
+        const montoAnticipoUsd = i===0 ? valorUsd*pctAnticipo : 0;
+        const montoSaldoUsd = i===0 ? valorUsd*(1-pctAnticipo) : valorUsd;
+        const mesArribo = monthKey(fechaArribo);
+        const fechaNac = primeraSemanaSiguienteMes(mesArribo);
+        const montoNacUsd = valorUsd * arancelPct * (1+ivaPct);
+        filas.push({
+          mesNecesidad, familia, proveedor, kg:kgPorParcial, ton: kgPorParcial/1000,
+          fechaPedido: fechaPedido || fechaPedidoOrden, fechaZarpe, fechaArribo, fechaPagoAnticipo, fechaPagoSaldo, fechaNac, mesArribo,
+          retrasado, precioUsdTon, valorUsd, pctAnticipo,
+          montoAnticipoUsd, montoSaldoUsd, montoNacUsd,
+          parcial: i+1, deParciales: nParciales,
+        });
+      }
+    });
+    return filas;
+  }
+
   mesesHorizonte.forEach(mesNecesidad=>{
     const ppto = M.pptoPorMes[mesNecesidad];
     if(!ppto){ mesesSinPpto.push(mesNecesidad); return; }
@@ -2918,72 +2994,75 @@ function buildPedidosNuevosProyectados(M, opts={}){
       // punto de reorden s,S) — YA NO si el gap del mes es >0 como antes, que dimensionaba el pedido para
       // dejar el inventario de cierre en ~0 (sin ningún colchón, el problema que Sebastián detectó en 10.2b).
       const disparaPedido = necesidadTon>0 && mix && mix.length>0 && posicionInicio < bandaMin - 1e-6;
-      const pedidoTon = disparaPedido ? Math.max(0, bandaObjetivo - posicionInicio) : 0;
+      // Dimensionamiento del pedido (corrección 16-sep, décima revisión, a pedido de Sebastián: "no debería
+      // pedir para tener de más... creo que es calculable y debe quedar en el rango"). El objetivo NO se mide
+      // contra la venta de ESTE mes (que ya está a punto de consumirse) sino contra la venta del mes
+      // SIGUIENTE — porque lo que de verdad importa es que el inventario de CIERRE de este mes (que se
+      // convierte en el inventario de ARRANQUE del mes siguiente) alcance para ese mes siguiente. Medirlo
+      // contra la venta de este mismo mes es lo que producía el hallazgo estructural documentado en la
+      // Metodología: 2.15x de la venta de este mes, menos un mes completo de esa misma venta, cierra en 1.15x
+      // — por debajo del mínimo del mes siguiente incluso si las ventas no cambian. Al anclar el objetivo a la
+      // venta del mes QUE VIENE, el pedido se calcula exactamente para lo que hace falta (ni de más ni de
+      // menos) y dos meses seguidos con pedido SÍ alcanzan a mantener el arranque de cada mes dentro de la
+      // banda, sin inflar artificialmente el multiplicador objetivo. Si el mes siguiente todavía no tiene PPTO
+      // publicado (borde del horizonte), se usa la venta base de este mismo mes como respaldo (comportamiento
+      // idéntico al de antes de esta corrección, para no romper el borde del horizonte).
+      const idxMesNecesidad = mesesHorizonte.indexOf(mesNecesidad);
+      const mesSiguienteKey = mesesHorizonte[idxMesNecesidad+1];
+      const pptoSiguiente = mesSiguienteKey ? M.pptoPorMes[mesSiguienteKey] : null;
+      const ventaBaseSiguiente = (pptoSiguiente && pptoSiguiente[familia]>0) ? pptoSiguiente[familia] : ventaBase;
+      const bandaObjetivoSiguiente = BANDA_INVENTARIO_OBJETIVO * ventaBaseSiguiente;
+      const pedidoTonNaive = disparaPedido ? Math.max(0, bandaObjetivoSiguiente - (posicionInicio - necesidadTon)) : 0;
+
+      // 16-sep, duodécima tanda — INTENTADO Y REVERTIDO EN LA MISMA SESIÓN: a pedido de Sebastián ("consolidar
+      // los parciales para cada mes y correr hacia atrás cuánto se tiene que pedir") se probaron DOS variantes
+      // de un dimensionamiento consolidado (una mirando solo el mes siguiente, otra neteando una ventana de 6
+      // meses hacia adelante contra lo ya confirmado/en tránsito). Ambas se verificaron con el mismo arnés de
+      // pruebas antes de considerarlas — y ambas fallaron, en direcciones opuestas: la primera sub-corrigió
+      // (el pedido de un mes no veía que otro pedido de un mes anterior seguía aportando tonelaje varios meses
+      // después, y terminaba sobre-pidiendo para "compensar" un hueco que ya se estaba cerrando solo —
+      // inventario sostenido en 300-380% del mínimo durante más de un año en la fixture de prueba); la
+      // segunda, al netear una ventana de 6 meses SIN ningún pedido nuevo como referencia, acumulaba un
+      // déficit artificialmente enorme en escenarios donde el primer embarque tarda ~3-4 meses en llegar desde
+      // HOY (lead time real de zarpe+navegación) — y terminaba pidiendo pedidos de ~12.000-14.000 Ton en un
+      // solo mes, empeorando el sobre-pedido en vez de resolverlo (500-800% del mínimo sostenido). Ninguna de
+      // las dos se entrega: se vuelve a la fórmula de la décima tanda (objetivo medido contra el mes
+      // siguiente, sin partición en la fórmula de tamaño) — sigue teniendo el equilibrio de ~50-55% ya
+      // reportado cuando el pedido se parte en muchos parciales, pero es un comportamiento YA CONOCIDO Y
+      // COMUNICADO, no uno nuevo y peor. Diseño correcto pendiente: requiere resolver el tamaño y el momento
+      // de VARIOS pedidos en conjunto (no uno a la vez, mes a mes) cuando el lead time es más largo que el
+      // intervalo de revisión — visto en detalle con Sebastián antes de intentar una tercera variante.
+      const pedidoTon = pedidoTonNaive;
+      let tonLlegaEsteMes = 0;
+      let filasDeEsteMes = [];
+
+      if(disparaPedido && pedidoTon>0 && mix && mix.length>0){
+        // Fecha objetivo de arribo: dentro del mes de necesidad, respetando el "día de gabela" para que
+        // mesDisponibilidad() lo cuente en ese mismo mes — consistente con el criterio ya usado en Vista 9.
+        const [yy,mm] = mesNecesidad.split('-').map(Number);
+        const diaObjetivo = Math.min(diaGabela, new Date(yy,mm,0).getDate());
+        const fechaArriboObjetivo = new Date(yy, mm-1, diaObjetivo);
+
+        filasDeEsteMes = construirParcialesPedido(mix, pedidoTon, mesNecesidad, fechaArriboObjetivo, familia);
+
+        // Cierre de inventario del mes = posición de inicio − venta del mes + lo que el pedido alcanza a
+        // aportar DENTRO de este mismo mes (herencia de la corrección de la novena tanda: solo lo que llega
+        // en mesArribo===mesNecesidad se acredita aquí; el resto queda como spillover futuro).
+        tonLlegaEsteMes = filasDeEsteMes.filter(f=>f.mesArribo===mesNecesidad).reduce((a,f)=>a+f.ton,0);
+        filasDeEsteMes.forEach(fila=>{
+          if(fila.retrasado) alertasRetraso.push(fila);
+          if(fila.mesArribo!==mesNecesidad){
+            entradasNuevasFuturasPorMes[fila.mesArribo] = entradasNuevasFuturasPorMes[fila.mesArribo] || {};
+            entradasNuevasFuturasPorMes[fila.mesArribo][familia] = (entradasNuevasFuturasPorMes[fila.mesArribo][familia]||0) + fila.ton;
+          }
+        });
+      }
 
       inventarioPorMes.push({mes:mesNecesidad, familia, invInicial, esReal: !!tieneInvReal,
         posicionInicio, ventaBase, ventaRealDeducida: ventaRealMes>0?ventaRealMes:null, bandaMin, bandaObjetivo, pedidoTon, disparaPedido});
 
-      // Cierre de inventario del mes = posición de inicio (que YA incluye cualquier pedido nuevo anterior que
-      // haya madurado este mes, ver arriba) − venta del mes (PPTO, que es lo que efectivamente se descuenta
-      // para la proyección hacia adelante; la venta real deducida es solo diagnóstico/calibración de la banda,
-      // no reemplaza el consumo usado para arrastrar el inventario). El `pedidoTon` que se dispara EN ESTE mes
-      // NO se suma aquí — todavía no ha llegado (llega en `fechaArribo`, con el lead time real del proveedor,
-      // ver el registro en `entradasNuevasFuturasPorMes` más abajo) — sumarlo aquí fue el bug que Sebastián
-      // detectó (el inventario "se recuperaba" en la proyección antes de que el pedido llegara de verdad).
-      inventarioCorriente[familia] = Math.max(0, posicionInicio - necesidadTon);
-
-      if(!disparaPedido || pedidoTon<=0) return; // no hace falta pedido nuevo este mes, o no hay proveedores históricos para generarlo (se reporta aparte, ver renderView10)
-
-      // Fecha objetivo de arribo: dentro del mes de necesidad, respetando el "día de gabela" para que
-      // mesDisponibilidad() lo cuente en ese mismo mes — consistente con el criterio ya usado en Vista 9.
-      const [yy,mm] = mesNecesidad.split('-').map(Number);
-      const diaObjetivo = Math.min(diaGabela, new Date(yy,mm,0).getDate());
-      const fechaArriboObjetivo = new Date(yy, mm-1, diaObjetivo);
-      const stats = M.statsProveedor;
-
-      mix.forEach(({proveedor, share})=>{
-        const kg = pedidoTon*1000*share; if(kg<=0) return;
-        const diasNav = stats.diasNavegacionProveedor(proveedor) || 45;
-        const diasPedidoAZarpe = stats.avgPrimerZarpe(proveedor) || 60;
-        let fechaZarpe = addDays(fechaArriboObjetivo, -diasNav);
-        let fechaPedido = addDays(fechaZarpe, -diasPedidoAZarpe);
-        let retrasado = false;
-        if(fechaPedido < HOY){
-          // No se puede "pedir en el pasado": se re-ancla a HOY y el zarpe/arribo se recalculan hacia
-          // adelante desde ahí — el resultado es que la mercancía llegará DESPUÉS del mes que se quería
-          // cubrir (riesgo real de desabastecimiento), y se deja marcado para que el equipo lo vea a tiempo.
-          retrasado = true;
-          fechaPedido = HOY;
-          fechaZarpe = addDays(fechaPedido, diasPedidoAZarpe);
-        }
-        const fechaArribo = addDays(fechaZarpe, diasNav);
-        const fechaPagoSaldo = addDays(fechaZarpe, stats.avgBlPago(proveedor) ?? 15); // puede ser ANTES del zarpe (avgBlPago negativo) — es real, no un error
-        const fechaPagoAnticipo = addDays(fechaPedido, stats.avgAnticipoPago(proveedor) ?? 0);
-        const pctAnt = stats.avgPctAnticipo(proveedor);
-        const pctAnticipo = (pctAnt===null || pctAnt===undefined || isNaN(pctAnt)) ? pctAnticipoRespaldo : pctAnt;
-
-        const precioUsdTon = PRECIOS_REF_USD_TON[familia] || 0;
-        const valorUsd = (kg/1000) * precioUsdTon;
-        const montoAnticipoUsd = valorUsd*pctAnticipo, montoSaldoUsd = valorUsd*(1-pctAnticipo);
-        const mesArribo = monthKey(fechaArribo);
-        const fechaNac = primeraSemanaSiguienteMes(mesArribo);
-        const montoNacUsd = valorUsd * arancelPct * (1+ivaPct); // misma fórmula y misma moneda (USD nominal) que calcularNacEstimada()
-
-        const fila = {
-          mesNecesidad, familia, proveedor, kg, ton: kg/1000,
-          fechaPedido, fechaZarpe, fechaArribo, fechaPagoAnticipo, fechaPagoSaldo, fechaNac, mesArribo,
-          retrasado, precioUsdTon, valorUsd, pctAnticipo,
-          montoAnticipoUsd, montoSaldoUsd, montoNacUsd,
-        };
-        pedidosNuevos.push(fila);
-        if(retrasado) alertasRetraso.push(fila);
-        // Registrar esta entrada en el mes en que REALMENTE llega, para que cuando el bucle externo llegue a
-        // ese mes (si cae dentro del horizonte), la sume a `cubiertoTon` de esa familia — así el motor "ve
-        // venir" sus propios pedidos en tránsito (el "kardex a futuro" que pidió Sebastián), en vez de asumir
-        // que llegaron instantáneamente o de ignorarlos hasta que el bucle ya pasó por ese mes.
-        entradasNuevasFuturasPorMes[mesArribo] = entradasNuevasFuturasPorMes[mesArribo] || {};
-        entradasNuevasFuturasPorMes[mesArribo][familia] = (entradasNuevasFuturasPorMes[mesArribo][familia]||0) + fila.ton;
-      });
+      inventarioCorriente[familia] = Math.max(0, posicionInicio - necesidadTon + tonLlegaEsteMes);
+      filasDeEsteMes.forEach(fila=> pedidosNuevos.push(fila));
     });
   });
 
