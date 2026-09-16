@@ -28,7 +28,7 @@
   .sub{font-size:10.5px;opacity:.8;}
   #statusMsg{font-size:10px;margin-top:3px;opacity:.85;}
   .kpi-filterbar{display:flex;align-items:center;gap:8px;padding:10px 36px 0;background:#fff;font-size:12px;color:var(--ink-soft);}
-  .kpis{display:grid;grid-template-columns:repeat(7,1fr);gap:7px;padding:9px 36px 10px;background:#fff;border-bottom:1px solid var(--line);}
+  .kpis{display:grid;grid-template-columns:repeat(8,1fr);gap:7px;padding:9px 36px 10px;background:#fff;border-bottom:1px solid var(--line);}
   .kpi{border-left:3px solid var(--navy);padding:4px 8px;min-height:50px;}
   .kpi.ok{border-left-color:var(--green);} .kpi.ok .val{color:var(--green);}
   .kpi.neutral{border-left-color:var(--slate);}
@@ -475,7 +475,7 @@
 
       <h3 style="margin-top:22px;color:var(--navy);">5 · Cómo "aprende" el modelo con datos nuevos, y qué tan reciente es "reciente"</h3>
       <p>El tablero <b>no guarda ningún valor calculado</b> — cada vez que se abre, recalcula todos los promedios con el historial completo disponible en el Sheet hasta ese momento. Si mañana se cierra un pedido nuevo, la próxima carga del tablero ya lo incluye automáticamente, sin tocar código.</p>
-      <p>Para las estadísticas de comportamiento (días entre parciales, días a primer zarpe, días BL→pago), en vez de usar un promedio simple o cortar los datos por fecha, se usa un <b>promedio ponderado por antigüedad</b>: cada observación pesa menos mientras más vieja es, siguiendo la fórmula <span style="font-family:var(--mono);">peso = 0.5 <sup>(días desde la observación ÷ 270)</sup></span> — es decir, una observación de hace 9 meses pesa la mitad que una de hoy, una de hace 18 meses pesa un cuarto, y así sucesivamente, <u>sin descartar nunca del todo</u> el dato viejo. Esto permite que el modelo reaccione más rápido si un proveedor mejora o empeora su comportamiento reciente, sin perder toda la memoria histórica de golpe. La capacidad de embarque (tamaño máximo demostrado en Toneladas) es la única estadística que, por ahora, sigue sin ponderar por recencia — usa el máximo histórico simple, sin importar si el embarque grande fue reciente o de hace tiempo.</p>
+      <p>Para las estadísticas de comportamiento (días entre parciales, días a primer zarpe, días BL→pago), en vez de usar un promedio simple o cortar los datos por fecha, se usa un <b>promedio ponderado por antigüedad</b>: cada observación pesa menos mientras más vieja es, siguiendo la fórmula <span style="font-family:var(--mono);">peso = 0.5 <sup>(días desde la observación ÷ 270)</sup></span> — es decir, una observación de hace 9 meses pesa la mitad que una de hoy, una de hace 18 meses pesa un cuarto, y así sucesivamente, <u>sin descartar nunca del todo</u> el dato viejo. Esto permite que el modelo reaccione más rápido si un proveedor mejora o empeora su comportamiento reciente, sin perder toda la memoria histórica de golpe. La capacidad de embarque es distinta: no es un solo número, sino una curva (Kg por parcial en función del tamaño del pedido, ajustada por regresión sobre el historial de pedidos completados de cada proveedor) — un análisis estadístico de los datos reales de Imporinox mostró que la capacidad de embarque crece con el tamaño del pedido pero no proporcionalmente, y que un solo número fijo (mediana o máximo) no representaba bien esa relación. Si un proveedor no tiene suficiente historial o variación de tamaños para ajustar una curva confiable, se usa como respaldo el máximo histórico simple de ese proveedor (o el global). A diferencia de las demás estadísticas, esta curva tampoco pondera por recencia todavía.</p>
       <p><b>Regla de muestra mínima:</b> si un proveedor tiene menos de 5 observaciones históricas para una estadística dada, no se confía en su propio número — se usa el promedio/mediana global de todos los proveedores como respaldo, para evitar que 1 o 2 datos atípicos de un proveedor con poco historial distorsionen la proyección.</p>
 
       <h3 style="margin-top:22px;color:var(--navy);">6 · Nacionalización estimada (Vista 4.6)</h3>
@@ -505,6 +505,7 @@
       <div class="mini-kpis" id="v8_resumen"></div>
       <h3 style="margin-top:18px;color:var(--navy);">Por proveedor</h3>
       <div class="scroll"><table id="tbl_estad_proveedor"></table></div>
+      <div class="desc" id="v8_nota_capacidad" style="margin-top:6px;"></div>
       <h3 style="margin-top:22px;color:var(--navy);">Navegación por país de origen (Zarpe → Arribo)</h3>
       <div class="desc">Días de navegación usados para estimar fecha de arribo cuando aún no ha llegado. Se usa el P80 del país si tiene 5 o más observaciones; si no, el promedio global de todos los países.</div>
       <div class="scroll"><table id="tbl_estad_pais"></table></div>
@@ -576,7 +577,12 @@
 
     <div class="panel" id="v10_alertasPanel" style="display:none;">
       <h2>⚠ Pedidos que ya deberían haberse colocado</h2>
-      <div class="desc">El lead time del proveedor no alcanza para llegar a tiempo al mes que necesita cubrir — se re-ancla la fecha de pedido a HOY y la llegada real queda más tarde. Riesgo real de desabastecimiento si no se coloca de inmediato.</div>
+      <div class="desc">El lead time del proveedor no alcanza para llegar a tiempo al mes que necesita cubrir — se re-ancla la fecha de pedido a HOY y la llegada real queda más tarde. Riesgo real de desabastecimiento si no se coloca de inmediato. Consolidado por mes y familia (puede involucrar más de un proveedor); usa el filtro para ver un mes puntual.</div>
+      <div class="filters">
+        <label style="font-size:12px;color:var(--ink-soft);">Filtrar por mes:
+          <select id="f10_alertas_mes"><option value="">Todos los meses</option></select>
+        </label>
+      </div>
       <div class="scroll"><table id="tbl_v10_alertas"></table></div>
     </div>
 
@@ -591,6 +597,13 @@
       <div class="desc">Acumula, por mes: anticipos y saldos ya pagados (histórico reciente), obligaciones ya pedidas confirmadas/estimadas (Vista 4/9), y anticipos+saldos+nacionalización de los pedidos nuevos que este módulo proyecta. Así la CFO ve una sola línea de caja de mercancía, no dos herramientas por separado.</div>
       <div style="height:340px;"><canvas id="c_v10_flujo"></canvas></div>
       <div id="v10_flujoTotal" style="margin-top:10px;font-family:var(--mono);font-size:14px;font-weight:700;color:var(--navy);"></div>
+    </div>
+
+    <div class="panel">
+      <h2>10.2b · Proyección de niveles de inventario (optimización de capital de trabajo)</h2>
+      <div class="desc">Entradas confirmadas de lo ya pedido (Vista 9) + entradas de los pedidos nuevos que este módulo proyecta colocar (contadas en el mes en que realmente llegarían, no en el mes que buscan cubrir — por eso un pedido retrasado puede mostrar un hueco), menos las salidas por venta presupuestada (PPTO); el resultado es el inventario con el que arrancaría cada mes. Consolidado de las 4 familias (Ton. de bodega, sin contar tránsito ni producción). Líneas punteadas: meta de referencia de 2× a 3× la venta presupuestada de ESE mes — ni por debajo (riesgo de desabasto) ni muy por encima (capital de trabajo atado en exceso de inventario). Es un punto de partida para discutir la política de compra con Sebastián, no una regla ya decidida.</div>
+      <div style="height:340px;"><canvas id="c_v10_inventario"></canvas></div>
+      <div id="v10_inventarioNota" style="margin-top:10px;font-size:11.5px;color:var(--ink-soft);"></div>
     </div>
 
     <div class="panel">
@@ -1520,19 +1533,75 @@ function buildModel({profRaw, spRaw, pgRaw, gfRaw, nacRaw, pedDetRaw, impRaw, pp
     const s = arr.filter(x=>x!==null && !isNaN(x) && x>0);
     return s.length ? Math.max(...s) : null;
   }
-  const capacidadPorProveedor = {};
+  // 16-sep, segunda revisión: Sebastián cuestionó (con razón) que el MÁXIMO histórico sea "la medida más
+  // acertiva" — un solo número (mediana o máximo) ignora que, en los datos reales, la capacidad de embarque
+  // NO es constante: crece con el tamaño del pedido, pero menos que proporcionalmente (economías de escala
+  // en consolidación de contenedores/buques). Se validó estadísticamente (análisis Python sobre sus CSV
+  // reales de producción, usando USD como proxy porque esos archivos no traen Kg): una regresión log-log
+  // capacidad = a · pedidoKg^b (ajustada por mínimos cuadrados sobre ln(pedidoKg) vs ln(Kg/parcial)) explica
+  // el 78.5% de la varianza (R²=0.785) de Kg-por-parcial en función del tamaño del pedido — muy superior a
+  // asumir un número fijo. Por eso capacidadEmbarque ahora recibe pedidoKg y evalúa la curva ajustada
+  // (por proveedor si tiene ≥MIN_MUESTRA pedidos completados con variación suficiente en tamaño; si no,
+  // con el ajuste GLOBAL de todos los proveedores). Si no hay suficientes datos o no hay variación en tamaño
+  // para ajustar una curva confiable, se usa el MÁXIMO histórico plano como respaldo (mismo comportamiento
+  // que antes), nunca un valor inventado.
+  const capacidadPorProveedor = {}; // {proveedor: [{kg, capacidad}]} — pares tamaño-de-pedido / Kg-por-parcial, para poder ajustar la curva
   pedidos.forEach(p=>{
     if(p.estatusPedido!=='COMPLETADO' || !p.nProyectosParciales || !p.pedidoKg || !p.proveedor) return;
     capacidadPorProveedor[p.proveedor] = capacidadPorProveedor[p.proveedor]||[];
-    capacidadPorProveedor[p.proveedor].push(p.pedidoKg / p.nProyectosParciales);
+    capacidadPorProveedor[p.proveedor].push({kg:p.pedidoKg, capacidad:p.pedidoKg / p.nProyectosParciales});
   });
-  const GLOBAL_capacidadEmbarque = maxArr(Object.values(capacidadPorProveedor).flat());
-  function capacidadEmbarque(prov){
-    const v = capacidadPorProveedor[prov];
-    return (v && v.length>=MIN_MUESTRA) ? maxArr(v) : GLOBAL_capacidadEmbarque;
+  // Ajuste log-log por mínimos cuadrados: ln(capacidad) = ln(a) + b·ln(pedidoKg). Requiere ≥3 puntos y
+  // variación real en pedidoKg (si todos los pedidos históricos son del mismo tamaño no hay curva que ajustar,
+  // solo un punto repetido). 'b' se limita a [0,1]: b=0 sería "capacidad constante" (el caso plano de antes),
+  // b=1 sería "capacidad crece exactamente proporcional al pedido" (nunca se dividiría en más de 1 parcial);
+  // valores fuera de ese rango no tienen sentido físico y probablemente son ruido de muestra chica.
+  function ajustarCapacidadLogLog(observaciones){
+    const pts = (observaciones||[]).filter(o=>o && o.kg>0 && o.capacidad>0);
+    if(pts.length<3) return null;
+    const xs = pts.map(o=>Math.log(o.kg)), ys = pts.map(o=>Math.log(o.capacidad));
+    const n = xs.length;
+    const mediaX = xs.reduce((a,b)=>a+b,0)/n, mediaY = ys.reduce((a,b)=>a+b,0)/n;
+    let sxy=0, sxx=0;
+    for(let i=0;i<n;i++){ sxy += (xs[i]-mediaX)*(ys[i]-mediaY); sxx += (xs[i]-mediaX)*(xs[i]-mediaX); }
+    if(sxx<1e-9) return null; // sin variación en el tamaño de los pedidos históricos: no hay nada que ajustar
+    let b = sxy/sxx;
+    b = Math.max(0, Math.min(1, b));
+    const lnA = mediaY - b*mediaX;
+    const a = Math.exp(lnA);
+    // R² para transparencia (se muestra en Vista 8 / diagnóstico, no afecta el cálculo)
+    let ssRes=0, ssTot=0;
+    for(let i=0;i<n;i++){ const pred = lnA + b*xs[i]; ssRes += (ys[i]-pred)**2; ssTot += (ys[i]-mediaY)**2; }
+    const r2 = ssTot>1e-9 ? Math.max(0, 1 - ssRes/ssTot) : null;
+    return {a, b, r2, n};
+  }
+  const GLOBAL_obsCapacidad = Object.values(capacidadPorProveedor).flat();
+  const GLOBAL_fitCapacidad = ajustarCapacidadLogLog(GLOBAL_obsCapacidad);
+  const GLOBAL_capacidadEmbarque = maxArr(GLOBAL_obsCapacidad.map(o=>o.capacidad)); // respaldo plano si ni el ajuste GLOBAL es viable
+  const fitCapacidadPorProveedor = {};
+  Object.keys(capacidadPorProveedor).forEach(prov=>{
+    if(capacidadPorProveedor[prov].length>=MIN_MUESTRA) fitCapacidadPorProveedor[prov] = ajustarCapacidadLogLog(capacidadPorProveedor[prov]);
+  });
+  // Orden de preferencia, de más a menos específico: (1) curva propia del proveedor, si tiene ≥MIN_MUESTRA
+  // pedidos completados Y suficiente variación de tamaños para ajustarla; (2) si tiene ≥MIN_MUESTRA pedidos
+  // pero TODOS de tamaño parecido (sin variación que ajustar — p.ej. un proveedor que siempre pide lotes
+  // iguales), su propio MÁXIMO histórico plano, sin recurrir al ajuste GLOBAL (sería mezclar su comportamiento
+  // real y bien conocido con el de otros proveedores distintos); (3) si no alcanza muestra propia, la curva
+  // GLOBAL (todos los proveedores) si es viable; (4) como último respaldo, el máximo histórico GLOBAL plano.
+  function capacidadEmbarque(prov, pedidoKg){
+    const obs = capacidadPorProveedor[prov] || [];
+    const tieneMuestraPropia = obs.length>=MIN_MUESTRA;
+    const fitPropio = fitCapacidadPorProveedor[prov]; // undefined = sin muestra suficiente; null = con muestra pero sin ajuste viable; objeto = ajuste viable
+    if(fitPropio && pedidoKg>0) return Math.exp(Math.log(fitPropio.a) + fitPropio.b*Math.log(pedidoKg));
+    if(tieneMuestraPropia){
+      const planoProv = maxArr(obs.map(o=>o.capacidad));
+      if(planoProv) return planoProv;
+    }
+    if(GLOBAL_fitCapacidad && pedidoKg>0) return Math.exp(Math.log(GLOBAL_fitCapacidad.a) + GLOBAL_fitCapacidad.b*Math.log(pedidoKg));
+    return GLOBAL_capacidadEmbarque;
   }
   function numParcialesPorCapacidad(prov, pedidoKg){
-    const cap = capacidadEmbarque(prov);
+    const cap = capacidadEmbarque(prov, pedidoKg);
     if(!cap || !pedidoKg) return 1;
     return Math.max(1, Math.ceil(pedidoKg / cap));
   }
@@ -1743,18 +1812,49 @@ function buildModel({profRaw, spRaw, pgRaw, gfRaw, nacRaw, pedDetRaw, impRaw, pp
     ...Object.keys(diasPrimerZarpePorProveedor), ...Object.keys(capacidadPorProveedor),
     ...Object.keys(porProveedor), ...Object.keys(motorPagos.diasPorProveedor)
   ]);
-  const estadProveedor = [...proveedoresSet].filter(Boolean).sort().map(prov=>({
-    proveedor: prov,
-    n_gap1: (gap1PorProveedor[prov]||[]).length, gap1: avgGap1(prov),
-    n_gap2plus: (gap2PlusPorProveedor[prov]||[]).length, gap2plus: avgGap2Plus(prov),
-    n_primerZarpe: (diasPrimerZarpePorProveedor[prov]||[]).length, primerZarpe: avgPrimerZarpe(prov),
-    n_capacidad: (capacidadPorProveedor[prov]||[]).length, capacidad: capacidadEmbarque(prov),
-    n_blPago: (porProveedor[prov]?.blPago||[]).length, blPago: avgBlPago(prov),
-    n_condicionDias: (motorPagos.diasPorProveedor[prov]||[]).length, condicionDias: motorPagos.diasBLProveedor(prov),
-  }));
+  // 'capacidad' ya no es un número fijo por proveedor (ver nota junto a capacidadEmbarque más arriba): para
+  // mostrar UN valor de referencia en esta tabla de transparencia, se evalúa la curva ajustada en el pedido
+  // Kg mediano histórico de ese proveedor (o el mediano GLOBAL si el proveedor no tiene datos propios) — es
+  // solo ilustrativo, el cálculo real de parciales siempre usa el pedidoKg específico de cada pedido nuevo.
+  // Se exponen también a/b/R²/n del ajuste para que quede auditable qué tan confiable es la curva.
+  function medianaKgPedidos(prov){
+    const obs = capacidadPorProveedor[prov];
+    const kgs = ((obs&&obs.length)?obs:GLOBAL_obsCapacidad).map(o=>o.kg).sort((a,b)=>a-b);
+    if(!kgs.length) return null;
+    const mid = Math.floor(kgs.length/2);
+    return kgs.length%2 ? kgs[mid] : (kgs[mid-1]+kgs[mid])/2;
+  }
+  const estadProveedor = [...proveedoresSet].filter(Boolean).sort().map(prov=>{
+    const obsProv = capacidadPorProveedor[prov]||[];
+    const fitPropio = fitCapacidadPorProveedor[prov]; // undefined=sin muestra suficiente; null=con muestra pero sin ajuste viable; objeto=ajuste viable
+    // Misma cascada de preferencia que capacidadEmbarque(): curva propia > plano propio (muestra suficiente
+    // pero sin variación de tamaños) > curva GLOBAL > plano GLOBAL — aquí solo para etiquetar de dónde salen
+    // los coeficientes a/b/R² mostrados, el valor numérico de 'capacidad' ya lo calcula capacidadEmbarque().
+    let capacidad_fuente, fitMostrado;
+    if(fitPropio){ capacidad_fuente = 'curva propia'; fitMostrado = fitPropio; }
+    else if(obsProv.length>=MIN_MUESTRA){ capacidad_fuente = 'máximo propio (sin variación de tamaños)'; fitMostrado = null; }
+    else if(GLOBAL_fitCapacidad){ capacidad_fuente = 'curva GLOBAL (muestra propia insuficiente)'; fitMostrado = GLOBAL_fitCapacidad; }
+    else { capacidad_fuente = 'máximo GLOBAL (muestra propia insuficiente)'; fitMostrado = null; }
+    return {
+      proveedor: prov,
+      n_gap1: (gap1PorProveedor[prov]||[]).length, gap1: avgGap1(prov),
+      n_gap2plus: (gap2PlusPorProveedor[prov]||[]).length, gap2plus: avgGap2Plus(prov),
+      n_primerZarpe: (diasPrimerZarpePorProveedor[prov]||[]).length, primerZarpe: avgPrimerZarpe(prov),
+      n_capacidad: obsProv.length, capacidad: capacidadEmbarque(prov, medianaKgPedidos(prov)),
+      capacidad_a: fitMostrado? fitMostrado.a : null,
+      capacidad_b: fitMostrado? fitMostrado.b : null,
+      capacidad_r2: fitMostrado? fitMostrado.r2 : null,
+      capacidad_fuente,
+      capacidad_esGlobal: capacidad_fuente.includes('GLOBAL'),
+      n_blPago: (porProveedor[prov]?.blPago||[]).length, blPago: avgBlPago(prov),
+      n_condicionDias: (motorPagos.diasPorProveedor[prov]||[]).length, condicionDias: motorPagos.diasBLProveedor(prov),
+    };
+  });
   const estadGlobal = {
     gap1: GLOBAL_gap1, gap2plus: GLOBAL_gap2Plus, primerZarpe: GLOBAL_primerZarpe,
-    capacidad: GLOBAL_capacidadEmbarque, blPago: GLOBAL_blPago, condicionDias: motorPagos.GLOBAL_diasBL
+    capacidad: GLOBAL_capacidadEmbarque, blPago: GLOBAL_blPago, condicionDias: motorPagos.GLOBAL_diasBL,
+    capacidad_a: GLOBAL_fitCapacidad?GLOBAL_fitCapacidad.a:null, capacidad_b: GLOBAL_fitCapacidad?GLOBAL_fitCapacidad.b:null,
+    capacidad_r2: GLOBAL_fitCapacidad?GLOBAL_fitCapacidad.r2:null, capacidad_n: GLOBAL_obsCapacidad.length,
   };
 
   return { pedidos, spAll, spUnico, pg, gf, gfAbiertos, nac, nacMes, grupoA, grupoB, obligaciones, pagosMes, gfMes, pedidosMes, enriquecidos, enriquecidosUnico,
@@ -1977,8 +2077,10 @@ function renderView8(){
     <div class="mini-kpi"><span>Países de origen con historial</span><b>${Object.keys(M.nav.statsPorPais).length}</b></div>
   `;
 
+  const fmtPct1 = v => v===null||v===undefined ? '—' : (v*100).toFixed(0)+'%';
+  const fmtCoef = v => v===null||v===undefined ? '—' : v.toFixed(2);
   let html = `<tr><th>Proveedor</th><th>Gap 1→2 parcial</th><th>Gap parciales 2+</th><th>Días a 1er zarpe</th>
-    <th>Capacidad por embarque (Ton)</th><th>Días BL→Pago (histórico)</th><th>Días BL→Pago (condición)</th></tr>`;
+    <th>Capacidad por embarque (Ton, ilustrativa*)</th><th>Curva ajustada (Kg/parcial = a·pedidoKg^b)</th><th>Días BL→Pago (histórico)</th><th>Días BL→Pago (condición)</th></tr>`;
   M.estadProveedor.forEach(e=>{
     html += `<tr>
       <td class="txt"><b>${e.proveedor}</b></td>
@@ -1986,14 +2088,19 @@ function renderView8(){
       <td${badge(e.n_gap2plus)}>${fmtD(e.gap2plus)} <span style="color:var(--ink-soft);font-size:9.5px;">(n=${e.n_gap2plus})</span></td>
       <td${badge(e.n_primerZarpe)}>${fmtD(e.primerZarpe)} <span style="color:var(--ink-soft);font-size:9.5px;">(n=${e.n_primerZarpe})</span></td>
       <td${badge(e.n_capacidad)}>${fmtTon(e.capacidad)} <span style="color:var(--ink-soft);font-size:9.5px;">(n=${e.n_capacidad})</span></td>
+      <td style="font-size:10.5px;color:var(--ink-soft);">${e.capacidad_a!==null? `a=${fmtCoef(e.capacidad_a)}, b=${fmtCoef(e.capacidad_b)}, R²=${fmtPct1(e.capacidad_r2)}` : 'sin curva ajustable'} <i>(${e.capacidad_fuente})</i></td>
       <td${badge(e.n_blPago)}>${fmtD(e.blPago)} <span style="color:var(--ink-soft);font-size:9.5px;">(n=${e.n_blPago})</span></td>
       <td${badge(e.n_condicionDias)}>${fmtD(e.condicionDias)} <span style="color:var(--ink-soft);font-size:9.5px;">(n=${e.n_condicionDias})</span></td>
     </tr>`;
   });
   html += `<tr style="background:var(--paper);font-weight:700;"><td class="txt">RESPALDO GLOBAL</td>
     <td>${fmtD(M.estadGlobal.gap1)}</td><td>${fmtD(M.estadGlobal.gap2plus)}</td><td>${fmtD(M.estadGlobal.primerZarpe)}</td>
-    <td>${fmtTon(M.estadGlobal.capacidad)}</td><td>${fmtD(M.estadGlobal.blPago)}</td><td>${fmtD(M.estadGlobal.condicionDias)}</td></tr>`;
+    <td>${fmtTon(M.estadGlobal.capacidad)}</td>
+    <td style="font-size:10.5px;">a=${fmtCoef(M.estadGlobal.capacidad_a)}, b=${fmtCoef(M.estadGlobal.capacidad_b)}, R²=${fmtPct1(M.estadGlobal.capacidad_r2)} (n=${M.estadGlobal.capacidad_n})</td>
+    <td>${fmtD(M.estadGlobal.blPago)}</td><td>${fmtD(M.estadGlobal.condicionDias)}</td></tr>`;
   document.getElementById('tbl_estad_proveedor').innerHTML = html;
+  const notaCap = document.getElementById('v8_nota_capacidad');
+  if(notaCap) notaCap.innerHTML = `* La capacidad por embarque ya no es un número fijo: se ajusta una curva (Kg por parcial en función del tamaño del pedido) por proveedor con historial suficiente, o la curva GLOBAL si no. El valor de esta columna es solo ilustrativo (evaluado en el pedido mediano histórico del proveedor); el cálculo real de parciales usa el tamaño exacto de cada pedido nuevo. Cuando R² es bajo o "b" está cerca de 0, la curva aporta poco y el sistema puede estar usando el máximo histórico plano como respaldo — revisar con más datos.`;
 
   let htmlPais = '<tr><th>País de Origen</th><th># Observaciones</th><th>Promedio (días)</th><th>Mediana (P50)</th><th>P80 (usado en estimaciones)</th><th>Confiable</th></tr>';
   Object.entries(M.nav.statsPorPais).sort((a,b)=>b[1].n-a[1].n).forEach(([pais,s])=>{
@@ -2150,15 +2257,41 @@ function renderView10(){
   const R = buildPedidosNuevosProyectados(M, {horizonteMeses:horizonte, diaGabela, arancelPct:arancel, ivaPct:iva});
   const {pedidosNuevos, alertasRetraso, mesesSinPpto, mesesHorizonte} = R;
 
-  // ---- Alertas de retraso ----
+  // ---- Alertas de retraso: consolidadas por mes+familia (antes una fila por proveedor, lo que repetía el
+  // mismo mes/familia varias veces cuando el faltante se repartía entre varios proveedores — Sebastián pidió
+  // consolidar para ver de un vistazo cuánto Ton. hay en riesgo por mes/familia, con un filtro de mes) ----
   const alertasPanel = document.getElementById('v10_alertasPanel');
   if(alertasRetraso.length){
     alertasPanel.style.display = '';
-    let htmlA = '<tr><th>Mes que necesitaba cubrirse</th><th>Familia</th><th>Proveedor</th><th>Ton.</th><th>Pedido debía colocarse</th><th>Llegada real estimada</th></tr>';
-    alertasRetraso.sort((a,b)=>a.fechaArribo-b.fechaArribo).forEach(f=>{
-      htmlA += `<tr class="row-bad"><td class="txt">${fmtMesLabel(f.mesNecesidad)}</td><td class="txt">${f.familia}</td><td class="txt">${f.proveedor}</td><td>${fmtTon(f.kg)}</td><td>HOY (ya vencido)</td><td>${fmtMesLabel(f.mesArribo)}</td></tr>`;
-    });
-    document.getElementById('tbl_v10_alertas').innerHTML = htmlA;
+    const selMes = document.getElementById('f10_alertas_mes');
+    const mesesConAlerta = [...new Set(alertasRetraso.map(f=>f.mesNecesidad))].sort();
+    const valorPrevio = selMes.value;
+    selMes.innerHTML = '<option value="">Todos los meses</option>' + mesesConAlerta.map(m=>`<option value="${m}">${fmtMesLabel(m)}</option>`).join('');
+    selMes.value = mesesConAlerta.includes(valorPrevio) ? valorPrevio : '';
+    selMes.onchange = pintarAlertas;
+    function pintarAlertas(){
+      const filtroMes = selMes.value;
+      const filtradas = filtroMes ? alertasRetraso.filter(f=>f.mesNecesidad===filtroMes) : alertasRetraso;
+      const consolidado = {};
+      filtradas.forEach(f=>{
+        const k = f.mesNecesidad+'||'+f.familia;
+        if(!consolidado[k]) consolidado[k] = {mesNecesidad:f.mesNecesidad, familia:f.familia, ton:0, proveedores:new Set(), mesesArribo:new Set()};
+        const c = consolidado[k];
+        c.ton += f.ton; c.proveedores.add(f.proveedor); c.mesesArribo.add(f.mesArribo);
+      });
+      const filas = Object.values(consolidado).sort((a,b)=> a.mesNecesidad.localeCompare(b.mesNecesidad) || a.familia.localeCompare(b.familia));
+      let htmlA = '<tr><th>Mes que necesitaba cubrirse</th><th>Familia</th><th>Ton. en riesgo</th><th>Proveedores afectados</th><th>Pedido debía colocarse</th><th>Llegada real estimada</th></tr>';
+      let totTon = 0;
+      filas.forEach(c=>{
+        totTon += c.ton;
+        const arribos = [...c.mesesArribo].sort();
+        const arriboLabel = arribos.length>1 ? `${fmtMesLabel(arribos[0])} – ${fmtMesLabel(arribos[arribos.length-1])}` : fmtMesLabel(arribos[0]);
+        htmlA += `<tr class="row-bad"><td class="txt">${fmtMesLabel(c.mesNecesidad)}</td><td class="txt">${c.familia}</td><td>${fmtTonDirecto(c.ton)}</td><td class="txt" style="font-size:11px;">${[...c.proveedores].join(', ')}</td><td>HOY (ya vencido)</td><td>${arriboLabel}</td></tr>`;
+      });
+      htmlA += `<tr style="background:var(--paper);font-weight:700;"><td class="txt" colspan="2">TOTAL${filtroMes?' ('+fmtMesLabel(filtroMes)+')':''}</td><td>${fmtTonDirecto(totTon)}</td><td colspan="3"></td></tr>`;
+      document.getElementById('tbl_v10_alertas').innerHTML = htmlA;
+    }
+    pintarAlertas();
   } else {
     alertasPanel.style.display = 'none';
   }
@@ -2224,6 +2357,54 @@ function renderView10(){
     return a + yaComexGf[k]+yaProyeccion[k]+yaNac[k]+nuevoAnticipo[k]+nuevoSaldo[k]+nuevoNac[k];
   },0);
   document.getElementById('v10_flujoTotal').textContent = `Próximos ${horizonte} meses: ${fmt(totalFwd)} en USD nominal (mercancía + nacionalización estimada, ya pedido + pedidos nuevos proyectados).`;
+
+  // ---- 10.2b Proyección de niveles de inventario (16-sep, a pedido de Sebastián: ver el nivel de inventario
+  // resultante de entradas (lo ya pedido + lo que este módulo proyecta pedir) menos salidas (venta PPTO), para
+  // discutir la política de compra frente a una meta de 2-3x la venta mensual en bodega). Consolidado de las
+  // 4 familias — el detalle por familia ya vive en la tabla 10.1. El inventario de arranque de cada mes es el
+  // MISMO que ya calcula buildPedidosNuevosProyectados (R.inventarioPorMes: real cuando existe, proyectado
+  // hacia adelante si no), sumado across familias — una sola fuente de verdad, no un cálculo paralelo. Las
+  // entradas de "pedidos nuevos" se cuentan en el mes en que realmente LLEGARÍAN (fechaArribo), no en el mes
+  // que buscaban cubrir (mesNecesidad) — así un pedido retrasado (ver panel de alertas arriba) se ve reflejado
+  // como un hueco real en el mes que necesitaba cobertura, en vez de aparecer cubierto artificialmente.
+  (function renderInventarioConsolidado(){
+    const invPorMesFamilia = {}; // 'mes' -> {familia: invInicial}
+    (R.inventarioPorMes||[]).forEach(x=>{ invPorMesFamilia[x.mes] = invPorMesFamilia[x.mes]||{}; invPorMesFamilia[x.mes][x.familia] = x; });
+    const entradasNuevasPorMes = {};
+    pedidosNuevos.forEach(p=>{ const m = monthKey(p.fechaArribo); entradasNuevasPorMes[m] = (entradasNuevasPorMes[m]||0) + p.ton; });
+
+    const filas = mesesConDato.map(m=>{
+      const ppto = M.pptoPorMes[m] || {};
+      const cubierto = llegadasIdx[m];
+      let ventaMes = 0, entradasConfirmadas = 0, invInicio = 0, esRealAlgunaFamilia = false;
+      FAMILIAS_ORDEN.forEach(fam=>{
+        ventaMes += ppto[fam]||0;
+        const cubKg = cubierto ? (cubierto.cierto[fam]||0)+(cubierto.estimado[fam]||0) : 0;
+        entradasConfirmadas += cubKg/1000;
+        const inv = invPorMesFamilia[m] && invPorMesFamilia[m][fam];
+        if(inv){ invInicio += inv.invInicial; if(inv.esReal) esRealAlgunaFamilia = true; }
+      });
+      const entradasNuevas = entradasNuevasPorMes[m]||0;
+      const invFin = invInicio + entradasConfirmadas + entradasNuevas - ventaMes;
+      return {mes:m, ventaMes, entradasConfirmadas, entradasNuevas, invInicio, invFin, esRealAlgunaFamilia};
+    });
+
+    const tonFmt = v => v===null||v===undefined ? '' : Math.round(v).toLocaleString('en-US');
+    barChart('c_v10_inventario', filas.map(f=>fmtMesLabel(f.mes)), [
+      {label:'Entradas confirmadas (ya pedido)', type:'bar', data:filas.map(f=>f.entradasConfirmadas), backgroundColor:COLORS.mist, stack:'mov'},
+      {label:'Entradas: pedidos nuevos a colocar', type:'bar', data:filas.map(f=>f.entradasNuevas), backgroundColor:COLORS.gold, stack:'mov'},
+      {label:'Salidas por venta (PPTO)', type:'bar', data:filas.map(f=>-f.ventaMes), backgroundColor:COLORS.red, stack:'mov'},
+      {label:'Inventario al inicio del mes', type:'line', data:filas.map(f=>f.invInicio), borderColor:COLORS.navy, backgroundColor:COLORS.navy, borderWidth:2.5, pointRadius:3, pointBackgroundColor:COLORS.navy, tension:0.15, fill:false, order:0},
+      {label:'Meta mínima (2× venta del mes)', type:'line', data:filas.map(f=>2*f.ventaMes), borderColor:COLORS.green, borderDash:[6,4], borderWidth:1.5, pointRadius:0, fill:false, order:1},
+      {label:'Meta máxima (3× venta del mes)', type:'line', data:filas.map(f=>3*f.ventaMes), borderColor:COLORS.steel, borderDash:[2,3], borderWidth:1.5, pointRadius:0, fill:false, order:1},
+    ], {scales:{x:{stacked:true}, y:{stacked:false, ticks:{callback:tonFmt}}}, plugins:{datalabels:{display:false}, tooltip:{callbacks:{label:ctx=>`${ctx.dataset.label}: ${tonFmt(ctx.raw)} Ton`}}}}, false, tonFmt, false);
+
+    const primeraConReal = filas.find(f=>f.esRealAlgunaFamilia);
+    const nota = !primeraConReal
+      ? 'Todavía no hay ningún mes con inventario inicial REAL cargado en la hoja de PPTO — toda la línea de inventario es 100% proyectada por el modelo a partir de entradas y salidas, arrancando en 0. En cuanto Sebastián cargue el primer mes con conteo físico, la proyección se ancla ahí (ver Vista 10.1 para el detalle real vs. proyectado por familia).'
+      : `El inventario se ancla a un conteo físico real a partir de ${fmtMesLabel(primeraConReal.mes)} (al menos una familia con dato cargado ese mes); los meses sin conteo físico siguen siendo proyección del modelo, no un dato medido.`;
+    document.getElementById('v10_inventarioNota').textContent = nota;
+  })();
 
   // ---- 10.3 Detalle ----
   function poblarSelect(id, valores){
@@ -2330,15 +2511,15 @@ function renderDiag(){
   if(arribadosSinNacDiag.length) advs.push(`${arribadosSinNacDiag.length} proyecto(s) ya arribaron y no tienen registro en la hoja de Nacionalización — posible pago pendiente de registrar (ver Vista 7 · Nacionalización): ` +
     arribadosSinNacDiag.slice(0,10).map(s=>s.proyecto).join(', ') + (arribadosSinNacDiag.length>10?'…':''));
 
-  // Pedidos con MUCHOS parciales proyectados (Vista 4, Grupo A/B) — señal de que la "capacidad de embarque"
-  // de ese proveedor (16-sep: MÁXIMO histórico de Kg/embarque en sus pedidos YA completados — antes era la
-  // mediana, cambiado a pedido de Sebastián para no partir en muchos envíos chicos un pedido grande cuando el
-  // proveedor ya demostró poder consolidar en embarques más grandes) puede seguir sin ser representativa para
-  // ESTE pedido, si es aún más grande que cualquier cosa que ese proveedor haya embarcado antes:
-  // numParcialesPorCapacidad = techo(Kg del pedido ÷ capacidad), y cada parcial adicional encadena ~1 mes
-  // más (avgEntreParciales) — con varios parciales proyectados, la cadena se puede ir bastante hacia
-  // adelante. Esto NO es necesariamente un error de dato: puede ser un pedido genuinamente grande para ese
-  // proveedor — pero merece revisión puntual, no asumir que el pronóstico está bien solo porque no lanza
+  // Pedidos con MUCHOS parciales proyectados (Vista 4, Grupo A/B) — señal de que la capacidad de embarque
+  // estimada para ESE proveedor y ESE tamaño de pedido (16-sep, segunda revisión: curva ajustada por
+  // regresión log-log sobre el historial de pedidos completados del proveedor — o el máximo histórico plano
+  // como respaldo si no hay ajuste confiable; ver nota junto a capacidadEmbarque en buildModel) puede seguir
+  // sin ser representativa para ESTE pedido en particular, si es un caso muy atípico incluso para la curva.
+  // numParcialesPorCapacidad = techo(Kg del pedido ÷ capacidad evaluada en ese Kg), y cada parcial adicional
+  // encadena ~1 mes más (avgEntreParciales) — con varios parciales proyectados, la cadena se puede ir bastante
+  // hacia adelante. Esto NO es necesariamente un error de dato: puede ser un pedido genuinamente grande para
+  // ese proveedor — pero merece revisión puntual, no asumir que el pronóstico está bien solo porque no lanza
   // ningún error.
   const UMBRAL_PARCIALES_SOSPECHOSO = 4;
   const conMuchosParciales = [
@@ -2346,12 +2527,11 @@ function renderDiag(){
     ...MODEL.grupoB.filter(p=>!p.sinFechaBase && (p.numParcialesFaltantes||0)>=UMBRAL_PARCIALES_SOSPECHOSO).map(p=>({...p, n:p.numParcialesFaltantes})),
   ].sort((a,b)=>b.n-a.n);
   if(conMuchosParciales.length){
-    const capPorProv = {}; (MODEL.estadProveedor||[]).forEach(e=>capPorProv[e.proveedor]=e.capacidad);
-    advs.push(`${conMuchosParciales.length} pedido(s) proyectan ${UMBRAL_PARCIALES_SOSPECHOSO} o más parciales pendientes — revisar si el pedido es de verdad así de grande, o si en la práctica se consolidaría en menos envíos (la capacidad de embarque ya usa el MÁXIMO histórico de ese proveedor, no un promedio): ` +
+    advs.push(`${conMuchosParciales.length} pedido(s) proyectan ${UMBRAL_PARCIALES_SOSPECHOSO} o más parciales pendientes — revisar si el pedido es de verdad así de grande, o si en la práctica se consolidaría en menos envíos (la capacidad de embarque se estima con una curva ajustada al historial de ese proveedor, evaluada en el tamaño específico de este pedido — ver Vista 6 · Estadísticas del modelo): ` +
       conMuchosParciales.slice(0,10).map(p=>{
         const ultimoParcial = p.parciales[p.parciales.length-1];
-        const cap = capPorProv[p.proveedor];
-        return `${p.pedido} (${p.proveedor}: ${fmtTon(p.pedidoKg||0)} pedidas ÷ capacidad máxima demostrada ${cap?fmtTon(cap):'sin dato'}/embarque → ${p.n} parciales proyectados, el último llegando ${fmtDate(ultimoParcial?.fechaArriboEstimada)})`;
+        const cap = MODEL.statsProveedor.capacidadEmbarque(p.proveedor, p.pedidoKg);
+        return `${p.pedido} (${p.proveedor}: ${fmtTon(p.pedidoKg||0)} pedidas ÷ capacidad estimada ${cap?fmtTon(cap):'sin dato'}/embarque para este tamaño → ${p.n} parciales proyectados, el último llegando ${fmtDate(ultimoParcial?.fechaArriboEstimada)})`;
       }).join('; ') + (conMuchosParciales.length>10?'…':''));
   }
   const diagPanel = document.getElementById('tbl_diag').closest('.panel');
@@ -2447,14 +2627,23 @@ function renderKPIs(){
   const pesoTotalLead = leadEventos.reduce((a,e)=>a+e.peso,0);
   const leadTimeProm = pesoTotalLead>0 ? Math.round(leadEventos.reduce((a,e)=>a+e.dias*e.peso,0)/pesoTotalLead) : null;
 
+  // Etiqueta de año para las dos tarjetas de arribo/entrada (16-sep, a pedido de Sebastián: separadas en
+  // tarjetas propias — antes "Entrado en Y" vivía como sub-línea chica dentro de "Pedidos del período",
+  // con letra pequeña y poca visibilidad; ahora es su propia tarjeta con el mismo tamaño de letra grande
+  // que las demás). Son dos años potencialmente DISTINTOS por diseño (ver comentario más arriba): "Arribado
+  // de pedidos" sigue la cohorte seleccionada en el filtro de año (anioSel); "Entrado en" sigue el año
+  // calendario real de arribo (anioArriboRef) — se etiqueta cada tarjeta con SU año correspondiente para
+  // que la diferencia quede clara en vez de asumir que son la misma cifra.
+  const labelAnioArribados = anioSel==='todos' ? 'de pedidos (todos los años)' : `de pedidos ${anioSel}`;
   document.getElementById('kpiBar').innerHTML = `
-    <div class="kpi neutral"><div class="lab">Pedidos del período</div><div class="val">${pedidosAnio.length}</div><div class="sub"><b class="ton">${fmtTon(tonPedidosAnio)}</b> · ${fmt(valorPedidosAnio)}</div><div class="sub" style="margin-top:5px;padding-top:5px;border-top:1px dashed var(--line);">Entrado en ${anioArriboRef} (todas las cohortes): <b class="ton">${fmtTon(tonEntradoAnioCalendario)}</b> · ${fmt(valorEntradoAnioCalendario)}</div></div>
+    <div class="kpi neutral"><div class="lab">Pedidos del período</div><div class="val">${pedidosAnio.length}</div><div class="sub"><b class="ton">${fmtTon(tonPedidosAnio)}</b> · ${fmt(valorPedidosAnio)}</div></div>
+    <div class="kpi neutral"><div class="lab">Entrado en ${anioArriboRef}</div><div class="val">${fmtTon(tonEntradoAnioCalendario)}</div><div class="sub">${fmt(valorEntradoAnioCalendario)} · todas las cohortes de pedido</div></div>
     <div class="kpi warn"><div class="lab">En Producción</div><div class="val">${enProduccion.length}</div><div class="sub"><b class="ton">${fmtTon(tonEnProduccion)}</b> · ${fmt(valorEnProduccion)}</div></div>
     <div class="kpi warn"><div class="lab">Parcial Pendiente</div><div class="val">${conParcial.length}</div><div class="sub"><b class="ton">${fmtTon(tonPendienteParcial)}</b> · ${fmt(valorPendienteParcial)}</div></div>
     <div class="kpi ok"><div class="lab">Completados</div><div class="val">${completados.length}</div><div class="sub">de ${pedidosAnio.length} del período</div></div>
     <div class="kpi neutral"><div class="lab">Lead Time Ponderado</div><div class="val">${leadTimeProm?leadTimeProm+' d':'—'}</div><div class="sub">Pedido → Arribo</div></div>
     <div class="kpi neutral"><div class="lab">Navegando</div><div class="val">${navegando.length}</div><div class="sub"><b class="ton">${fmtTon(tonNavegando)}</b> · ${fmt(valorNavegando)}</div></div>
-    <div class="kpi ok"><div class="lab">Arribados</div><div class="val">${arribados.length}</div><div class="sub"><b class="ton">${fmtTon(tonArribado)}</b> · ${fmt(valorArribado)}</div></div>
+    <div class="kpi ok"><div class="lab">Arribado ${labelAnioArribados}</div><div class="val">${arribados.length}</div><div class="sub"><b class="ton">${fmtTon(tonArribado)}</b> · ${fmt(valorArribado)}</div></div>
   `;
 }
 
