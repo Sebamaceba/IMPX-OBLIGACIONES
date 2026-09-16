@@ -156,6 +156,7 @@
   <div class="nav-grupo"><span class="nav-grupo-label">Finanzas</span>
     <button data-view="v4">5 · Pendientes por Pagar</button>
     <button data-view="v5">7 · Nacionalización</button>
+    <button data-view="v10">10 · Pedidos Nuevos Proyectados</button>
   </div>
   <div class="nav-grupo"><span class="nav-grupo-label">Modelo</span>
     <button data-view="v8">6 · Estadísticas del Modelo</button>
@@ -384,7 +385,7 @@
       <h2>4.7 · Nacionalización estimada (Arancel + IVA) — consolidada por mes de pago</h2>
       <div class="desc">Así se paga en la realidad: todas las llegadas (reales o estimadas) de un mes se acumulan, y el arancel + IVA de ese acumulado se paga en la <b>primera semana del mes siguiente</b>. Fórmula: Nacionalización = Valor Acumulado × Arancel% × (1 + IVA%). Incluye proyectos comex navegando, parciales incompletos y pedidos sin parcial — lo que ya arribó y no está registrado se lista aparte, no se pronostica (ya debió pagarse).</div>
       <div class="filters">
-        <label style="font-size:11.5px;color:var(--ink-soft);">Arancel % <input id="v4_arancel" type="number" step="0.1" value="5" style="width:60px;"></label>
+        <label style="font-size:11.5px;color:var(--ink-soft);">Arancel % <input id="v4_arancel" type="number" step="0.1" value="6" style="width:60px;"></label>
         <label style="font-size:11.5px;color:var(--ink-soft);">IVA % <input id="v4_iva" type="number" step="0.1" value="19" style="width:60px;"></label>
         <select id="f46_mes"><option value="">Todos los meses de pago</option></select>
       </div>
@@ -559,6 +560,56 @@
     </div>
   </div>
 
+  <div class="view" id="v10">
+    <div class="panel">
+      <h2>10 · Pedidos Nuevos Proyectados — Flujo de Caja de Compras (histórico + gerencial)</h2>
+      <div class="desc">Cuánto pedir, a qué proveedor y cuándo, para cubrir el PPTO de ventas por Familia en la parte que <b>NO</b> alcanza a cubrir lo que ya está pedido (Vista 9). Usa las mismas estadísticas empíricas por proveedor ya validadas en el resto del Tablero (lead time real Pedido→Zarpe→Arribo, día de pago del saldo anclado al ZARPE, no al arribo) — reemplaza el modelaje que tenía el Kardex de Excel.</div>
+      <div class="note info">Simplificación explícita: el Tablero no tiene una foto de inventario en vivo (solo compras/pagos/llegadas). La "necesidad de compra" de un mes = PPTO de ventas de ese mes menos lo que ya va a llegar ese mismo mes — equivale a asumir que el inventario de seguridad se mantiene aprox. constante. Si se necesita modelar niveles de stock reales, hay que conectar el saldo de Kardex/WMS (hoy no vive en ninguna de las dos herramientas).</div>
+      <div class="filters">
+        <label style="font-size:12px;color:var(--ink-soft);">Horizonte:
+          <select id="v10_horizonte"><option value="6">Próximos 6 meses</option><option value="12" selected>Próximos 12 meses</option><option value="24">Próximos 24 meses</option></select>
+        </label>
+        <span style="font-size:11px;color:var(--ink-soft);">Arancel/IVA y día de gabela: mismos parámetros de las Vistas 4 y 9 (cámbialos allá si hace falta).</span>
+      </div>
+      <div id="v10_narrativa" style="margin-top:8px;font-size:12.5px;color:var(--ink-soft);line-height:1.6;"></div>
+    </div>
+
+    <div class="panel" id="v10_alertasPanel" style="display:none;">
+      <h2>⚠ Pedidos que ya deberían haberse colocado</h2>
+      <div class="desc">El lead time del proveedor no alcanza para llegar a tiempo al mes que necesita cubrir — se re-ancla la fecha de pedido a HOY y la llegada real queda más tarde. Riesgo real de desabastecimiento si no se coloca de inmediato.</div>
+      <div class="scroll"><table id="tbl_v10_alertas"></table></div>
+    </div>
+
+    <div class="panel">
+      <h2>10.1 · Necesidad de compra por mes y Familia — parte gerencial</h2>
+      <div class="desc">PPTO de ventas (Ton) vs. lo que ya va a llegar (cierto + estimado, Vista 9) vs. el faltante a cubrir con pedidos nuevos.</div>
+      <div class="scroll"><table id="tbl_v10_necesidad"></table></div>
+    </div>
+
+    <div class="panel">
+      <h2>10.2 · Flujo de caja de compras — histórico reciente + ya pedido + pedidos nuevos proyectados</h2>
+      <div class="desc">Acumula, por mes: anticipos y saldos ya pagados (histórico reciente), obligaciones ya pedidas confirmadas/estimadas (Vista 4/9), y anticipos+saldos+nacionalización de los pedidos nuevos que este módulo proyecta. Así la CFO ve una sola línea de caja de mercancía, no dos herramientas por separado.</div>
+      <div style="height:340px;"><canvas id="c_v10_flujo"></canvas></div>
+      <div id="v10_flujoTotal" style="margin-top:10px;font-family:var(--mono);font-size:14px;font-weight:700;color:var(--navy);"></div>
+    </div>
+
+    <div class="panel">
+      <h2>10.3 · Detalle de pedidos nuevos proyectados</h2>
+      <div class="filters">
+        <select id="f10_familia"><option value="">Todas las familias</option></select>
+        <select id="f10_proveedor"><option value="">Todos los proveedores</option></select>
+        <button id="v10_descargar" type="button" style="background:var(--navy);color:#fff;border:none;border-radius:6px;padding:8px 14px;font-size:12px;cursor:pointer;">⬇ Descargar a Excel</button>
+      </div>
+      <div class="scroll"><table id="tbl_v10_detalle"></table></div>
+    </div>
+
+    <div class="panel">
+      <h2>10.4 · Mezcla Familia → Proveedor usada para repartir los pedidos nuevos</h2>
+      <div class="desc">Calculada en vivo desde "Cuadro Pedidos" (histórico real, no una tabla copiada de Excel) — proveedores con menos del 3% del Kg histórico de su familia se excluyen por no ser representativos.</div>
+      <div class="scroll"><table id="tbl_v10_mix"></table></div>
+    </div>
+  </div>
+
 </main>
 
 <footer>Tablero conectado en vivo a Google Sheets · Sheet ID: 1QDs19b...DTLX30 · cálculo 100% en el navegador, sin servidor intermedio.</footer>
@@ -574,7 +625,9 @@ const CSV_URLS = {
   gf: 'https://docs.google.com/spreadsheets/d/e/2PACX-1vTMOQUv-oE-Vs3VvrpHc6g-8X04Qf_s-2gkFzialLhlD2KwMBr6GiNtgzYPUvI1EJpsy2qjQpVoqQQD/pub?gid=1483317032&single=true&output=csv',
   nacionalizacion: 'https://docs.google.com/spreadsheets/d/e/2PACX-1vTMOQUv-oE-Vs3VvrpHc6g-8X04Qf_s-2gkFzialLhlD2KwMBr6GiNtgzYPUvI1EJpsy2qjQpVoqQQD/pub?gid=502120634&single=true&output=csv',
   pedidosDet: 'https://docs.google.com/spreadsheets/d/e/2PACX-1vTMOQUv-oE-Vs3VvrpHc6g-8X04Qf_s-2gkFzialLhlD2KwMBr6GiNtgzYPUvI1EJpsy2qjQpVoqQQD/pub?gid=926745922&single=true&output=csv',
-  importaciones: 'https://docs.google.com/spreadsheets/d/e/2PACX-1vTMOQUv-oE-Vs3VvrpHc6g-8X04Qf_s-2gkFzialLhlD2KwMBr6GiNtgzYPUvI1EJpsy2qjQpVoqQQD/pub?gid=1055034535&single=true&output=csv'
+  importaciones: 'https://docs.google.com/spreadsheets/d/e/2PACX-1vTMOQUv-oE-Vs3VvrpHc6g-8X04Qf_s-2gkFzialLhlD2KwMBr6GiNtgzYPUvI1EJpsy2qjQpVoqQQD/pub?gid=1055034535&single=true&output=csv',
+  // PPTO de ventas por familia (Ton), pestaña agregada 16-sep-2026 para el módulo de Pedidos Nuevos Proyectados.
+  ppto: 'https://docs.google.com/spreadsheets/d/e/2PACX-1vTMOQUv-oE-Vs3VvrpHc6g-8X04Qf_s-2gkFzialLhlD2KwMBr6GiNtgzYPUvI1EJpsy2qjQpVoqQQD/pub?gid=66861670&single=true&output=csv'
 };
 
 const ANCHORS = {
@@ -584,7 +637,8 @@ const ANCHORS = {
   gf: ['FECHA DE APERTURA','PROYECTO COMEX','SALDO USD CON TASA'],
   nacionalizacion: ['NACIONALIZACIÓN','FECHA DE PAGO NACIONALIZACIÓN'],
   pedidosDet: ['# PROFORMA','CANTIDAD PI','NOMBRE PROYECTO'],
-  importaciones: ['NOMBRE PROYECTO','FECHA REAL DE ARRIBO','PESO BRUTO']
+  importaciones: ['NOMBRE PROYECTO','FECHA REAL DE ARRIBO','PESO BRUTO'],
+  ppto: ['MES','LAMINAS','TOTAL']
 };
 
 function normKey(s){ return String(s||'').replace(/\s+/g,' ').trim().toUpperCase(); }
@@ -595,6 +649,17 @@ const FAMILIA_MAP = {
 };
 const FAMILIAS_ORDEN = ['Láminas','Tubos','Perfiles','Otros Productos'];
 function familiaDeProducto(producto){ return FAMILIA_MAP[normKey(producto)] || 'Otros Productos'; }
+
+// ---- Precios de referencia (USD/Ton) y TRM (COP/USD) para valorizar los "Pedidos Nuevos Proyectados" ----
+// Ninguna de las dos existe hoy en el Tablero (solo trackea USD ya facturado real, no una tarifa de referencia
+// por Ton, y no maneja tasa de cambio en absoluto). Se portan aquí los MISMOS supuestos ya confirmados y usados
+// en Forecast_Maestro.xlsx (hoja Supuestos, secciones 3b y TRM) para que ambas herramientas coincidan — si se
+// actualizan allá, hay que actualizar aquí también (no hay todavía una única fuente publicada para esto).
+// Nota: el Tablero (a diferencia del Excel) nunca maneja TRM — todo se calcula en USD nominal, incluida la
+// nacionalización estimada (ver calcularNacEstimada: arancel% × (1+IVA%) × valor USD, sin convertir a COP).
+// Vista 10 sigue exactamente esa misma convención por consistencia interna, aunque el pago real de
+// nacionalización se hace en COP — si se necesita el valor en COP, es un TRM aplicado sobre este mismo total.
+const PRECIOS_REF_USD_TON = { 'Láminas':1843, 'Tubos':2456, 'Perfiles':2173, 'Otros Productos':3629 };
 
 function num(v){
   if(v===null||v===undefined||v==='') return 0;
@@ -736,11 +801,41 @@ async function fetchAndParse(name){
 }
 
 async function loadAll(){
-  const [profRaw, spRaw, pgRaw, gfRaw, nacRaw, pedDetRaw, impRaw] = await Promise.all([
+  const [profRaw, spRaw, pgRaw, gfRaw, nacRaw, pedDetRaw, impRaw, pptoRaw] = await Promise.all([
     fetchAndParse('proformas'), fetchAndParse('proyectos'), fetchAndParse('pagos'), fetchAndParse('gf'), fetchAndParse('nacionalizacion'),
-    fetchAndParse('pedidosDet'), fetchAndParse('importaciones')
+    fetchAndParse('pedidosDet'), fetchAndParse('importaciones'), fetchAndParse('ppto')
   ]);
-  return { profRaw, spRaw, pgRaw, gfRaw, nacRaw, pedDetRaw, impRaw };
+  return { profRaw, spRaw, pgRaw, gfRaw, nacRaw, pedDetRaw, impRaw, pptoRaw };
+}
+
+// ---- PPTO de ventas por familia (Ton) — pestaña "Año/Mes/Laminas/Tubos/Perfiles/Otros/TOTAL" ----
+const MESES_ES = {'ENERO':1,'FEBRERO':2,'MARZO':3,'ABRIL':4,'MAYO':5,'JUNIO':6,'JULIO':7,'AGOSTO':8,
+  'SEPTIEMBRE':9,'OCTUBRE':10,'NOVIEMBRE':11,'DICIEMBRE':12};
+function normPpto(r){
+  const anio = num(get(r,'AÑO','ANO'));
+  const mesNombre = normKey(get(r,'MES'));
+  const mesNum = MESES_ES[mesNombre];
+  if(!anio || !mesNum) return null;
+  return {
+    mesKey: `${anio}-${String(mesNum).padStart(2,'0')}`,
+    // OJO: las claves deben ser EXACTAMENTE las de FAMILIAS_ORDEN ('Láminas' con tilde, etc.) — son las
+    // mismas que usa el resto del Tablero (familiaDeProducto, mixFamiliaProveedor, llegadas por familia) para
+    // indexar por familia. Un desajuste aquí (p.ej. 'Laminas' sin tilde) hace que M.pptoPorMes[m]['Láminas']
+    // salga undefined en todos lados sin lanzar ningún error — un bug real, silencioso, detectado con un test.
+    'Láminas': num(get(r,'LAMINAS')),
+    'Tubos': num(get(r,'TUBOS')),
+    'Perfiles': num(get(r,'PERFILES')),
+    'Otros Productos': num(get(r,'OTROS')),
+    total: num(get(r,'TOTAL'))
+  };
+}
+function buildPptoPorMes(pptoRaw){
+  const out = {};
+  (pptoRaw||[]).forEach(r=>{
+    const p = normPpto(r);
+    if(p) out[p.mesKey] = p;
+  });
+  return out;
 }
 
 function parseCondicion(raw){
@@ -1083,7 +1178,7 @@ function corregirGF(gf){
   });
 }
 
-function buildModel({profRaw, spRaw, pgRaw, gfRaw, nacRaw, pedDetRaw, impRaw}){
+function buildModel({profRaw, spRaw, pgRaw, gfRaw, nacRaw, pedDetRaw, impRaw, pptoRaw}){
   const prof = profRaw.map(normProf).filter(r=>r.pedido);
   const spAll0 = dedupSP(spRaw.map(normSP).filter(r=>r.proyecto));
   const pg = pgRaw.map(normPG).filter(r=>r.valor);
@@ -1091,6 +1186,7 @@ function buildModel({profRaw, spRaw, pgRaw, gfRaw, nacRaw, pedDetRaw, impRaw}){
   const nac = nacRaw.map(normNac).filter(r=>r.proyectoComex);
   const ton = buildToneladasModel(pedDetRaw||[], impRaw||[], prof, spAll0);
   const nav = buildNavegacionStats(ton);
+  const pptoPorMes = buildPptoPorMes(pptoRaw||[]);
 
   // ---- Saldo pendiente CALCULADO de forma independiente, por Proyecto Comex ----
   // = (Valor Factura - Reclasificación - Notas Crédito) - Σ pagos de concepto SALDO hechos a ESE Proyecto Comex
@@ -1169,6 +1265,29 @@ function buildModel({profRaw, spRaw, pgRaw, gfRaw, nacRaw, pedDetRaw, impRaw}){
     return g;
   });
 
+  // ---- MIX empírico Familia -> Proveedor (Kg), para repartir los "Pedidos Nuevos Proyectados" (Vista 10) ----
+  // Reemplaza la tabla estática que se había copiado a mano en el Excel (top-5 proveedores por familia,
+  // tomada de Arquitectura) por el MISMO cálculo pero derivado en vivo de "Cuadro Pedidos" (ton.grupos, ya
+  // agrupado por proforma+producto con la familia correctamente inferida vía familiaDeProducto — la columna
+  // FAMILIA del Sheet viene vacía, ver comentario junto a esa función). Una sola fuente de verdad: no hay que
+  // copiar/pegar números entre el Excel y el Tablero cada vez que cambia la mezcla real de proveedores.
+  const kgPorFamiliaProveedor = {};
+  ton.grupos.forEach(g=>{
+    const pedidoCod = ton.proformaToPedido[g.proforma]; if(!pedidoCod) return;
+    const ped = byPedido[pedidoCod]; if(!ped || !ped.proveedor) return;
+    kgPorFamiliaProveedor[g.familia] = kgPorFamiliaProveedor[g.familia] || {};
+    kgPorFamiliaProveedor[g.familia][ped.proveedor] = (kgPorFamiliaProveedor[g.familia][ped.proveedor]||0) + (g.cantidadPedidaKg||0);
+  });
+  const MIX_SHARE_MINIMO = 0.03; // proveedores con <3% del Kg histórico de la familia se excluyen (cola larga, poco representativa para asignar pedidos nuevos)
+  const mixFamiliaProveedor = {};
+  Object.entries(kgPorFamiliaProveedor).forEach(([familia, porProv])=>{
+    const total = Object.values(porProv).reduce((a,b)=>a+b,0); if(!total) return;
+    const relevantes = Object.entries(porProv).filter(([,kg])=>kg/total >= MIX_SHARE_MINIMO);
+    const usar = relevantes.length ? relevantes : Object.entries(porProv); // si ninguno llega al mínimo (familia con muy pocos datos), se usan todos
+    const totalUsar = usar.reduce((a,[,kg])=>a+kg,0);
+    mixFamiliaProveedor[familia] = usar.map(([proveedor,kg])=>({proveedor, share: kg/totalUsar, kgHistorico: kg})).sort((a,b)=>b.share-a.share);
+  });
+
   const saldoPagoRealPorProyecto = {};
   pg.filter(p=>p.concepto==='SALDO').forEach(p=>{
     const cur = saldoPagoRealPorProyecto[p.proyectoComex];
@@ -1219,6 +1338,54 @@ function buildModel({profRaw, spRaw, pgRaw, gfRaw, nacRaw, pedDetRaw, impRaw}){
   function avgGap2Plus(prov){ const v = gap2PlusPorProveedor[prov]; return (v&&v.length) ? weightedMean(v) : (GLOBAL_gap2Plus||GLOBAL_gap1); }
   function avgEntreParciales(prov, posicion){ return posicion<=1 ? avgGap1(prov) : avgGap2Plus(prov); } // posicion: 1=hacia el 2do parcial, 2+=subsiguientes
 
+  // ---- Días desde Fecha de Pedido hasta el pago del ANTICIPO, por proveedor ----
+  // Construido 16-sep-2026 a pedido de Sebastián: en el Excel el anticipo se pronosticaba con un supuesto
+  // fijo (0 o 2 meses) porque no existía una fuente empírica. Aquí SÍ existe: pg trae filas reales con
+  // concepto==='ANTICIPO', enlazables a byPedido[pedido].fechaPedido (misma llave 'PROYECTO EN PRODUCCIÓN'
+  // usada en todo el resto del modelo). Mismo patrón que avgProformaPago/avgBlPago: promedio ponderado por
+  // recencia, con respaldo GLOBAL si el proveedor no tiene muestra suficiente.
+  const anticipoPagoPorProveedor = {};
+  pg.filter(p=>p.concepto==='ANTICIPO').forEach(p=>{
+    const g = byPedido[p.pedido];
+    if(!g || !g.fechaPedido || !p.fecha || !g.proveedor) return;
+    anticipoPagoPorProveedor[g.proveedor] = anticipoPagoPorProveedor[g.proveedor] || [];
+    anticipoPagoPorProveedor[g.proveedor].push({valor: daysBetween(g.fechaPedido, p.fecha), fecha: p.fecha});
+  });
+  const GLOBAL_anticipoPago = weightedMean(Object.values(anticipoPagoPorProveedor).flat());
+  function avgAnticipoPago(prov){
+    const v = anticipoPagoPorProveedor[prov];
+    return (v && v.length>=MIN_MUESTRA) ? weightedMean(v) : GLOBAL_anticipoPago;
+  }
+
+  // ---- % Anticipo típico por proveedor (empírico, de proformas reales) ----
+  // Reemplaza las columnas estáticas "% Anticipo / % Saldo" copiadas de Arquitectura para el módulo de
+  // Pedidos Nuevos Proyectados: se calcula directo de 'prof' (anticipoReconocido / valor de cada proforma),
+  // ponderado por el valor de la proforma (una proforma grande pesa más que una chica) y por recencia.
+  const pctAnticipoPorProveedor = {};
+  prof.forEach(p=>{
+    if(!p.proveedor || !p.valor) return;
+    const pct = p.anticipoReconocido / p.valor;
+    if(isNaN(pct) || pct<0 || pct>1) return; // descarta filas con datos inconsistentes (anticipo > valor, etc.)
+    pctAnticipoPorProveedor[p.proveedor] = pctAnticipoPorProveedor[p.proveedor] || [];
+    pctAnticipoPorProveedor[p.proveedor].push({valor: pct, fecha: p.fecha, peso: p.valor});
+  });
+  function weightedMeanPonderadaValor(pairs){ // variante de weightedMean() que además pondera por 'peso' (valor USD de la proforma)
+    const hoy = new Date();
+    let sumW=0, sumWV=0;
+    pairs.forEach(p=>{
+      if(p.valor===null||p.valor===undefined||isNaN(p.valor)) return;
+      const wRec = p.fecha ? pesoRecencia(p.fecha, hoy) : 1;
+      const w = wRec * (p.peso||1);
+      sumW += w; sumWV += w*p.valor;
+    });
+    return sumW>0 ? sumWV/sumW : mean(pairs.map(p=>p.valor));
+  }
+  const GLOBAL_pctAnticipo = weightedMeanPonderadaValor(Object.values(pctAnticipoPorProveedor).flat());
+  function avgPctAnticipo(prov){
+    const v = pctAnticipoPorProveedor[prov];
+    return (v && v.length>=MIN_MUESTRA) ? weightedMeanPonderadaValor(v) : GLOBAL_pctAnticipo;
+  }
+
 
   // Días desde Fecha de Pedido hasta el primer Zarpe (para estimar el primer proyecto comex de pedidos que aún no tienen ninguno)
   const primerZarpePorPedido = {};
@@ -1264,6 +1431,34 @@ function buildModel({profRaw, spRaw, pgRaw, gfRaw, nacRaw, pedDetRaw, impRaw}){
   }
 
   function diasNavegacionPedido(pedido){ return nav.diasNavegacion(ton.paisPorPedido[pedido]); }
+
+  // ---- País de origen típico por proveedor (moda histórica) ----
+  // diasNavegacionPedido() necesita un país y solo lo tiene para pedidos que YA tienen una fila en Cuadro
+  // Pedidos (ton.paisPorPedido). Un pedido nuevo/proyectado (aún no existe) no tiene esa fila todavía, así
+  // que para proyectarlo hace falta el país MÁS FRECUENTE con el que ha trabajado ese proveedor en el
+  // histórico. Se calcula por moda (no promedio, un país no es numérico), con respaldo GLOBAL (el país más
+  // frecuente en todo el histórico) si el proveedor no tiene ningún pedido con país registrado.
+  const paisesPorProveedor = {};
+  pedidos.forEach(p=>{
+    const pais = ton.paisPorPedido[p.pedido];
+    if(!pais || !p.proveedor) return;
+    paisesPorProveedor[p.proveedor] = paisesPorProveedor[p.proveedor] || {};
+    paisesPorProveedor[p.proveedor][pais] = (paisesPorProveedor[p.proveedor][pais]||0) + 1;
+  });
+  function modaPais(conteo){
+    let mejor = null, mejorN = 0;
+    Object.entries(conteo||{}).forEach(([pais,n])=>{ if(n>mejorN){ mejor=pais; mejorN=n; } });
+    return mejor;
+  }
+  const conteoGlobalPaises = {};
+  Object.values(paisesPorProveedor).forEach(conteo=>{
+    Object.entries(conteo).forEach(([pais,n])=>{ conteoGlobalPaises[pais] = (conteoGlobalPaises[pais]||0) + n; });
+  });
+  const GLOBAL_paisTipico = modaPais(conteoGlobalPaises);
+  function paisTipicoProveedor(prov){
+    return modaPais(paisesPorProveedor[prov]) || GLOBAL_paisTipico;
+  }
+  function diasNavegacionProveedor(prov){ return nav.diasNavegacion(paisTipicoProveedor(prov)); }
 
   function condicionRepresentativaPedido(pedido){
     const p = prof.find(x=>x.pedido===pedido && x.condicion);
@@ -1454,8 +1649,14 @@ function buildModel({profRaw, spRaw, pgRaw, gfRaw, nacRaw, pedDetRaw, impRaw}){
   };
 
   return { pedidos, spAll, spUnico, pg, gf, gfAbiertos, nac, nacMes, grupoA, grupoB, obligaciones, pagosMes, gfMes, pedidosMes, enriquecidos, enriquecidosUnico,
-           promedios:{GLOBAL_proformaPago, GLOBAL_blPago, GLOBAL_gap1, GLOBAL_gap2Plus, GLOBAL_primerZarpe, GLOBAL_capacidadEmbarque},
-           ton, nav, estadProveedor, estadGlobal, MIN_MUESTRA_MODELO: MIN_MUESTRA, VIDA_MEDIA_MODELO: VIDA_MEDIA_DIAS,
+           promedios:{GLOBAL_proformaPago, GLOBAL_blPago, GLOBAL_gap1, GLOBAL_gap2Plus, GLOBAL_primerZarpe, GLOBAL_capacidadEmbarque, GLOBAL_anticipoPago},
+           // Funciones estadísticas por proveedor, expuestas para el módulo de "Pedidos Nuevos Proyectados"
+           // (flujo de caja de compras aún no realizadas) — antes eran closures privadas de buildModel().
+           statsProveedor: { avgPrimerZarpe, avgEntreParciales, avgGap1, avgGap2Plus, avgProformaPago, avgBlPago,
+                              avgAnticipoPago, avgPctAnticipo, numParcialesPorCapacidad, capacidadEmbarque, diasNavegacionPedido,
+                              diasNavegacionProveedor, paisTipicoProveedor, condicionRepresentativaPedido },
+           mixFamiliaProveedor,
+           ton, nav, pptoPorMes, estadProveedor, estadGlobal, MIN_MUESTRA_MODELO: MIN_MUESTRA, VIDA_MEDIA_MODELO: VIDA_MEDIA_DIAS,
            excluidosPorCorte, FECHA_CORTE_DATA_CONFIABLE, excluidosPorTolerancia,
            conteos: {
              proformas_leidas: profRaw.length, proformas_validas: prof.length,
@@ -1510,7 +1711,7 @@ function setStatus(state, msg){
 
 async function init(){
   try{
-    setStatus('loading','Descargando 7 pestañas del Sheet...');
+    setStatus('loading','Descargando 8 pestañas del Sheet...');
     const raw = await loadAll();
     setStatus('loading','Calculando el modelo...');
     MODEL = buildModel(raw);
@@ -1587,6 +1788,7 @@ function render(){
   renderView6();
   renderView8();
   renderView9();
+  renderView10();
   renderTableroMando();
   renderBandejaAlertas();
   renderDiag();
@@ -1826,6 +2028,157 @@ function renderView9(){
   };
 }
 
+// ================= VISTA 10 · PEDIDOS NUEVOS PROYECTADOS =================
+const fmtTonDirecto = t => t===null||t===undefined ? '—' : t.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2}) + ' Ton'; // 't' YA está en toneladas (PPTO, gaps) — no dividir de nuevo por 1000 como hace fmtTon() con los kg del resto del Tablero
+function renderView10(){
+  const M = MODEL;
+  const horizonte = parseInt(document.getElementById('v10_horizonte').value||'12',10);
+  const arancel = (parseFloat(document.getElementById('v4_arancel').value)||6)/100;
+  const iva = (parseFloat(document.getElementById('v4_iva').value)||19)/100;
+  const diaGabela = parseInt(document.getElementById('v9_gabela').value||'20',10);
+
+  const R = buildPedidosNuevosProyectados(M, {horizonteMeses:horizonte, diaGabela, arancelPct:arancel, ivaPct:iva});
+  const {pedidosNuevos, alertasRetraso, mesesSinPpto, mesesHorizonte} = R;
+
+  // ---- Alertas de retraso ----
+  const alertasPanel = document.getElementById('v10_alertasPanel');
+  if(alertasRetraso.length){
+    alertasPanel.style.display = '';
+    let htmlA = '<tr><th>Mes que necesitaba cubrirse</th><th>Familia</th><th>Proveedor</th><th>Ton.</th><th>Pedido debía colocarse</th><th>Llegada real estimada</th></tr>';
+    alertasRetraso.sort((a,b)=>a.fechaArribo-b.fechaArribo).forEach(f=>{
+      htmlA += `<tr class="row-bad"><td class="txt">${fmtMesLabel(f.mesNecesidad)}</td><td class="txt">${f.familia}</td><td class="txt">${f.proveedor}</td><td>${fmtTon(f.kg)}</td><td>HOY (ya vencido)</td><td>${fmtMesLabel(f.mesArribo)}</td></tr>`;
+    });
+    document.getElementById('tbl_v10_alertas').innerHTML = htmlA;
+  } else {
+    alertasPanel.style.display = 'none';
+  }
+
+  // ---- 10.1 Necesidad de compra por mes y familia ----
+  const llegadasPorMes = consolidarLlegadasPorMes(M._llegadasCache, diaGabela);
+  const llegadasIdx = {}; llegadasPorMes.forEach(l=>llegadasIdx[l.mes]=l);
+  const mesesConDato = mesesHorizonte.filter(m=>M.pptoPorMes[m]);
+  let htmlN = '<tr><th>Mes</th><th>Familia</th><th>PPTO Ventas (Ton)</th><th>Ya cubierto (Ton)</th><th>Faltante a pedir (Ton)</th><th>Pedido nuevo proyectado (Ton)</th></tr>';
+  let totNecesidad=0, totCubierto=0, totNuevo=0;
+  mesesConDato.forEach(m=>{
+    const ppto = M.pptoPorMes[m];
+    const cubierto = llegadasIdx[m];
+    FAMILIAS_ORDEN.forEach(fam=>{
+      const necesidad = ppto[fam]||0; if(necesidad<=0) return;
+      const cubKg = cubierto ? (cubierto.cierto[fam]||0)+(cubierto.estimado[fam]||0) : 0;
+      const cubTon = cubKg/1000;
+      const gapTon = Math.max(0, necesidad - cubTon);
+      const nuevoTon = pedidosNuevos.filter(p=>p.mesNecesidad===m && p.familia===fam).reduce((a,p)=>a+p.ton,0);
+      totNecesidad+=necesidad; totCubierto+=cubTon; totNuevo+=nuevoTon;
+      htmlN += `<tr><td class="txt">${fmtMesLabel(m)}</td><td class="txt">${fam}</td><td>${fmtTonDirecto(necesidad)}</td><td>${fmtTonDirecto(cubTon)}</td><td>${gapTon>0.01?fmtTonDirecto(gapTon):'—'}</td><td>${nuevoTon>0.01?fmtTonDirecto(nuevoTon):'—'}</td></tr>`;
+    });
+  });
+  htmlN += `<tr style="background:var(--paper);font-weight:700;"><td class="txt" colspan="2">TOTAL</td><td>${fmtTonDirecto(totNecesidad)}</td><td>${fmtTonDirecto(totCubierto)}</td><td colspan="1"></td><td>${fmtTonDirecto(totNuevo)}</td></tr>`;
+  if(mesesSinPpto.length) htmlN += `<tr><td class="txt" colspan="6" style="color:var(--ink-soft);font-size:11.5px;">Sin PPTO publicado todavía para: ${mesesSinPpto.map(fmtMesLabel).join(', ')} — no se proyecta pedido nuevo para esos meses hasta que se publique el presupuesto.</td></tr>`;
+  document.getElementById('tbl_v10_necesidad').innerHTML = htmlN;
+
+  // ---- 10.2 Flujo de caja de compras: histórico reciente + ya pedido + pedidos nuevos ----
+  const mesActual = monthKey(new Date());
+  const mesesHistTodos = Object.keys(M.pagosMes).filter(m=>m<mesActual).sort();
+  const mesesHist = mesesHistTodos.slice(-6);
+  const flujo = computeFlujoCaja(M, horizonte, arancel, iva);
+  const mesesFwd = flujo.mesesN;
+  const mesesTotal = [...mesesHist, ...mesesFwd];
+
+  const histAnticipo = mesesTotal.map(m=> mesesHist.includes(m) ? (M.pagosMes[m]?.ANTICIPO||0) : 0);
+  const histSaldo    = mesesTotal.map(m=> mesesHist.includes(m) ? (M.pagosMes[m]?.SALDO||0) : 0);
+  const yaComexGf     = mesesTotal.map(m=> flujo.porMes[m] ? (flujo.porMes[m].comex+flujo.porMes[m].gf) : 0);
+  const yaProyeccion  = mesesTotal.map(m=> flujo.porMes[m] ? (flujo.porMes[m].proyA+flujo.porMes[m].proyB) : 0);
+  const yaNac         = mesesTotal.map(m=> flujo.porMes[m] ? flujo.porMes[m].nac : 0); // ya viene en USD nominal (misma convención que calcularNacEstimada, ver nota junto a PRECIOS_REF_USD_TON)
+  const nuevoAnticipo = mesesTotal.map(m=> pedidosNuevos.filter(p=>monthKey(p.fechaPagoAnticipo)===m).reduce((a,p)=>a+p.montoAnticipoUsd,0));
+  const nuevoSaldo    = mesesTotal.map(m=> pedidosNuevos.filter(p=>monthKey(p.fechaPagoSaldo)===m).reduce((a,p)=>a+p.montoSaldoUsd,0));
+  const nuevoNac      = mesesTotal.map(m=> pedidosNuevos.filter(p=>monthKey(p.fechaNac)===m).reduce((a,p)=>a+p.montoNacUsd,0));
+
+  barChart('c_v10_flujo', mesesTotal.map(fmtMesLabel), [
+    {label:'Histórico: Anticipos pagados', data:histAnticipo, backgroundColor:COLORS.mist, stack:'usd'},
+    {label:'Histórico: Saldos pagados', data:histSaldo, backgroundColor:COLORS.slate, stack:'usd'},
+    {label:'Ya pedido: Comex + Giros', data:yaComexGf, backgroundColor:COLORS.navy, stack:'usd'},
+    {label:'Ya pedido: Parciales proyectados', data:yaProyeccion, backgroundColor:COLORS.steel, stack:'usd'},
+    {label:'Ya pedido: Nacionalización estimada', data:yaNac, backgroundColor:COLORS.red, stack:'usd'},
+    {label:'Pedidos nuevos: Anticipo', data:nuevoAnticipo, backgroundColor:COLORS.amber, stack:'usd'},
+    {label:'Pedidos nuevos: Saldo', data:nuevoSaldo, backgroundColor:COLORS.gold, stack:'usd'},
+    {label:'Pedidos nuevos: Nacionalización estimada', data:nuevoNac, backgroundColor:COLORS.green, stack:'usd'},
+  ], {scales:{x:{stacked:true}, y:{stacked:true}}, plugins:{datalabels:{display:false}}}, false, null, true);
+
+  const totalFwd = mesesFwd.reduce((a,m,i)=>{
+    const k = mesesHist.length+i;
+    return a + yaComexGf[k]+yaProyeccion[k]+yaNac[k]+nuevoAnticipo[k]+nuevoSaldo[k]+nuevoNac[k];
+  },0);
+  document.getElementById('v10_flujoTotal').textContent = `Próximos ${horizonte} meses: ${fmt(totalFwd)} en USD nominal (mercancía + nacionalización estimada, ya pedido + pedidos nuevos proyectados).`;
+
+  // ---- 10.3 Detalle ----
+  function poblarSelect(id, valores){
+    const sel = document.getElementById(id);
+    if(sel.dataset.poblado) return;
+    valores.forEach(v=> sel.innerHTML += `<option value="${v}">${v}</option>`);
+    sel.dataset.poblado='1';
+  }
+  poblarSelect('f10_familia', FAMILIAS_ORDEN);
+  poblarSelect('f10_proveedor', [...new Set(pedidosNuevos.map(p=>p.proveedor))].sort());
+  function pintarDetalle(){
+    const fFam = document.getElementById('f10_familia').value;
+    const fProv = document.getElementById('f10_proveedor').value;
+    const filas = pedidosNuevos.filter(p=>(!fFam||p.familia===fFam)&&(!fProv||p.proveedor===fProv)).sort((a,b)=>a.fechaPedido-b.fechaPedido);
+    let html = '<tr><th>Familia</th><th>Proveedor</th><th>Mes a cubrir</th><th>Ton.</th><th>Fecha Pedido</th><th>Fecha Zarpe</th><th>Fecha Arribo</th><th>Pago Anticipo</th><th>Pago Saldo</th><th>Nacionalización (fecha / USD)</th><th>Valor USD</th><th>% Anticipo</th></tr>';
+    filas.forEach(p=>{
+      html += `<tr class="${p.retrasado?'row-bad':''}"><td class="txt">${p.familia}</td><td class="txt">${p.proveedor}</td><td class="txt">${fmtMesLabel(p.mesNecesidad)}</td><td>${fmtTon(p.kg)}</td>
+        <td>${fmtDate(p.fechaPedido)}</td><td>${fmtDate(p.fechaZarpe)}</td><td>${fmtDate(p.fechaArribo)}</td><td>${fmtDate(p.fechaPagoAnticipo)}</td><td>${fmtDate(p.fechaPagoSaldo)}</td><td>${fmtDate(p.fechaNac)} / ${fmt(p.montoNacUsd)}</td>
+        <td>${fmt(p.valorUsd)}</td><td>${fmtPct(p.pctAnticipo)}</td></tr>`;
+    });
+    html += `<tr style="background:var(--paper);font-weight:700;"><td class="txt" colspan="3">TOTAL</td><td>${fmtTon(filas.reduce((a,p)=>a+p.kg,0))}</td><td colspan="6"></td><td>${fmt(filas.reduce((a,p)=>a+p.valorUsd,0))}</td><td></td></tr>`;
+    document.getElementById('tbl_v10_detalle').innerHTML = html;
+  }
+  document.getElementById('f10_familia').onchange = pintarDetalle;
+  document.getElementById('f10_proveedor').onchange = pintarDetalle;
+  document.getElementById('v10_horizonte').onchange = renderView10;
+  pintarDetalle();
+
+  // ---- 10.4 Mix Familia -> Proveedor ----
+  let htmlMix = '<tr><th>Familia</th><th>Proveedor</th><th>% del Kg histórico (re-normalizado)</th><th>Kg histórico</th></tr>';
+  FAMILIAS_ORDEN.forEach(fam=>{
+    (M.mixFamiliaProveedor[fam]||[]).forEach(m=>{
+      htmlMix += `<tr><td class="txt">${fam}</td><td class="txt">${m.proveedor}</td><td>${fmtPct(m.share)}</td><td>${fmtTon(m.kgHistorico)}</td></tr>`;
+    });
+  });
+  document.getElementById('tbl_v10_mix').innerHTML = htmlMix;
+
+  // ---- Narrativa ----
+  const familiasConGap = [...new Set(pedidosNuevos.map(p=>p.familia))];
+  document.getElementById('v10_narrativa').innerHTML = pedidosNuevos.length
+    ? `En los próximos ${horizonte} meses se proyectan <b>${pedidosNuevos.length}</b> pedidos nuevos (${familiasConGap.join(', ')||'—'}) por un total de <b>${fmtTon(pedidosNuevos.reduce((a,p)=>a+p.kg,0))}</b> y ${fmt(pedidosNuevos.reduce((a,p)=>a+p.valorUsd,0))} USD.` +
+      (alertasRetraso.length ? ` <b style="color:var(--red);">${alertasRetraso.length} de ellos ya deberían haberse colocado hoy</b> — ver panel de alertas arriba.` : ' Ninguno está retrasado con el lead time actual.')
+    : `Con el PPTO y el horizonte actual, lo ya pedido (Vista 9) alcanza a cubrir la venta presupuestada — no se proyecta ningún pedido nuevo.`;
+
+  // ---- Descargar a Excel ----
+  document.getElementById('v10_descargar').onclick = function(){
+    const wb = XLSX.utils.book_new();
+    const filasDet = [['Familia','Proveedor','Mes a cubrir','Ton','Fecha Pedido','Fecha Zarpe','Fecha Arribo','Pago Anticipo','Pago Saldo','Fecha Nacionalización','Monto Anticipo USD','Monto Saldo USD','Monto Nacionalización USD','Valor Total USD','% Anticipo','Retrasado']];
+    pedidosNuevos.forEach(p=> filasDet.push([p.familia, p.proveedor, fmtMesLabel(p.mesNecesidad), Number(p.ton.toFixed(3)),
+      fmtDate(p.fechaPedido), fmtDate(p.fechaZarpe), fmtDate(p.fechaArribo), fmtDate(p.fechaPagoAnticipo), fmtDate(p.fechaPagoSaldo), fmtDate(p.fechaNac),
+      Number(p.montoAnticipoUsd.toFixed(2)), Number(p.montoSaldoUsd.toFixed(2)), Number(p.montoNacUsd.toFixed(2)),
+      Number(p.valorUsd.toFixed(2)), Number((p.pctAnticipo*100).toFixed(1)), p.retrasado?'SÍ':'NO']));
+    const wsDet = XLSX.utils.aoa_to_sheet(filasDet);
+    XLSX.utils.book_append_sheet(wb, wsDet, 'Pedidos Nuevos');
+    const filasNec = [['Mes','Familia','PPTO Ventas (Ton)','Ya cubierto (Ton)','Faltante (Ton)','Pedido nuevo (Ton)']];
+    mesesConDato.forEach(m=>{
+      const ppto = M.pptoPorMes[m]; const cubierto = llegadasIdx[m];
+      FAMILIAS_ORDEN.forEach(fam=>{
+        const necesidad = ppto[fam]||0; if(necesidad<=0) return;
+        const cubTon = (cubierto?(cubierto.cierto[fam]||0)+(cubierto.estimado[fam]||0):0)/1000;
+        const nuevoTon = pedidosNuevos.filter(p=>p.mesNecesidad===m&&p.familia===fam).reduce((a,p)=>a+p.ton,0);
+        filasNec.push([fmtMesLabel(m), fam, Number(necesidad.toFixed(2)), Number(cubTon.toFixed(2)), Number(Math.max(0,necesidad-cubTon).toFixed(2)), Number(nuevoTon.toFixed(2))]);
+      });
+    });
+    const wsNec = XLSX.utils.aoa_to_sheet(filasNec);
+    XLSX.utils.book_append_sheet(wb, wsNec, 'Necesidad por Mes');
+    XLSX.writeFile(wb, `Pedidos_Nuevos_Proyectados_${fmtDate(new Date())}.xlsx`);
+  };
+}
+
 function renderDiag(){
   const c = MODEL.conteos;
   const rows = [
@@ -1861,6 +2214,28 @@ function renderDiag(){
   })();
   if(arribadosSinNacDiag.length) advs.push(`${arribadosSinNacDiag.length} proyecto(s) ya arribaron y no tienen registro en la hoja de Nacionalización — posible pago pendiente de registrar (ver Vista 7 · Nacionalización): ` +
     arribadosSinNacDiag.slice(0,10).map(s=>s.proyecto).join(', ') + (arribadosSinNacDiag.length>10?'…':''));
+
+  // Pedidos con MUCHOS parciales proyectados (Vista 4, Grupo A/B) — señal de que "capacidad de embarque"
+  // (mediana histórica de Kg/parcial de ese proveedor en pedidos YA completados) puede no ser representativa
+  // para ESTE pedido, si es mucho más grande de lo típico: numParcialesPorCapacidad = techo(Kg del pedido ÷
+  // capacidad), y cada parcial adicional encadena ~1 mes más (avgEntreParciales) — con 12-15 parciales
+  // proyectados, la cadena fácilmente se va 1-1.5 años hacia adelante. Esto NO es necesariamente un error de
+  // dato: puede ser un pedido genuinamente grande para ese proveedor — pero merece revisión puntual, no
+  // asumir que el pronóstico está bien solo porque no lanza ningún error.
+  const UMBRAL_PARCIALES_SOSPECHOSO = 4;
+  const conMuchosParciales = [
+    ...MODEL.grupoA.filter(p=>!p.sinFechaBase && (p.numParcialesEstimados||0)>=UMBRAL_PARCIALES_SOSPECHOSO).map(p=>({...p, n:p.numParcialesEstimados})),
+    ...MODEL.grupoB.filter(p=>!p.sinFechaBase && (p.numParcialesFaltantes||0)>=UMBRAL_PARCIALES_SOSPECHOSO).map(p=>({...p, n:p.numParcialesFaltantes})),
+  ].sort((a,b)=>b.n-a.n);
+  if(conMuchosParciales.length){
+    const capPorProv = {}; (MODEL.estadProveedor||[]).forEach(e=>capPorProv[e.proveedor]=e.capacidad);
+    advs.push(`${conMuchosParciales.length} pedido(s) proyectan ${UMBRAL_PARCIALES_SOSPECHOSO} o más parciales pendientes — revisar si la "capacidad de embarque" típica de ese proveedor (mediana histórica de sus pedidos ya completados) sigue siendo representativa para un pedido de este tamaño, o si en la práctica se consolidaría en menos envíos más grandes: ` +
+      conMuchosParciales.slice(0,10).map(p=>{
+        const ultimoParcial = p.parciales[p.parciales.length-1];
+        const cap = capPorProv[p.proveedor];
+        return `${p.pedido} (${p.proveedor}: ${fmtTon(p.pedidoKg||0)} pedidas ÷ capacidad típica ${cap?fmtTon(cap):'sin dato'}/embarque → ${p.n} parciales proyectados, el último llegando ${fmtDate(ultimoParcial?.fechaArriboEstimada)})`;
+      }).join('; ') + (conMuchosParciales.length>10?'…':''));
+  }
   const diagPanel = document.getElementById('tbl_diag').closest('.panel');
   let advBox = document.getElementById('adv_toneladas');
   if(!advBox){ advBox = document.createElement('div'); advBox.id='adv_toneladas'; advBox.className='note'; diagPanel.appendChild(advBox); }
@@ -1897,12 +2272,20 @@ function renderKPIs(){
   const enAnio = fecha => anioSel==='todos' || (fecha && fecha.getFullYear().toString()===anioSel);
 
   const pedidosAnio = M.pedidos.filter(p=>enAnio(p.fechaPedido));
+  const pedidosAnioSet = new Set(pedidosAnio.map(p=>p.pedido));
   const enProduccion = pedidosAnio.filter(p=>p.estatusPedido==='EN PRODUCCIÓN');
   const conParcial = pedidosAnio.filter(p=>p.estatusPedido==='CON ENTREGA PARCIAL');
   const completados = pedidosAnio.filter(p=>p.estatusPedido==='COMPLETADO');
 
-  const comexAnio = M.spAll.filter(s=>enAnio(s.fechaBL||s.fechaRealZarpe));
-  const comexAnioUnico = M.spUnico.filter(s=>enAnio(s.fechaBL||s.fechaRealZarpe));
+  // Navegando/Arribado: SIEMPRE sobre la cohorte "pedidos de este período" (por fechaPedido del PEDIDO
+  // padre) — NO por la fecha de zarpe/BL de cada envío. Antes se filtraba por fechaBL/fechaRealZarpe, lo
+  // que mezclaba, dentro de la "Visión del año" seleccionada, embarques de pedidos COLOCADOS EN OTRO AÑO
+  // (ej. un pedido de 2025 que zarpa en 2026 inflaba el "Arribado" de 2026 sin nunca contarse en "Pedidos
+  // del período" de 2026) — detectado por Sebastián al comparar Ton. Pedidas contra la suma de En
+  // Producción + Navegando + Arribado, que no cuadraba. Misma metodología que ya usa, y documenta, la
+  // tabla "Estadísticas por mes" de Vista 2 — ahora es una sola fuente de verdad para esta reconciliación.
+  const comexAnio = M.spAll.filter(s=>pedidosAnioSet.has(s.pedido));
+  const comexAnioUnico = M.spUnico.filter(s=>pedidosAnioSet.has(s.pedido));
   const navegando = comexAnioUnico.filter(s=>s.estatusProyecto==='NAVEGANDO'); // conteos/toneladas: SIEMPRE con spUnico
   const arribados = comexAnioUnico.filter(s=>s.estatusProyecto==='ARRIBADO');
   const navegandoValor = comexAnio.filter(s=>s.estatusProyecto==='NAVEGANDO'); // $ USD: con spAll completo (cada línea de factura suma)
@@ -1910,7 +2293,6 @@ function renderKPIs(){
 
   const valorPedidosAnio = pedidosAnio.reduce((a,p)=>a+p.valorPedido,0);
   const tonPedidosAnio = pedidosAnio.reduce((a,p)=>a+(p.pedidoKg||0),0);
-  const tonEnProduccion = enProduccion.reduce((a,p)=>a+(p.pedidoKg||0),0);
   const valorEnProduccion = enProduccion.reduce((a,p)=>a+p.valorPedido,0);
   const tonPendienteParcial = conParcial.reduce((a,p)=>a+(p.saldoKg||0),0);
   const valorPendienteParcial = conParcial.reduce((a,p)=>a+p.saldoPendienteProyectos,0);
@@ -1918,6 +2300,14 @@ function renderKPIs(){
   const valorNavegando = navegandoValor.reduce((a,s)=>a+(s.valorFactura||0),0);
   const tonArribado = arribados.reduce((a,s)=>a+(s.pesoBrutoKg||s.entregadoKg||0),0);
   const valorArribado = arribadosValor.reduce((a,s)=>a+(s.valorFactura||0),0);
+  // "En Producción" en TONELADAS se muestra como RESIDUAL (Pedidas − Navegando − Arribado), no como una
+  // suma independiente de pedidoKg de los pedidos con estatus 'EN PRODUCCIÓN' — así la identidad
+  // Ton. Pedidas = Ton. En Producción + Ton. Navegando + Ton. Arribado se cumple SIEMPRE, por construcción,
+  // igual que en Vista 2. El conteo (#) y el valor USD de la tarjeta "En Producción" siguen siendo la
+  // partición por pedido completo (pedidos con 0% entregado) — es una lectura distinta (cuántos PEDIDOS,
+  // no cuántas toneladas), y no tiene por qué cuadrar en USD contra Navegando+Arribado (esos son valor
+  // FACTURADO por embarque, que puede diferir del valor de la proforma completa).
+  const tonEnProduccion = Math.max(0, tonPedidosAnio - tonNavegando - tonArribado);
 
   // Lead time promedio REAL, ponderado por toneladas entregadas (igual metodología que "Desempeño por proveedor")
   const leadEventos = comexAnioUnico.filter(s=>s.estatusProyecto==='ARRIBADO' && s.fechaRealArribo)
@@ -2046,7 +2436,99 @@ function consolidarLlegadasPorMes(llegadas, diaGabela){
   return Object.values(meses).sort((a,b)=>a.mes.localeCompare(b.mes));
 }
 
-function computeFlujoCaja(M, horizonte, arancelPct=0.05, ivaPct=0.19){
+// ================= PEDIDOS NUEVOS PROYECTADOS (Vista 10) =================
+// Motor de "cuánto pedir y cuándo", para cubrir el PPTO de ventas por familia en la parte que NO alcanza a
+// cubrir lo que ya está pedido (confirmado + estimado, Vista 9). Construido 16-sep-2026 a pedido de Sebastián,
+// para reemplazar el modelaje de "pedidos nuevos" del Kardex de Excel — que tenía un error real: calculaba un
+// "Tiempo total ponderado" pero nunca lo conectaba con las fechas de llegada, y anclaba el pago del saldo al
+// mes de LLEGADA en vez de al ZARPE. Aquí se modela en el mismo Tablero, con las MISMAS estadísticas empíricas
+// por proveedor ya validadas en las Vistas 4 y 9 (avgPrimerZarpe, avgBlPago, diasNavegacion...) — nada de
+// Solver, nada de supuestos fijos de "3 meses" o "-2 meses".
+//
+// SIMPLIFICACIÓN EXPLÍCITA (para que quede clara, no escondida): el Tablero no tiene una foto de inventario en
+// vivo (solo compras/pagos/llegadas — no niveles de stock). Por eso la "necesidad neta de compra" de un mes se
+// calcula como PPTO de ventas de ese mes MENOS lo que ya va a llegar ese mismo mes (cierto + estimado de lo ya
+// pedido) — equivale a asumir que el inventario de seguridad se mantiene aprox. constante mes a mes. Si se
+// quiere modelar niveles de stock reales (mínimos/máximos, cobertura en días), hace falta conectar el saldo de
+// Kardex/WMS, que hoy no vive en ninguna de las dos herramientas — queda como mejora futura, no silenciada.
+function buildPedidosNuevosProyectados(M, opts={}){
+  const { horizonteMeses=12, diaGabela=20, arancelPct=0.06, ivaPct=0.19, pctAnticipoRespaldo=0.20 } = opts;
+  const HOY = new Date();
+  const llegadas = M._llegadasCache || (M._llegadasCache = buildLlegadasPorFamilia(M));
+  const llegadasPorMes = consolidarLlegadasPorMes(llegadas, diaGabela);
+  const llegadasIdx = {}; llegadasPorMes.forEach(l=> llegadasIdx[l.mes]=l);
+
+  const mesesHorizonte = [];
+  for(let i=0;i<horizonteMeses;i++){ const d=new Date(HOY.getFullYear(), HOY.getMonth()+i, 1); mesesHorizonte.push(monthKey(d)); }
+
+  const pedidosNuevos = [];   // una fila por (mes de necesidad, familia, proveedor)
+  const mesesSinPpto = [];    // meses del horizonte sin fila de PPTO publicada todavía
+  const alertasRetraso = [];  // pedidos cuya fecha de pedido calculada cae en el pasado (no se alcanza a colocar a tiempo)
+
+  mesesHorizonte.forEach(mesNecesidad=>{
+    const ppto = M.pptoPorMes[mesNecesidad];
+    if(!ppto){ mesesSinPpto.push(mesNecesidad); return; }
+    const cubierto = llegadasIdx[mesNecesidad];
+    FAMILIAS_ORDEN.forEach(familia=>{
+      const necesidadTon = ppto[familia] || 0; if(necesidadTon<=0) return;
+      const cubiertoKg = cubierto ? (cubierto.cierto[familia]||0) + (cubierto.estimado[familia]||0) : 0;
+      const gapTon = necesidadTon - (cubiertoKg/1000);
+      if(gapTon <= necesidadTon*0.02) return; // gap <2% de la necesidad del mes: tolerancia, no justifica un pedido nuevo
+
+      const mix = M.mixFamiliaProveedor[familia];
+      if(!mix || !mix.length) return; // sin proveedores históricos para esta familia — no se puede proyectar a quién pedirle (se reporta aparte, ver renderView10)
+
+      // Fecha objetivo de arribo: dentro del mes de necesidad, respetando el "día de gabela" para que
+      // mesDisponibilidad() lo cuente en ese mismo mes — consistente con el criterio ya usado en Vista 9.
+      const [yy,mm] = mesNecesidad.split('-').map(Number);
+      const diaObjetivo = Math.min(diaGabela, new Date(yy,mm,0).getDate());
+      const fechaArriboObjetivo = new Date(yy, mm-1, diaObjetivo);
+      const stats = M.statsProveedor;
+
+      mix.forEach(({proveedor, share})=>{
+        const kg = gapTon*1000*share; if(kg<=0) return;
+        const diasNav = stats.diasNavegacionProveedor(proveedor) || 45;
+        const diasPedidoAZarpe = stats.avgPrimerZarpe(proveedor) || 60;
+        let fechaZarpe = addDays(fechaArriboObjetivo, -diasNav);
+        let fechaPedido = addDays(fechaZarpe, -diasPedidoAZarpe);
+        let retrasado = false;
+        if(fechaPedido < HOY){
+          // No se puede "pedir en el pasado": se re-ancla a HOY y el zarpe/arribo se recalculan hacia
+          // adelante desde ahí — el resultado es que la mercancía llegará DESPUÉS del mes que se quería
+          // cubrir (riesgo real de desabastecimiento), y se deja marcado para que el equipo lo vea a tiempo.
+          retrasado = true;
+          fechaPedido = HOY;
+          fechaZarpe = addDays(fechaPedido, diasPedidoAZarpe);
+        }
+        const fechaArribo = addDays(fechaZarpe, diasNav);
+        const fechaPagoSaldo = addDays(fechaZarpe, stats.avgBlPago(proveedor) ?? 15); // puede ser ANTES del zarpe (avgBlPago negativo) — es real, no un error
+        const fechaPagoAnticipo = addDays(fechaPedido, stats.avgAnticipoPago(proveedor) ?? 0);
+        const pctAnt = stats.avgPctAnticipo(proveedor);
+        const pctAnticipo = (pctAnt===null || pctAnt===undefined || isNaN(pctAnt)) ? pctAnticipoRespaldo : pctAnt;
+
+        const precioUsdTon = PRECIOS_REF_USD_TON[familia] || 0;
+        const valorUsd = (kg/1000) * precioUsdTon;
+        const montoAnticipoUsd = valorUsd*pctAnticipo, montoSaldoUsd = valorUsd*(1-pctAnticipo);
+        const mesArribo = monthKey(fechaArribo);
+        const fechaNac = primeraSemanaSiguienteMes(mesArribo);
+        const montoNacUsd = valorUsd * arancelPct * (1+ivaPct); // misma fórmula y misma moneda (USD nominal) que calcularNacEstimada()
+
+        const fila = {
+          mesNecesidad, familia, proveedor, kg, ton: kg/1000,
+          fechaPedido, fechaZarpe, fechaArribo, fechaPagoAnticipo, fechaPagoSaldo, fechaNac, mesArribo,
+          retrasado, precioUsdTon, valorUsd, pctAnticipo,
+          montoAnticipoUsd, montoSaldoUsd, montoNacUsd,
+        };
+        pedidosNuevos.push(fila);
+        if(retrasado) alertasRetraso.push(fila);
+      });
+    });
+  });
+
+  return { pedidosNuevos, alertasRetraso, mesesSinPpto, mesesHorizonte };
+}
+
+function computeFlujoCaja(M, horizonte, arancelPct=0.06, ivaPct=0.19){
   const nacEst = calcularNacEstimada(M, arancelPct, ivaPct);
   const hoy = new Date();
   const mesesN = [];
@@ -2204,14 +2686,14 @@ function renderView1(){
     {label:'Pago a Giros Financieros', data:meses.map(m=>paM(m).GF_PAGO), backgroundColor:COLORS.red, stack:'s'},
   ], {scales:{x:{stacked:true}, y:{stacked:true}}}, true);
 
-  // Flujo de caja de pendientes — próximos 12 meses (mismo cálculo de Vista 4, tarifas por defecto 5%/19%)
+  // Flujo de caja de pendientes — próximos 12 meses (mismo cálculo de Vista 4, tarifas por defecto 6%/19%)
   const flujo = computeFlujoCaja(M, 12);
   barChart('c_flujoV1', flujo.mesesN, [
     {label:'Confirmado: Saldo Proyectos Comex', data:flujo.mesesN.map(m=>flujo.porMes[m].comex), backgroundColor:COLORS.navy, stack:'s'},
     {label:'Confirmado: Giros Financieros', data:flujo.mesesN.map(m=>flujo.porMes[m].gf), backgroundColor:COLORS.steel, stack:'s'},
     {label:'Proyectado: Pedidos sin parcial', data:flujo.mesesN.map(m=>flujo.porMes[m].proyA), backgroundColor:COLORS.amber, stack:'s'},
     {label:'Proyectado: Parciales incompletos', data:flujo.mesesN.map(m=>flujo.porMes[m].proyB), backgroundColor:COLORS.slate, stack:'s'},
-    {label:'Nacionalización estimada (5%/19%)', data:flujo.mesesN.map(m=>flujo.porMes[m].nac), backgroundColor:COLORS.gold, stack:'s'},
+    {label:'Nacionalización estimada (6%/19%)', data:flujo.mesesN.map(m=>flujo.porMes[m].nac), backgroundColor:COLORS.gold, stack:'s'},
   ], {scales:{x:{stacked:true}, y:{stacked:true}}, plugins:{datalabels:{display:false}}}, false, null, true);
   document.getElementById('v1_flujoTotal').textContent = `Total necesario en los próximos 12 meses: ${fmt(flujo.total)} · ajusta tarifas exactas en la Vista 4.`;
 
@@ -2220,7 +2702,7 @@ function renderView1(){
   const totalAP = M.grupoA.flatMap(p=>p.parciales).reduce((a,par)=>a+par.valorEstimado,0);
   const totalBP = M.grupoB.flatMap(p=>p.parciales).reduce((a,par)=>a+par.valorEstimado,0);
   const totalGFP = M.gfAbiertos.reduce((a,g)=>a+g.saldoReal,0);
-  const nacEstP = calcularNacEstimada(M, 0.05, 0.19);
+  const nacEstP = calcularNacEstimada(M, 0.06, 0.19);
   // Giros abiertos "sin conciliar": abiertos (saldo real > 0) cuyo estado no confirma pago conciliado.
   // Supuesto a validar con el equipo: se marca así cuando el campo "ESTADO DEL PAGO" viene vacío o no dice explícitamente "CONCILIADO".
   const girosSinConciliar = M.gfAbiertos.filter(g => !g.estado || !String(g.estado).toUpperCase().includes('CONCILIA'));
