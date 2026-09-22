@@ -3340,8 +3340,10 @@ function buildPedidosNuevosProyectados(M, opts={}){
   // red de seguridad para el caso en que la posición caiga por debajo del mínimo ENTRE dos revisiones programadas
   // (p.ej. un salto de demanda inesperado) — pero deja de ser el mecanismo principal de anticipación, porque
   // revisar y pedir cada pocas semanas ya cumple ese papel de forma más simple y fiel a como opera Imporinox.
-  const proximaRevisionPorFamilia = {};
-  FAMILIAS_ORDEN.forEach(familia=>{ proximaRevisionPorFamilia[familia] = new Date(HOY); }); // primera revisión: inmediata
+  // NOTA: la "política de revisión cada N semanas" (proximaRevisionPorFamilia/POLITICA_REVISION_SEMANAS) se
+  // retiró (Tanda 24) — ahora se revisa CADA mes, sin cadencia por familia (ver el disparador de un solo
+  // punto, más abajo). El parámetro `politicaRevisionSemanas` y sus campos en la UI (Vista 10) quedan sin
+  // efecto sobre el cálculo; se puede quitar esa sección de la UI si ya no aporta.
 
   // Construye los parciales de UN pedido candidato (una familia, un mes de necesidad, un tamaño en Ton a
   // probar), sin efectos secundarios (no toca alertasRetraso/entradasNuevasFuturasPorMes/pedidosNuevos) — se
@@ -3471,7 +3473,6 @@ function buildPedidosNuevosProyectados(M, opts={}){
     const cubierto = llegadasIdx[mesNecesidad];
     const invReal = M.inventarioInicialPorMes[mesNecesidad];
     const [yyM, mmM] = mesNecesidad.split('-').map(Number);
-    const inicioMes = new Date(yyM, mmM-1, 1), inicioMesSiguiente = new Date(yyM, mmM, 1);
     FAMILIAS_ORDEN.forEach(familia=>{
       const necesidadTon = ppto[familia] || 0; // PPTO de ventas (Ton) — se sigue usando para el flujo de caja y como respaldo de "venta del mes" cuando no hay venta real deducida
       const cubiertoYaPedidoKg = cubierto ? (cubierto.cierto[familia]||0) + (cubierto.estimado[familia]||0) : 0;
@@ -3496,83 +3497,44 @@ function buildPedidosNuevosProyectados(M, opts={}){
       const mix = M.mixFamiliaProveedor[familia];
       const idxMesNecesidad = mesesHorizonte.indexOf(mesNecesidad);
 
-      // 22-sep — Disparador: REVISIÓN PROGRAMADA (política por familia, POLITICA_REVISION_SEMANAS) como
-      // mecanismo PRINCIPAL, con el disparador reactivo (posición < mínimo) como red de seguridad para el caso
-      // en que algo se salga de la banda entre dos revisiones. Se avanza `proximaRevisionPorFamilia[familia]`
-      // en pasos de `intervaloSemanas` hasta salir del mes actual, marcando si alguno de esos pasos cayó DENTRO
-      // del mes (puede no caer ninguno, si el intervalo es más largo que un mes — ej. Otros Productos a veces
-      // salta un mes entero, por diseño de su cadencia de 11 semanas).
-      const intervaloSemanas = politicaRevisionSemanas[familia] || POLITICA_REVISION_SEMANAS[familia] || 4;
-      let revisionProgramadaEsteMes = false;
-      while(proximaRevisionPorFamilia[familia] < inicioMesSiguiente){
-        if(proximaRevisionPorFamilia[familia] >= inicioMes) revisionProgramadaEsteMes = true;
-        proximaRevisionPorFamilia[familia] = addDays(proximaRevisionPorFamilia[familia], intervaloSemanas*7);
-      }
-      const disparaPorReactivo = necesidadTon>0 && mix && mix.length>0 && posicionInicio < bandaMin - 1e-6;
-      const disparaPedido = (necesidadTon>0 && mix && mix.length>0) && (revisionProgramadaEsteMes || disparaPorReactivo);
-      // Si el disparo fue reactivo (fuera de calendario, señal de un salto de demanda entre revisiones), se
-      // corre la próxima revisión programada un intervalo completo desde este mes — para no acumular un pedido
-      // de emergencia y uno programado casi seguidos, sin coordinarse entre sí.
-      if(disparaPedido && !revisionProgramadaEsteMes){
-        proximaRevisionPorFamilia[familia] = addDays(inicioMes, intervaloSemanas*7);
-      }
-
-      // Dimensionamiento del pedido — Tanda 18 (corrige un defecto real de la Tanda 17, encontrado por
-      // Sebastián con su propia corrida: Láminas cae por debajo del mínimo hacia jun-ago-27 pese a la revisión
-      // periódica). El objetivo ya NO se mide contra "el mes siguiente" fijo, sino contra el mes que está a
-      // Lmeses de distancia, donde Lmeses = lead time REAL de cierre completo de la familia
-      // (leadTimeCierreDiasFamilia, arriba) redondeado a meses — exactamente la lógica clásica de un punto de
-      // reorden con lead time L: lo que se pide HOY solo puede llegar dentro de L meses, así que hay que medir
-      // la posición contra la necesidad de DENTRO DE L MESES, no la de dentro de 1. Con Lmeses=1 (lead time
-      // corto, ≤1 mes) esto converge EXACTO a la fórmula de la Tanda 17. La primera versión de este fix (mirar
-      // "el peor mes de una ventana") tenía un defecto: al proyectar sin pedidos nuevos adicionales, el déficit
-      // crece monótonamente mientras más lejos se mire, así que "el peor mes" siempre terminaba siendo el
-      // último de la ventana — daba el resultado correcto por una razón incorrecta. Medir directo contra
-      // mes+Lmeses (no buscar el peor) es la formulación correcta y evita ese artefacto.
-      let pedidoTon = 0, fechaArriboObjetivo = null, mesObjetivoPedido = null, huecoNoCerradoEnVentanaTon = 0;
-      if(disparaPedido){
+      // 22-sep, Tanda 24 (reemplaza la política de "revisión periódica cada N semanas" — Sebastián pidió algo
+      // más simple y literal): CADA mes se revisa (sin cadencia por familia). Se calcula A = lead time real de
+      // cierre de esa familia (leadTimeCierreDiasFamilia) ÷ 30, redondeado a meses, y se proyecta la posición
+      // — SIN pedidos nuevos adicionales a los ya decididos en meses anteriores de este mismo cálculo — en el
+      // mes Mi+A. Si esa posición cae bajo 1.8× la venta de Mi+A, se dispara el pedido AHORA (en Mi), sizeado
+      // hasta 2.15× la venta de Mi+A (order-up-to). Esto es justo el clásico punto de reorden con lead time A:
+      // lo que se pide hoy solo puede llegar dentro de A meses, así que hay que medir la posición contra la
+      // necesidad de DENTRO DE A MESES, no la de hoy — y hay que mirarlo TODOS los meses, no cada tanto, para
+      // no dejar puntos ciegos entre revisiones.
+      let Lmeses = 1, mesObjetivoPedido = mesNecesidad, deficitBase = 0, fechaArriboObjetivo = null;
+      if(mix && mix.length>0 && necesidadTon>0){
         const leadDias = leadTimeCierreDiasFamilia(mix, ventaBase*(BANDA_INVENTARIO_OBJETIVO-BANDA_INVENTARIO_MIN), familia);
-        const Lmeses = Math.max(1, Math.round(leadDias/30));
-        const mesInmediatoSiguiente = mesesHorizonte[idxMesNecesidad+1] || mesNecesidad;
-        // 22-sep, Tanda 23 (a pedido de Sebastián, con evidencia real: Láminas no pedía hasta nov-26 pese a
-        // que la posición ya venía cayendo desde sep-26): medir el déficit en UN SOLO punto (mes+Lmeses, Tanda
-        // 18) tiene un punto ciego — si el quiebre real de inventario cae DESPUÉS de ese punto puntual, no se ve
-        // todavía en la revisión de hoy, y solo se detecta cuando, revisión a revisión, el punto Lmeses-adelante
-        // se acerca lo suficiente al quiebre real. Eso es exactamente lo que producía pedidos tardíos y grandes
-        // (aparecían de golpe varias revisiones después) en vez de anticiparse desde la primera revisión posible.
-        // Fix: escanear TODA la ventana entre mes+1 y mes+Lmeses+(1 ciclo de revisión) — no solo el punto
-        // Lmeses — y dimensionar contra el PEOR déficit encontrado en esa ventana, sea cual sea el mes exacto
-        // donde caiga. La ventana se acota (no es todo el horizonte) a propósito: un lookahead sin límite repite
-        // el artefacto ya descartado en la Tanda 17 ("el peor mes siempre es el último", porque sin pedidos
-        // nuevos el déficit crece monótonamente cuanto más lejos se mire) — acotar a Lmeses+1 ciclo de revisión
-        // da margen para ver más allá del punto único sin caer en ese artefacto.
-        const mesesExtraVentana = Math.max(1, Math.ceil(intervaloSemanas/4.33));
-        const idxVentanaFin = Math.min(mesesHorizonte.length-1, idxMesNecesidad + Lmeses + mesesExtraVentana);
-        // ambos tipos de "entrada ya en camino" cuentan: pedidos NUEVOS decididos en revisiones anteriores de
-        // este mismo cálculo (entradasNuevasFuturasPorMes) Y pedidos YA colocados antes de correr el Tablero
-        // (llegadasIdx, el mismo índice de "ya pedido" que usa cada mes para su propio posicionInicio) —
-        // omitir este segundo grupo subestimaría lo que de verdad va a llegar y sobre-dimensionaría el pedido.
+        Lmeses = Math.max(1, Math.round(leadDias/30));
+        const idxChequeo = Math.min(mesesHorizonte.length-1, idxMesNecesidad + Lmeses);
+        mesObjetivoPedido = mesesHorizonte[idxChequeo];
         const entradasYaPedidoTon = (mesX)=>{ const c = llegadasIdx[mesX]; return c ? ((c.cierto[familia]||0)+(c.estimado[familia]||0))/1000 : 0; };
-        let posicionProyectada = posicionInicio - necesidadTon; // cierre de este mes
-        let peorDeficit = -Infinity, mesPeorDeficit = null;
-        for(let k=idxMesNecesidad+1; k<=idxVentanaFin; k++){
+        let posicionProyectada = posicionInicio - necesidadTon; // cierre de este mes (Mi)
+        for(let k=idxMesNecesidad+1; k<=idxChequeo; k++){
           const mesK = mesesHorizonte[k];
           const pptoK = M.pptoPorMes[mesK];
           const ventaK = (pptoK && pptoK[familia]>0) ? pptoK[familia] : ventaBase;
           const entradasK = (entradasNuevasFuturasPorMes[mesK] && entradasNuevasFuturasPorMes[mesK][familia]) || 0;
           posicionProyectada = posicionProyectada + entradasK + entradasYaPedidoTon(mesK) - ventaK;
-          const deficitK = BANDA_INVENTARIO_OBJETIVO*ventaK - posicionProyectada;
-          if(deficitK > peorDeficit){ peorDeficit = deficitK; mesPeorDeficit = mesK; }
         }
-        // Si el horizonte no alcanza (cola del horizonte, u horizontes de prueba cortos), se degrada con
-        // gracia al último mes disponible — nunca peor que el comportamiento de la Tanda 17.
-        mesObjetivoPedido = mesPeorDeficit || mesesHorizonte[mesesHorizonte.length-1] || mesNecesidad;
-        const deficitBase = Math.max(0, peorDeficit);
+        const pptoChequeo = M.pptoPorMes[mesObjetivoPedido];
+        const ventaChequeo = (pptoChequeo && pptoChequeo[familia]>0) ? pptoChequeo[familia] : ventaBase;
+        if(posicionProyectada < BANDA_INVENTARIO_MIN*ventaChequeo - 1e-6){
+          deficitBase = Math.max(0, BANDA_INVENTARIO_OBJETIVO*ventaChequeo - posicionProyectada);
+          const [yyO, mmO] = mesObjetivoPedido.split('-').map(Number);
+          const diaObjetivo = Math.min(diaGabela, new Date(yyO, mmO, 0).getDate());
+          fechaArriboObjetivo = new Date(yyO, mmO-1, diaObjetivo);
+        }
+      }
+      const mesInmediatoSiguiente = mesesHorizonte[idxMesNecesidad+1] || mesNecesidad;
+      const disparaPedido = deficitBase > 0;
 
-        const [yyO, mmO] = mesObjetivoPedido.split('-').map(Number);
-        const diaObjetivo = Math.min(diaGabela, new Date(yyO, mmO, 0).getDate());
-        fechaArriboObjetivo = new Date(yyO, mmO-1, diaObjetivo);
-
+      let pedidoTon = 0, huecoNoCerradoEnVentanaTon = 0;
+      if(disparaPedido){
         // El dimensionamiento consciente de parciales (inflar el candidato para que más Ton. lleguen a tiempo
         // al mes objetivo) solo se activa cuando la anticipación real está en juego (mesObjetivoPedido va más
         // allá de "el mes siguiente") — para el caso base (Lmeses=1 efectivo, igual que la Tanda 17) el
@@ -3647,8 +3609,7 @@ function buildPedidosNuevosProyectados(M, opts={}){
 
       inventarioPorMes.push({mes:mesNecesidad, familia, invInicial, esReal: !!tieneInvReal,
         posicionInicio, ventaBase, ventaRealDeducida: ventaRealMes>0?ventaRealMes:null, bandaMin, bandaObjetivo, pedidoTon, disparaPedido,
-        revisionProgramada: revisionProgramadaEsteMes, disparoReactivo: disparaPorReactivo,
-        mesObjetivoPedido: disparaPedido ? mesObjetivoPedido : null, // Tanda 18: mes real que este pedido busca cubrir (puede ser varios meses adelante, no siempre "el siguiente")
+        Lmeses, mesObjetivoPedido: disparaPedido ? mesObjetivoPedido : null, // A = meses de anticipación (lead time real de cierre de la familia ÷30) usado en el chequeo de un solo punto
         huecoNoCerradoEnVentanaTon: disparaPedido ? huecoNoCerradoEnVentanaTon : 0});
 
       inventarioCorriente[familia] = Math.max(0, posicionInicio - necesidadTon + tonLlegaEsteMes);
