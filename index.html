@@ -1485,6 +1485,23 @@ function buildModel({profRaw, spRaw, pgRaw, gfRaw, nacRaw, pedDetRaw, impRaw, pp
   const conBL = enriquecidosUnico.filter(e=>e.fechaBL).sort((a,b)=> (a.pedido+a.fechaBL.toISOString()).localeCompare(b.pedido+b.fechaBL.toISOString()));
   const gap1PorProveedor = {};      // gap entre el 1er y el 2do parcial (suele ser el más largo)
   const gap2PlusPorProveedor = {};  // gaps entre parciales subsiguientes (2do→3ro, 3ro→4to...), agrupados por muestra
+  // 23-sep, Tanda 20 (segunda causa raíz, encontrada verificando el fix de arriba con datos de prueba): el
+  // respaldo GLOBAL_gap1/GLOBAL_gap2Plus original agrupa las observaciones de TODOS los proveedores de TODAS
+  // las Familias juntas. Un proveedor de Láminas que hasta ahora nunca necesitó 2do parcial (0 muestra propia)
+  // caía a ese mismo pool global — que puede estar dominado por proveedores de Tubos/Perfiles con patrones de
+  // embarque naturalmente distintos (más lentos o más rápidos). Eso significa que aumentar el tamaño de pedido
+  // de una Familia (Tanda 18/19) puede terminar heredando el ritmo de otra Familia sin relación. Se agrega un
+  // respaldo intermedio por Familia (más específico que el global de todo el Tablero, más robusto que un solo
+  // proveedor con poca muestra): familiaPorPedido asigna cada pedido a la Familia de mayor Kg entre sus grupos.
+  const familiaPorPedido = {};
+  ton.grupos.forEach(g=>{
+    const pedidoCod = ton.proformaToPedido[g.proforma]; if(!pedidoCod) return;
+    const actual = familiaPorPedido[pedidoCod];
+    if(!actual || (g.cantidadPedidaKg||0) > actual.kg) familiaPorPedido[pedidoCod] = {familia:g.familia, kg:g.cantidadPedidaKg||0};
+  });
+  const familiaDePedido = (pedido)=> familiaPorPedido[pedido] ? familiaPorPedido[pedido].familia : null;
+  const gap1PorProveedorFamilia = {};      // {familia: {proveedor: [...]}}
+  const gap2PlusPorProveedorFamilia = {};
   let lastByPedido = {}, posByPedido = {};
   conBL.forEach(e=>{
     const prev = lastByPedido[e.pedido];
@@ -1494,6 +1511,13 @@ function buildModel({profRaw, spRaw, pgRaw, gfRaw, nacRaw, pedDetRaw, impRaw, pp
       const destino = pos===1 ? gap1PorProveedor : gap2PlusPorProveedor;
       destino[e.proveedor] = destino[e.proveedor] || [];
       destino[e.proveedor].push({valor:d, fecha:e.fechaBL});
+      const fam = familiaDePedido(e.pedido);
+      if(fam){
+        const destinoFam = pos===1 ? gap1PorProveedorFamilia : gap2PlusPorProveedorFamilia;
+        destinoFam[fam] = destinoFam[fam] || {};
+        destinoFam[fam][e.proveedor] = destinoFam[fam][e.proveedor] || [];
+        destinoFam[fam][e.proveedor].push({valor:d, fecha:e.fechaBL});
+      }
     }
     lastByPedido[e.pedido] = e.fechaBL;
   });
@@ -1501,12 +1525,53 @@ function buildModel({profRaw, spRaw, pgRaw, gfRaw, nacRaw, pedDetRaw, impRaw, pp
   const GLOBAL_blPago = weightedMean(enriquecidosUnico.filter(e=>e.diasBLPago!==null).map(e=>({valor:e.diasBLPago, fecha:saldoPagoRealPorProyecto[e.proyecto]||e.fechaBL})));
   const GLOBAL_gap1 = weightedMean(Object.values(gap1PorProveedor).flat());
   const GLOBAL_gap2Plus = weightedMean(Object.values(gap2PlusPorProveedor).flat());
+  const GLOBAL_gap1PorFamilia = {};
+  Object.keys(gap1PorProveedorFamilia).forEach(fam=>{ GLOBAL_gap1PorFamilia[fam] = weightedMean(Object.values(gap1PorProveedorFamilia[fam]).flat()); });
+  const GLOBAL_gap2PlusPorFamilia = {};
+  Object.keys(gap2PlusPorProveedorFamilia).forEach(fam=>{ GLOBAL_gap2PlusPorFamilia[fam] = weightedMean(Object.values(gap2PlusPorProveedorFamilia[fam]).flat()); });
 
-  function avgProformaPago(prov){ const v = porProveedor[prov]; return v && v.proformaPago.length? weightedMean(v.proformaPago) : GLOBAL_proformaPago; }
-  function avgBlPago(prov){ const v = porProveedor[prov]; return v && v.blPago.length? weightedMean(v.blPago) : GLOBAL_blPago; }
-  function avgGap1(prov){ const v = gap1PorProveedor[prov]; return (v&&v.length) ? weightedMean(v) : GLOBAL_gap1; }
-  function avgGap2Plus(prov){ const v = gap2PlusPorProveedor[prov]; return (v&&v.length) ? weightedMean(v) : (GLOBAL_gap2Plus||GLOBAL_gap1); }
-  function avgEntreParciales(prov, posicion){ return posicion<=1 ? avgGap1(prov) : avgGap2Plus(prov); } // posicion: 1=hacia el 2do parcial, 2+=subsiguientes
+  // 23-sep, Tanda 20 — bug real y grave encontrado por Sebastián con datos reales (fechas de parciales
+  // saltando a los años 2053/2054 en Vista 10.3): estas 4 funciones caían al respaldo GLOBAL solo cuando el
+  // proveedor tenía CERO observaciones propias (`v.length`, verdadero con solo 1), a diferencia de
+  // avgPrimerZarpe (más abajo) y de todo el resto del Tablero, que exigen `>=MIN_MUESTRA` (5) antes de confiar
+  // en un segmento. Con 1-4 observaciones, UNA sola fecha mal cargada en el Sheet (o un evento atípico real)
+  // dominaba el promedio de ESE proveedor sin ningún contrapeso — y `pesoRecencia` no descarta ni penaliza una
+  // fecha inconsistente, solo la pondera por qué tan reciente es. Esto estaba dormido para proveedores que
+  // hasta ahora solo necesitaban 1 parcial (nunca se llamaba avgGap1/avgGap2Plus); la Tanda 18/19 aumentó el
+  // tamaño típico de los pedidos y expuso el hueco para varios proveedores de Tubos que antes nunca lo
+  // disparaban. Corregido: mismo umbral `>=MIN_MUESTRA` que ya usa avgPrimerZarpe.
+  function avgProformaPago(prov){ const v = porProveedor[prov]; return v && v.proformaPago.length>=MIN_MUESTRA? weightedMean(v.proformaPago) : GLOBAL_proformaPago; }
+  function avgBlPago(prov){ const v = porProveedor[prov]; return v && v.blPago.length>=MIN_MUESTRA? weightedMean(v.blPago) : GLOBAL_blPago; }
+  // `familia` (opcional): cuando se conoce (Vista 10, pedidos nuevos proyectados), el respaldo por falta de
+  // muestra propia usa primero el promedio GLOBAL DE ESA FAMILIA (más específico, evita heredar el ritmo de
+  // embarque de una Familia distinta) y solo cae al global de todo el Tablero si esa Familia tampoco tiene
+  // datos propios. Sin `familia` (llamadas históricas de Grupo A/B, compatibilidad hacia atrás), se comporta
+  // exactamente igual que antes.
+  function avgGap1(prov, familia){
+    const v = gap1PorProveedor[prov]; if(v&&v.length>=MIN_MUESTRA) return weightedMean(v);
+    if(familia && GLOBAL_gap1PorFamilia[familia]!=null) return GLOBAL_gap1PorFamilia[familia];
+    return GLOBAL_gap1;
+  }
+  function avgGap2Plus(prov, familia){
+    const v = gap2PlusPorProveedor[prov]; if(v&&v.length>=MIN_MUESTRA) return weightedMean(v);
+    if(familia && GLOBAL_gap2PlusPorFamilia[familia]!=null) return GLOBAL_gap2PlusPorFamilia[familia];
+    return GLOBAL_gap2Plus||GLOBAL_gap1;
+  }
+  // Segunda línea de defensa (no solo el umbral de muestra de arriba): un tope duro sobre el gap entre
+  // parciales que de verdad se usa para encadenar fechas de zarpe. Aunque GLOBAL_gap1/GLOBAL_gap2Plus agrupan
+  // TODOS los proveedores (mucho más robusto que el promedio de uno solo), no hay garantía absoluta de que el
+  // Sheet nunca tenga una fecha corrupta que también contamine el global — y en una herramienta de flujo de
+  // caja, un salto de fecha de décadas (lo que reportó Sebastián) es demasiado costoso para dejarlo solo al
+  // umbral de muestra. El histórico real ya validado (Tanda 17: gaps de 20-50 días, cierre total ponderado
+  // ~155 días/5 meses para los 3 proveedores de mayor volumen) nunca se acerca a este tope — es una barrera de
+  // seguridad, no un valor que se espere alcanzar en operación normal. Ajustable si algún proveedor real
+  // demuestra un patrón legítimo más lento.
+  const CAP_DIAS_ENTRE_PARCIALES = 120;
+  function avgEntreParciales(prov, posicion, familia){ // posicion: 1=hacia el 2do parcial, 2+=subsiguientes
+    const dias = posicion<=1 ? avgGap1(prov, familia) : avgGap2Plus(prov, familia);
+    if(dias===null || dias===undefined || isNaN(dias)) return 30;
+    return Math.min(dias, CAP_DIAS_ENTRE_PARCIALES);
+  }
 
   // ---- Días desde Fecha de Pedido hasta el pago del ANTICIPO, por proveedor ----
   // Construido 16-sep-2026 a pedido de Sebastián: en el Excel el anticipo se pronosticaba con un supuesto
@@ -3148,7 +3213,7 @@ function buildPedidosNuevosProyectados(M, opts={}){
       const montoAnticipoUsdTotal = valorUsdTotal * pctAnticipo; // un solo desembolso, para todo el pedido
       let zarpePrevio = fechaZarpe1;
       for(let i=0;i<nParciales;i++){
-        const fZarpe = i===0 ? fechaZarpe1 : addDays(zarpePrevio, stats.avgEntreParciales(proveedor, i) || 30);
+        const fZarpe = i===0 ? fechaZarpe1 : addDays(zarpePrevio, stats.avgEntreParciales(proveedor, i, familia) || 30);
         zarpePrevio = fZarpe;
         const fArribo = addDays(fZarpe, diasNav);
         const fPagoSaldo = addDays(fZarpe, stats.avgBlPago(proveedor) ?? 15);
@@ -3188,7 +3253,7 @@ function buildPedidosNuevosProyectados(M, opts={}){
   // los proveedores reales de Imporinox — ver Tanda 17) como salvaguarda: un proveedor de capacidad muy chica
   // o sin historial de tamaño no debe poder inflar el lead time estimado a valores no realistas.
   const MAX_PARCIALES_LEAD_TIME = 4;
-  function leadTimeCierreDiasFamilia(mix, tonReferencia){
+  function leadTimeCierreDiasFamilia(mix, tonReferencia, familia){
     const stats = M.statsProveedor;
     if(!mix || !mix.length || !(tonReferencia>0)) return 150; // respaldo: ~cierre real ponderado top-3 proveedores (Tanda 17)
     let pesoTotal=0, leadPonderado=0;
@@ -3199,7 +3264,7 @@ function buildPedidosNuevosProyectados(M, opts={}){
       const diasPedidoAZarpe = stats.avgPrimerZarpe(proveedor)||60;
       const nParciales = Math.min(MAX_PARCIALES_LEAD_TIME, Math.max(1, stats.numParcialesPorCapacidad(proveedor, kgProveedor)));
       let diasEntreParciales = 0;
-      for(let i=1;i<nParciales;i++) diasEntreParciales += stats.avgEntreParciales(proveedor, i)||30;
+      for(let i=1;i<nParciales;i++) diasEntreParciales += stats.avgEntreParciales(proveedor, i, familia)||30;
       const leadTotal = diasPedidoAZarpe + diasEntreParciales + diasNav; // pedido→zarpe1→(gaps hasta el último zarpe)→arribo del ÚLTIMO parcial
       pesoTotal += share; leadPonderado += share*leadTotal;
     });
@@ -3272,7 +3337,7 @@ function buildPedidosNuevosProyectados(M, opts={}){
       // mes+Lmeses (no buscar el peor) es la formulación correcta y evita ese artefacto.
       let pedidoTon = 0, fechaArriboObjetivo = null, mesObjetivoPedido = null, huecoNoCerradoEnVentanaTon = 0;
       if(disparaPedido){
-        const leadDias = leadTimeCierreDiasFamilia(mix, ventaBase*(BANDA_INVENTARIO_OBJETIVO-BANDA_INVENTARIO_MIN));
+        const leadDias = leadTimeCierreDiasFamilia(mix, ventaBase*(BANDA_INVENTARIO_OBJETIVO-BANDA_INVENTARIO_MIN), familia);
         const Lmeses = Math.max(1, Math.round(leadDias/30));
         const mesInmediatoSiguiente = mesesHorizonte[idxMesNecesidad+1] || mesNecesidad;
         // Si el horizonte no alcanza a llegar Lmeses adelante (cola del horizonte, u horizontes de prueba
