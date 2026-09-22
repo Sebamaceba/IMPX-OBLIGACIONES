@@ -693,7 +693,20 @@ const ANCHORS = {
   ppto: ['MES','LAMINAS','TOTAL']
 };
 
-function normKey(s){ return String(s||'').replace(/\s+/g,' ').trim().toUpperCase(); }
+// 22-sep, Tanda 22 — bug real encontrado con los datos reales de Sebastián (CSV de Seguimiento Proyectos):
+// 162 de las filas usan literalmente 'LÁMINAS' (con tilde) en la columna PRODUCTO, pero FAMILIA_MAP solo
+// reconocía la clave sin tilde 'LAMINAS'. String.toUpperCase() de JS NO quita tildes, así que
+// normKey('LÁMINAS') seguía siendo 'LÁMINAS' — nunca calzaba con la clave del mapa — y esa fila caía
+// silenciosamente a 'Otros Productos'. Se agrega remoción de diacríticos (vía Unicode NFD) ANTES de
+// mayúsculas/trim, para que 'LÁMINAS', 'Láminas' y 'LAMINAS' normalicen todas al mismo valor. Es un cambio
+// seguro: normKey() se usa tanto para las claves de encabezado (Papa.parse) como para los alias con los que
+// se buscan (get()), así que ambos lados siempre se normalizan igual — nunca puede romper un match que ya
+// funcionaba, solo puede arreglar uno que fallaba por acentos.
+function normKey(s){
+  return String(s||'')
+    .normalize('NFD').replace(/[̀-ͯ]/g,'') // quita tildes/diacríticos (LÁMINAS -> LAMINAS)
+    .replace(/\s+/g,' ').trim().toUpperCase();
+}
 // La columna FAMILIA del Sheet está vacía — se deriva de "Producto" con este mapeo (confirmado con el cliente).
 const FAMILIA_MAP = {
   'LAMINAS':'Láminas', 'TUBOS':'Tubos',
@@ -744,12 +757,21 @@ function pesoRecencia(fechaObs, fechaRef){
   const dias = Math.max(0, daysBetween(fechaObs, fechaRef||new Date()));
   return Math.pow(0.5, dias/VIDA_MEDIA_DIAS);
 }
-function weightedMean(pairs){ // pairs: [{valor, fecha}] — cae a promedio simple si faltan fechas
+// pairs: [{valor, fecha, peso?}] — 'peso' es OPCIONAL (ej. Kg del parcial que originó esa observación): a
+// igual recencia, una observación con más peso pesa más en el promedio. Sin 'peso' se comporta exactamente
+// igual que antes (equivale a peso=1 en todas, solo pondera por recencia). Cae a promedio simple si ninguna
+// observación trae fecha.
+// 22-sep, Tanda 22 — se agrega el parámetro 'peso' a pedido de Sebastián ("diseñamos el tablero para tener
+// el leadtime... dandole mas peso a los dias del parcial con mas Kg"): avgGap1/avgGap2Plus (más abajo) ahora
+// pasan el Kg entregado de cada parcial como 'peso'. No se tocó weightedMeanPonderadaValor() (función
+// hermana, ya existente, usada solo para % anticipo) para no arriesgar ese cálculo aparte — misma idea, dos
+// funciones, cada una ya validada para su propio uso.
+function weightedMean(pairs){
   const hoy = new Date();
-  let sumW=0, sumWV=0, nConFecha=0;
+  let sumW=0, sumWV=0;
   pairs.forEach(p=>{
     if(p.valor===null || p.valor===undefined || isNaN(p.valor)) return;
-    if(p.fecha){ const w = pesoRecencia(p.fecha, hoy); sumW += w; sumWV += w*p.valor; nConFecha++; }
+    if(p.fecha){ const w = pesoRecencia(p.fecha, hoy) * (p.peso||1); sumW += w; sumWV += w*p.valor; }
   });
   if(sumW>0) return sumWV/sumW;
   return mean(pairs.map(p=>p.valor)); // respaldo: si ninguna observación trae fecha, promedio simple
@@ -1090,6 +1112,25 @@ function buildToneladasModel(pedDetRaw, impRaw, prof, spAll){
     return false;
   }).map(g=>g.proforma+' · '+g.producto);
 
+  // 22-sep, Tanda 22, a pedido de Sebastián ("garantiza que el bug de tildes no se repita"): el bug real de
+  // esa tanda (FAMILIA_MAP no reconocía 'LÁMINAS' con tilde) resultó, verificado con las 4 hojas reales, no
+  // ser la causa del patrón de 120 días que reportó — pero es un defecto real que sí existía, y la clase de
+  // bug (un valor de Producto que no calza con FAMILIA_MAP y cae SILENCIOSAMENTE en 'Otros Productos') puede
+  // repetirse con cualquier palabra nueva o mal escrita en el futuro. No se puede "garantizar" que nunca vuelva
+  // a pasar (eso requeriría anticipar cada typo posible), pero SÍ se puede garantizar que, si pasa, se vea
+  // aquí en vez de quedar escondido en un patrón raro de fechas descubierto varias tandas después. Se agrega
+  // este diagnóstico: qué valores de Producto (Cuadro Pedidos) cayeron en 'Otros Productos' y cuánto Kg
+  // representan — ver advertencia correspondiente en el Panel de Diagnóstico (Vista 1).
+  const kgPorProductoNoClasificado = {};
+  grupos.forEach(g=>{
+    if(g.familia !== 'Otros Productos') return;
+    const k = g.producto || '(sin producto)';
+    kgPorProductoNoClasificado[k] = (kgPorProductoNoClasificado[k]||0) + (g.cantidadPedidaKg||0);
+  });
+  const productosNoClasificados = Object.entries(kgPorProductoNoClasificado)
+    .map(([producto,kg])=>({producto,kg}))
+    .sort((a,b)=>b.kg-a.kg);
+
   // Proforma -> Pedido (usa el modelo ya existente de Proformas, clave 'PROYECTO EN PRODUCCIÓN')
   const proformaToPedido = {};
   prof.forEach(p=>{ if(p.proforma) proformaToPedido[p.proforma] = p.pedido; });
@@ -1161,7 +1202,7 @@ function buildToneladasModel(pedDetRaw, impRaw, prof, spAll){
     if(r.paisOrigen) paisPorPedido[pedido] = r.paisOrigen;
   });
 
-  return { grupos, advertenciasSalto, tonPorPedido, proformasSinPedido:[...proformasSinPedido], porProyectoComex, porProyectoImport, produccionPorProforma, rows, proformaToPedido, paisPorPedido, pedidoCerradoAutomatico };
+  return { grupos, advertenciasSalto, productosNoClasificados, tonPorPedido, proformasSinPedido:[...proformasSinPedido], porProyectoComex, porProyectoImport, produccionPorProforma, rows, proformaToPedido, paisPorPedido, pedidoCerradoAutomatico };
 }
 
 function estatusPedidoTon(pedidoKg, entregadoKg){
@@ -1277,15 +1318,46 @@ function buildModel({profRaw, spRaw, pgRaw, gfRaw, nacRaw, pedDetRaw, impRaw, pp
   const pptoPorMes = buildPptoPorMes(pptoRaw||[]);
   const inventarioInicialPorMes = buildInventarioInicialPorMes(pptoRaw||[]);
 
-  // ---- Saldo pendiente CALCULADO de forma independiente, por Proyecto Comex ----
-  // = (Valor Factura - Reclasificación - Notas Crédito) - Σ pagos de concepto SALDO hechos a ESE Proyecto Comex
-  const pagosSaldoPorProyecto = {};
+  // ---- Notas Crédito: se registra sobre TODA la factura del Proyecto Comex, y cuando ese proyecto
+  // consolida 2+ pedidos, PUEDE pasar que el mismo valor quede anotado repetido en cada fila (confirmado
+  // con datos reales: JIANGSU_DAMING_10_26 trae $629,65 de Notas Crédito en AMBAS filas, aunque las
+  // facturas sí difieren). Se prorratea por la participación de cada fila en la factura total de ese
+  // proyecto, para no restarla completa más de una vez al calcular el saldo pendiente combinado.
+  // OJO: esto es un parche mientras se homogeniza la digitación en el Sheet (lo ideal es que ya venga
+  // dividida desde el origen, reconociendo el valor que corresponde a cada proyecto). Por eso solo se
+  // activa cuando DETECTA el patrón de duplicación (2+ filas del mismo proyecto con el MISMO valor de
+  // Notas Crédito) — en cuanto se digite ya prorrateada/reconocida (valores distintos por fila), esta
+  // función deja de tocarla automáticamente y usa cada valor tal cual venga.
+  const facturaTotalPorProyecto = {};
+  const notasCreditoValoresPorProyecto = {};
+  spAll0.forEach(s=>{
+    facturaTotalPorProyecto[s.proyecto] = (facturaTotalPorProyecto[s.proyecto]||0) + s.valorFactura;
+    if(s.notasCredito){
+      notasCreditoValoresPorProyecto[s.proyecto] = notasCreditoValoresPorProyecto[s.proyecto] || [];
+      notasCreditoValoresPorProyecto[s.proyecto].push(s.notasCredito);
+    }
+  });
+  function notasCreditoProrrateada(s){
+    if(!s.notasCredito) return 0;
+    const valores = notasCreditoValoresPorProyecto[s.proyecto];
+    const pareceDuplicada = valores && valores.length>1 && valores.every(v=>Math.abs(v-valores[0])<1);
+    if(!pareceDuplicada) return s.notasCredito; // ya viene distinta por fila (bien digitada/reconocida) o es la única fila del proyecto: se usa tal cual
+    const facturaTotal = facturaTotalPorProyecto[s.proyecto];
+    return facturaTotal>0 ? valores[0] * (s.valorFactura/facturaTotal) : valores[0]/valores.length;
+  }
+
+  // ---- Saldo pendiente CALCULADO de forma independiente, por Proyecto Comex + Pedido ----
+  // = (Valor Factura - Reclasificación - Notas Crédito prorrateada) - Σ pagos de concepto SALDO de ESE
+  // Proyecto Comex Y ESE pedido específico (no solo por Proyecto Comex — un mismo proyecto puede
+  // consolidar 2 pedidos con pagos registrados por separado, y no deben mezclarse entre sí).
+  const pagosSaldoPorProyectoPedido = {};
   pg.filter(p=>p.concepto==='SALDO').forEach(p=>{
-    pagosSaldoPorProyecto[p.proyectoComex] = (pagosSaldoPorProyecto[p.proyectoComex]||0) + p.valor;
+    const k = p.proyectoComex+'||'+p.pedido;
+    pagosSaldoPorProyectoPedido[k] = (pagosSaldoPorProyectoPedido[k]||0) + p.valor;
   });
   const spAll = spAll0.map(s=>{
-    const netoFactura = s.valorFactura - s.reclasificacion - s.notasCredito;
-    const pagado = pagosSaldoPorProyecto[s.proyecto] || 0;
+    const netoFactura = s.valorFactura - s.reclasificacion - notasCreditoProrrateada(s);
+    const pagado = pagosSaldoPorProyectoPedido[s.proyecto+'||'+s.pedido] || 0;
     const saldoCalculado = Math.max(0, netoFactura - pagado);
     const estadoCalculado = saldoCalculado > 1 ? 'PENDIENTE POR PAGAR' : 'PAGADO';
     const tComex = ton.porProyectoComex[s.proyecto];
@@ -1297,6 +1369,7 @@ function buildModel({profRaw, spRaw, pgRaw, gfRaw, nacRaw, pedDetRaw, impRaw, pp
     const inconsistentePeso = tImp ? tImp.inconsistentePeso : false;
     const estatusProyecto = estatusProyectoComex(fechaRealZarpe, fechaRealArribo);
     return {...s, netoFactura, pagadoSaldo: pagado, saldoCalculado, estadoCalculado,
+      notasCreditoDeclarada: s.notasCredito, notasCredito: notasCreditoProrrateada(s),
       entregadoKg, fechaRealZarpe, pesoBrutoKg, fechaRealArribo, inconsistentePeso, estatusProyecto};
   });
 
@@ -1398,35 +1471,48 @@ function buildModel({profRaw, spRaw, pgRaw, gfRaw, nacRaw, pedDetRaw, impRaw, pp
   // misma observación 2-4 veces y además se generan gaps de 0 días falsos (mismo proyecto = misma Fecha BL).
   const enriquecidosUnico = dedupPorProyectoUnico(enriquecidos);
 
-  // ---- Lead Time promedio por proveedor (Pedido→Arribo), ponderado por Ton — misma metodología que la
-  // tabla "Desempeño por proveedor" (Vista 2) — se usa más abajo como criterio de DESEMPATE en el MIX
-  // Familia→Proveedor (16-sep, a pedido de Sebastián). Exige la misma muestra mínima (MIN_MUESTRA) que el
-  // resto de estadísticas del modelo: si un proveedor no tiene suficiente historial de arribos reales, no se
-  // usa su Lead Time para desempatar nada (no hay evidencia suficiente para preferirlo o no).
-  const leadTimeEventosPorProveedor = {};
+  // ---- Lead Time de cumplimiento, metodología de 2 PASOS exacta pedida por Sebastián (23-sep, Tanda 22):
+  // "1. Cada pedido tiene un leadtime de cumplimiento: promedio ponderado por Kg de los días que se ha
+  //     demorado CADA UNA de sus entregas (parciales)." → un solo número de días POR PEDIDO.
+  // "2. Luego sacar un promedio ponderado GLOBAL por proveedor basado en ese número de leadtime [por pedido],
+  //     dándole más peso a lo más reciente." → promedio entre PEDIDOS (no entre eventos), ponderado por
+  //     recencia de cuándo se completó cada pedido.
+  // El intento anterior (comentario de abajo, ya reemplazado) pesaba TODO en un solo paso (Kg × recencia
+  // sobre cada evento/parcial suelto) — matemáticamente distinto: un pedido con muchos parciales chicos
+  // pesaba una vez por cada parcial en vez de una sola vez como pedido. Esta versión sí hace los 2 pasos
+  // por separado, tal como se pidió.
+  const eventosPorPedidoLT = {};
   enriquecidosUnico.forEach(e=>{
-    if(!e.proveedor || !e.fechaRealArribo || !e.fechaPedido || !e.entregadoKg) return;
+    if(!e.pedido || !e.proveedor || !e.fechaRealArribo || !e.fechaPedido || !e.entregadoKg) return;
     const dias = daysBetween(e.fechaPedido, e.fechaRealArribo); if(dias===null || dias<=0) return;
-    leadTimeEventosPorProveedor[e.proveedor] = leadTimeEventosPorProveedor[e.proveedor] || [];
-    leadTimeEventosPorProveedor[e.proveedor].push({dias, peso: e.entregadoKg});
+    eventosPorPedidoLT[e.pedido] = eventosPorPedidoLT[e.pedido] || {eventos:[], proveedor:e.proveedor, fechaMax:null};
+    const g = eventosPorPedidoLT[e.pedido];
+    g.eventos.push({dias, kg:e.entregadoKg});
+    if(!g.fechaMax || e.fechaRealArribo>g.fechaMax) g.fechaMax = e.fechaRealArribo;
+  });
+  // PASO 1: un leadtime por pedido, ponderado por Kg de cada una de SUS entregas
+  const leadTimePorPedidoArr = Object.entries(eventosPorPedidoLT).map(([pedido,g])=>{
+    const kgTotal = g.eventos.reduce((a,e)=>a+e.kg,0);
+    const dias = g.eventos.reduce((a,e)=>a+e.dias*e.kg,0)/kgTotal;
+    return {pedido, dias, proveedor:g.proveedor, fecha:g.fechaMax, kgTotal};
+  });
+  // PASO 2: por proveedor (y GLOBAL), promedio entre esos leadtimes-de-pedido, ponderado por RECENCIA
+  const leadTimePedidosPorProveedor = {};
+  leadTimePorPedidoArr.forEach(p=>{
+    leadTimePedidosPorProveedor[p.proveedor] = leadTimePedidosPorProveedor[p.proveedor] || [];
+    leadTimePedidosPorProveedor[p.proveedor].push({valor:p.dias, fecha:p.fecha});
   });
   function leadTimePromedioProveedor(prov){
-    const eventos = leadTimeEventosPorProveedor[prov];
-    if(!eventos || eventos.length<MIN_MUESTRA) return null;
-    const sumPeso = eventos.reduce((a,x)=>a+x.peso,0); if(!sumPeso) return null;
-    return eventos.reduce((a,x)=>a+x.dias*x.peso,0)/sumPeso;
+    const arr = leadTimePedidosPorProveedor[prov];
+    if(!arr || arr.length<MIN_MUESTRA) return null;
+    return weightedMean(arr);
   }
-  // 21-sep — Respaldo GLOBAL para el Lead Time real (Pedido→Arribo), a pedido de Sebastián: el punto de
-  // reorden de "Pedidos Nuevos Proyectados" (Vista 10) necesita saber CUÁNTO tiempo real hace falta entre
-  // colocar un pedido y que llegue, para poder lanzarlo con la anticipación necesaria — no solo usarlo como
-  // criterio de desempate del mix, que era su único uso hasta ahora. Misma cascada de respaldo que el resto
-  // del modelo: propio (si tiene ≥MIN_MUESTRA eventos reales) > GLOBAL (todos los proveedores, ponderado por
-  // Kg) > estimado como avgPrimerZarpe+días de navegación típicos (real pero menos directo, último recurso).
-  const GLOBAL_leadTimeEventosArr = Object.values(leadTimeEventosPorProveedor).flat();
-  const GLOBAL_pesoLeadTime = GLOBAL_leadTimeEventosArr.reduce((a,x)=>a+x.peso,0);
-  const GLOBAL_leadTimePromedio = GLOBAL_pesoLeadTime>0
-    ? GLOBAL_leadTimeEventosArr.reduce((a,x)=>a+x.dias*x.peso,0)/GLOBAL_pesoLeadTime
-    : null;
+  // Respaldo GLOBAL para el Lead Time real (Pedido→Arribo): el punto de reorden de "Pedidos Nuevos
+  // Proyectados" (Vista 10) necesita saber cuánto tiempo real hace falta entre colocar un pedido y que
+  // llegue. Cascada de respaldo: propio (si tiene ≥MIN_MUESTRA pedidos) > GLOBAL (todos los proveedores,
+  // ponderado por recencia entre pedidos) > estimado como avgPrimerZarpe+días de navegación típicos.
+  const GLOBAL_leadTimeArr = leadTimePorPedidoArr.map(p=>({valor:p.dias, fecha:p.fecha}));
+  const GLOBAL_leadTimePromedio = GLOBAL_leadTimeArr.length ? weightedMean(GLOBAL_leadTimeArr) : null;
   function leadTimePromedioProveedorConRespaldo(prov){
     const propio = leadTimePromedioProveedor(prov);
     if(propio!==null) return propio;
@@ -1503,6 +1589,14 @@ function buildModel({profRaw, spRaw, pgRaw, gfRaw, nacRaw, pedDetRaw, impRaw, pp
   const gap1PorProveedorFamilia = {};      // {familia: {proveedor: [...]}}
   const gap2PlusPorProveedorFamilia = {};
   let lastByPedido = {}, posByPedido = {};
+  // 22-sep, Tanda 22 — a pedido de Sebastián ("diseñamos el tablero para tener el leadtime... dandole mas
+  // peso a los dias del parcial con mas Kg"): cada gap ahora se pesa también por el Kg ENTREGADO del parcial
+  // que llegó (e.entregadoKg) — no solo por qué tan reciente es (pesoRecencia). Antes, weightedMean() aquí
+  // pesaba SOLO por recencia: un parcial chico (ej. un remanente de 2 Ton) contaba exactamente igual que el
+  // parcial grueso que de verdad cierra el pedido. Con 'peso', un parcial de 500 Ton domina el promedio del
+  // proveedor frente a uno de 5 Ton, que es como Sebastián describe que se diseñó originalmente. Cuando no
+  // hay Kg entregado conocido para ese parcial (dato faltante), weightedMean() usa peso=1 (no descarta la
+  // observación, solo no la privilegia).
   conBL.forEach(e=>{
     const prev = lastByPedido[e.pedido];
     if(prev){
@@ -1510,13 +1604,13 @@ function buildModel({profRaw, spRaw, pgRaw, gfRaw, nacRaw, pedDetRaw, impRaw, pp
       const pos = (posByPedido[e.pedido] = (posByPedido[e.pedido]||0) + 1); // 1 = gap entre parcial 1 y 2
       const destino = pos===1 ? gap1PorProveedor : gap2PlusPorProveedor;
       destino[e.proveedor] = destino[e.proveedor] || [];
-      destino[e.proveedor].push({valor:d, fecha:e.fechaBL});
+      destino[e.proveedor].push({valor:d, fecha:e.fechaBL, peso:e.entregadoKg});
       const fam = familiaDePedido(e.pedido);
       if(fam){
         const destinoFam = pos===1 ? gap1PorProveedorFamilia : gap2PlusPorProveedorFamilia;
         destinoFam[fam] = destinoFam[fam] || {};
         destinoFam[fam][e.proveedor] = destinoFam[fam][e.proveedor] || [];
-        destinoFam[fam][e.proveedor].push({valor:d, fecha:e.fechaBL});
+        destinoFam[fam][e.proveedor].push({valor:d, fecha:e.fechaBL, peso:e.entregadoKg});
       }
     }
     lastByPedido[e.pedido] = e.fechaBL;
@@ -1629,14 +1723,34 @@ function buildModel({profRaw, spRaw, pgRaw, gfRaw, nacRaw, pedDetRaw, impRaw, pp
     if(!primerZarpePorPedido[s.pedido] || s.fechaBL<primerZarpePorPedido[s.pedido]) primerZarpePorPedido[s.pedido] = s.fechaBL;
   });
   const diasPrimerZarpePorProveedor = {};
+  const diasPrimerZarpePorProveedorFamilia = {}; // {familia: {proveedor: [...]}}
   pedidos.forEach(p=>{
     const fz = primerZarpePorPedido[p.pedido];
     if(!fz || !p.fechaPedido || !p.proveedor) return;
     diasPrimerZarpePorProveedor[p.proveedor] = diasPrimerZarpePorProveedor[p.proveedor]||[];
     diasPrimerZarpePorProveedor[p.proveedor].push({valor:daysBetween(p.fechaPedido, fz), fecha:fz});
+    const fam = familiaDePedido(p.pedido);
+    if(fam){
+      diasPrimerZarpePorProveedorFamilia[fam] = diasPrimerZarpePorProveedorFamilia[fam] || {};
+      diasPrimerZarpePorProveedorFamilia[fam][p.proveedor] = diasPrimerZarpePorProveedorFamilia[fam][p.proveedor] || [];
+      diasPrimerZarpePorProveedorFamilia[fam][p.proveedor].push({valor:daysBetween(p.fechaPedido, fz), fecha:fz});
+    }
   });
   const GLOBAL_primerZarpe = weightedMean(Object.values(diasPrimerZarpePorProveedor).flat());
-  function avgPrimerZarpe(prov){ const v = diasPrimerZarpePorProveedor[prov]; return (v&&v.length>=MIN_MUESTRA)? weightedMean(v) : GLOBAL_primerZarpe; }
+  // 23-sep, Tanda 22 (segunda parte, a pedido de Sebastián: "revisa que las estimaciones de llegadas de lo ya
+  // pedido esté bien... garantizar que eso esté sistemático en la herramienta"): mismo respaldo por Familia
+  // que ya tenían avgGap1/avgGap2Plus desde la Tanda 20 — antes, un proveedor de Láminas sin 5 zarpes propios
+  // caía directo al promedio de TODO el Tablero (todas las familias mezcladas), exactamente el mismo riesgo de
+  // heredar el ritmo de una familia ajena que ya se había corregido para los gaps entre parciales, pero que
+  // seguía abierto aquí para el PRIMER zarpe. `familia` opcional, retrocompatible (Vista 8/estadísticas
+  // históricas, que no conocen una Familia específica, siguen exactamente igual que antes).
+  const GLOBAL_primerZarpePorFamilia = {};
+  Object.keys(diasPrimerZarpePorProveedorFamilia).forEach(fam=>{ GLOBAL_primerZarpePorFamilia[fam] = weightedMean(Object.values(diasPrimerZarpePorProveedorFamilia[fam]).flat()); });
+  function avgPrimerZarpe(prov, familia){
+    const v = diasPrimerZarpePorProveedor[prov]; if(v&&v.length>=MIN_MUESTRA) return weightedMean(v);
+    if(familia && GLOBAL_primerZarpePorFamilia[familia]!=null) return GLOBAL_primerZarpePorFamilia[familia];
+    return GLOBAL_primerZarpe;
+  }
 
   // Número de proyectos comex (parciales) YA NO es un conteo fijo por proveedor — depende del tamaño del pedido.
   // Se calcula la capacidad típica de entrega por embarque y luego N = techo(Kg del pedido nuevo ÷ esa
@@ -1743,6 +1857,23 @@ function buildModel({profRaw, spRaw, pgRaw, gfRaw, nacRaw, pedDetRaw, impRaw, pp
     return Math.max(1, Math.ceil(pedidoKg / cap));
   }
 
+  // 23-sep, Tanda 21 (a pedido explícito de Sebastián, revisando el Tablero de la Tanda 20 con datos reales:
+  // "no nos basemos como restricción el pedido máximo atendido... el proveedor debe crecer... sugiere el pedido
+  // necesario"). `capacidadEmbarque` de arriba ya escala bien con el tamaño (curva log-log, sin techo fijo) para
+  // decidir CUÁNTOS parciales necesita un pedido — pero el dimensionamiento del pedido en Vista 10 (más abajo,
+  // en buildPedidosNuevosProyectados) topaba el TAMAÑO TOTAL del pedido en un múltiplo arbitrario (1.6x) del
+  // déficit a cerrar, sin relación con lo que el proveedor realmente puede llegar a manejar. Este es el hecho
+  // real y auditable que reemplaza ese número arbitrario: lo más grande que cada proveedor ha despachado
+  // alguna vez (de `pedidos`, ya validado — no una muestra nueva). Se usa como base de un techo de crecimiento
+  // ACOTADO (política elegida por Sebastián: ni ilimitado ni el máximo histórico congelado).
+  const maxPedidoKgPorProveedor = {};
+  pedidos.forEach(p=>{
+    if(!p.proveedor || !(p.pedidoKg>0)) return;
+    if(!maxPedidoKgPorProveedor[p.proveedor] || p.pedidoKg>maxPedidoKgPorProveedor[p.proveedor]) maxPedidoKgPorProveedor[p.proveedor]=p.pedidoKg;
+  });
+  const GLOBAL_maxPedidoKg = maxArr(Object.values(maxPedidoKgPorProveedor));
+  function maxPedidoKgHistoricoProveedor(prov){ return maxPedidoKgPorProveedor[prov] || GLOBAL_maxPedidoKg || null; }
+
   // ---- Concurrencia histórica de pedidos por proveedor (21-sep, a pedido de Sebastián: con datos reales de
   // Seguimiento Proyectos confirmó que un mismo proveedor puede tener VARIOS pedidos padre corriendo al mismo
   // tiempo dentro de un mes calendario — no solo parciales secuenciales de UN pedido. Ejemplo real: un
@@ -1816,12 +1947,19 @@ function buildModel({profRaw, spRaw, pgRaw, gfRaw, nacRaw, pedDetRaw, impRaw, pp
     const condRep = condicionRepresentativaPedido(p.pedido);
     const valorPorParcial = p.valorPedido / n;
     const kgPorParcial = p.pedidoKg ? p.pedidoKg / n : null;
+    // 23-sep, Tanda 22, a pedido de Sebastián ("revisa las estimaciones de llegadas de lo ya pedido"): antes
+    // esta llamada no pasaba la Familia del pedido, así que un proveedor sin muestra propia suficiente caía
+    // directo al respaldo GLOBAL de TODO el Tablero (todas las familias mezcladas) en vez del respaldo por
+    // Familia (Tanda 20) — con datos reales de Sebastián, el respaldo GLOBAL sin familia da ~157 días
+    // (Kg-ponderado) vs. ~29 días el respaldo específico de Láminas: una diferencia enorme para estimar
+    // cuándo llega algo "ya pedido", justo el tipo de fecha-sin-sentido que reportó ("llega en junio 2027").
+    const familiaPedidoA = familiaDePedido(p.pedido);
     const parciales = [];
     let zarpeAnterior = null;
     for(let i=0;i<n;i++){
       let zarpe = i===0
-        ? addDays(p.fechaPedido, avgPrimerZarpe(p.proveedor)||60)
-        : addDays(zarpeAnterior, avgEntreParciales(p.proveedor, i)||30); // i=1 → gap hacia el 2do parcial; i=2+ → gaps subsiguientes
+        ? addDays(p.fechaPedido, avgPrimerZarpe(p.proveedor, familiaPedidoA)||60)
+        : addDays(zarpeAnterior, avgEntreParciales(p.proveedor, i, familiaPedidoA)||30); // i=1 → gap hacia el 2do parcial; i=2+ → gaps subsiguientes
       // Si el ZARPE pronosticado ya quedó en el pasado sin haberse confirmado en Seguimiento de Proyectos,
       // se marca RETRASADO y se re-ancla todo (zarpe, arribo, pago) a partir de HOY.
       let retrasado = false;
@@ -1863,9 +2001,10 @@ function buildModel({profRaw, spRaw, pgRaw, gfRaw, nacRaw, pedDetRaw, impRaw, pp
         condicionUsada:'Sin fecha BL ni fecha de pedido — por diligenciar', parciales:[], saldoProyectado: p.saldoSinFacturar};
     }
     let anchor = p.ultimoBL || p.fechaPedido;
+    const familiaPedidoB = familiaDePedido(p.pedido); // 23-sep, Tanda 22: mismo fix que Grupo A, ver comentario ahí
     for(let i=0;i<nFaltan;i++){
       const posicion = p.nProyectosParciales + i; // posición del próximo gap a estimar (1=hacia el 2do parcial, 2+=subsiguientes)
-      let zarpe = addDays(anchor, avgEntreParciales(p.proveedor, posicion)||12);
+      let zarpe = addDays(anchor, avgEntreParciales(p.proveedor, posicion, familiaPedidoB)||12);
       let retrasado = false;
       if(zarpe < HOY){ retrasado = true; zarpe = HOY; }
       const diasNav = diasNavegacionPedido(p.pedido)||45;
@@ -2013,6 +2152,7 @@ function buildModel({profRaw, spRaw, pgRaw, gfRaw, nacRaw, pedDetRaw, impRaw, pp
       n_blPago: (porProveedor[prov]?.blPago||[]).length, blPago: avgBlPago(prov),
       n_condicionDias: (motorPagos.diasPorProveedor[prov]||[]).length, condicionDias: motorPagos.diasBLProveedor(prov),
       concurrenciaMax: concurrenciaMaxProveedor(prov),
+      maxPedidoKgHistorico: maxPedidoKgHistoricoProveedor(prov), // Tanda 21: base real y auditable del techo de crecimiento acotado en Vista 10
     };
   });
   const estadGlobal = {
@@ -2020,6 +2160,7 @@ function buildModel({profRaw, spRaw, pgRaw, gfRaw, nacRaw, pedDetRaw, impRaw, pp
     capacidad: GLOBAL_capacidadEmbarque, blPago: GLOBAL_blPago, condicionDias: motorPagos.GLOBAL_diasBL,
     capacidad_a: GLOBAL_fitCapacidad?GLOBAL_fitCapacidad.a:null, capacidad_b: GLOBAL_fitCapacidad?GLOBAL_fitCapacidad.b:null,
     capacidad_r2: GLOBAL_fitCapacidad?GLOBAL_fitCapacidad.r2:null, capacidad_n: GLOBAL_obsCapacidad.length,
+    maxPedidoKg: GLOBAL_maxPedidoKg,
   };
 
   return { pedidos, spAll, spUnico, pg, gf, gfAbiertos, nac, nacMes, grupoA, grupoB, obligaciones, pagosMes, gfMes, pedidosMes, enriquecidos, enriquecidosUnico,
@@ -2029,7 +2170,8 @@ function buildModel({profRaw, spRaw, pgRaw, gfRaw, nacRaw, pedDetRaw, impRaw, pp
            statsProveedor: { avgPrimerZarpe, avgEntreParciales, avgGap1, avgGap2Plus, avgProformaPago, avgBlPago,
                               avgAnticipoPago, avgPctAnticipo, numParcialesPorCapacidad, capacidadEmbarque, diasNavegacionPedido,
                               diasNavegacionProveedor, paisTipicoProveedor, condicionRepresentativaPedido, concurrenciaMaxProveedor,
-                              leadTimePromedioProveedorConRespaldo },
+                              leadTimePromedioProveedorConRespaldo, leadTimePromedioProveedor, maxPedidoKgHistoricoProveedor },
+           leadTimePorPedidoArr, GLOBAL_leadTimePromedio,
            mixFamiliaProveedor,
            ton, nav, pptoPorMes, inventarioInicialPorMes, estadProveedor, estadGlobal, MIN_MUESTRA_MODELO: MIN_MUESTRA, VIDA_MEDIA_MODELO: VIDA_MEDIA_DIAS,
            excluidosPorCorte, FECHA_CORTE_DATA_CONFIABLE, excluidosPorTolerancia,
@@ -2250,8 +2392,9 @@ function renderView8(){
 
   const fmtPct1 = v => v===null||v===undefined ? '—' : (v*100).toFixed(0)+'%';
   const fmtCoef = v => v===null||v===undefined ? '—' : v.toFixed(2);
+  const fmtTonKg = kg => kg===null||kg===undefined ? '—' : fmtTon(kg/1000);
   let html = `<tr><th>Proveedor</th><th>Gap 1→2 parcial</th><th>Gap parciales 2+</th><th>Días a 1er zarpe</th>
-    <th>Capacidad por embarque (Ton, ilustrativa*)</th><th>Curva ajustada (Kg/parcial = a·pedidoKg^b)</th><th>Días BL→Pago (histórico)</th><th>Días BL→Pago (condición)</th><th>Concurrencia máx. (pedidos padre/mes)</th></tr>`;
+    <th>Capacidad por embarque (Ton, ilustrativa*)</th><th>Curva ajustada (Kg/parcial = a·pedidoKg^b)</th><th>Días BL→Pago (histórico)</th><th>Días BL→Pago (condición)</th><th>Concurrencia máx. (pedidos padre/mes)</th><th>Pedido máx. histórico (Ton)</th></tr>`;
   M.estadProveedor.forEach(e=>{
     const r2Bajo = e.capacidad_fuente.includes('descartada por R²');
     html += `<tr>
@@ -2264,13 +2407,15 @@ function renderView8(){
       <td${badge(e.n_blPago)}>${fmtD(e.blPago)} <span style="color:var(--ink-soft);font-size:9.5px;">(n=${e.n_blPago})</span></td>
       <td${badge(e.n_condicionDias)}>${fmtD(e.condicionDias)} <span style="color:var(--ink-soft);font-size:9.5px;">(n=${e.n_condicionDias})</span></td>
       <td style="text-align:center;">${e.concurrenciaMax}×</td>
+      <td>${fmtTonKg(e.maxPedidoKgHistorico)}</td>
     </tr>`;
   });
   html += `<tr style="background:var(--paper);font-weight:700;"><td class="txt">RESPALDO GLOBAL</td>
     <td>${fmtD(M.estadGlobal.gap1)}</td><td>${fmtD(M.estadGlobal.gap2plus)}</td><td>${fmtD(M.estadGlobal.primerZarpe)}</td>
     <td>${fmtTon(M.estadGlobal.capacidad)}</td>
     <td style="font-size:10.5px;">a=${fmtCoef(M.estadGlobal.capacidad_a)}, b=${fmtCoef(M.estadGlobal.capacidad_b)}, R²=${fmtPct1(M.estadGlobal.capacidad_r2)} (n=${M.estadGlobal.capacidad_n})</td>
-    <td>${fmtD(M.estadGlobal.blPago)}</td><td>${fmtD(M.estadGlobal.condicionDias)}</td><td>—</td></tr>`;
+    <td>${fmtD(M.estadGlobal.blPago)}</td><td>${fmtD(M.estadGlobal.condicionDias)}</td><td>—</td>
+    <td>${fmtTonKg(M.estadGlobal.maxPedidoKg)}</td></tr>`;
   document.getElementById('tbl_estad_proveedor').innerHTML = html;
   const notaCap = document.getElementById('v8_nota_capacidad');
   if(notaCap) notaCap.innerHTML = `* La capacidad por embarque ya no es un número fijo: se ajusta una curva (Kg por parcial en función del tamaño del pedido) por proveedor con historial suficiente, o la curva GLOBAL si no. El valor de esta columna es solo ilustrativo (evaluado en el pedido mediano histórico del proveedor); el cálculo real de parciales usa el tamaño exacto de cada pedido nuevo. Cuando R² es bajo o "b" está cerca de 0, la curva aporta poco y el sistema puede estar usando el máximo histórico plano como respaldo — revisar con más datos.`;
@@ -2777,6 +2922,14 @@ function renderDiag(){
   const advs = [];
   if(t.proformasSinPedido.length) advs.push(`${t.proformasSinPedido.length} proforma(s) del Cuadro de Pedidos no encontraron pedido asociado (no están en la hoja de Proformas): ${t.proformasSinPedido.slice(0,10).join(', ')}${t.proformasSinPedido.length>10?'…':''}`);
   if(t.advertenciasSalto.length) advs.push(`${t.advertenciasSalto.length} grupo(s) Proforma×Producto tienen una fila con cantidad mayor a una anterior (posible pedido adicional bajo la misma proforma, no capturado en el total): ${t.advertenciasSalto.slice(0,10).join(' | ')}${t.advertenciasSalto.length>10?'…':''}`);
+  // 22-sep, Tanda 22: valores de "Producto" (Cuadro Pedidos) que no calzan con ninguna Familia conocida
+  // (FAMILIA_MAP) y cayeron en "Otros Productos" — con volumen no trivial, vale la pena revisar si son
+  // miscelánea real o si falta agregar esa palabra al mapeo. Umbral de 5 Ton: por debajo, casi seguro es
+  // miscelánea genuina (herramientas, mesas, filtros) y alertar solo sería ruido.
+  const UMBRAL_KG_PRODUCTO_NO_CLASIFICADO = 5000;
+  const productosNoClasificadosRelevantes = (t.productosNoClasificados||[]).filter(p=>p.kg >= UMBRAL_KG_PRODUCTO_NO_CLASIFICADO);
+  if(productosNoClasificadosRelevantes.length) advs.push(`${productosNoClasificadosRelevantes.length} valor(es) de "Producto" en Cuadro Pedidos no calzan con ninguna Familia conocida y caen en "Otros Productos" con un volumen que no es trivial — revisar si de verdad son miscelánea o si falta agregar esa palabra a FAMILIA_MAP (este es el tipo de bug — un valor de Producto mal escrito o con tilde que no calza con el mapeo — que se corrigió en la Tanda 22; este panel existe para que la próxima vez se note aquí, no en un patrón raro descubierto varias tandas después): ` +
+    productosNoClasificadosRelevantes.slice(0,10).map(p=>`"${p.producto}" (${fmtTon(p.kg)})`).join(', ') + (productosNoClasificadosRelevantes.length>10?'…':''));
   const incons = Object.values(t.porProyectoImport).filter(p=>p.inconsistentePeso).map(p=>p.proyecto);
   if(incons.length) advs.push(`${incons.length} proyecto(s) comex tienen 2 o más contenedores con el MISMO peso bruto exacto en Control de Importaciones (podría ser un total copiado sin actualizar por contenedor, o coincidencia real de cargas similares — se sumó igual, pero conviene validar contra el BL): ${incons.slice(0,10).join(', ')}${incons.length>10?'…':''}`);
   const cerradosAuto = MODEL.pedidos.filter(p=>p.cerrado && p.diferenciaEntregaKg!==null && Math.abs(p.diferenciaEntregaKg||0)>1);
@@ -2902,12 +3055,11 @@ function renderKPIs(){
   const valorEntradoAnioCalendario = arribadosAnioCalendarioValor.reduce((a,s)=>a+(s.valorFactura||0),0);
 
   // Lead time promedio REAL, ponderado por toneladas entregadas (igual metodología que "Desempeño por proveedor")
-  const leadEventos = comexAnioUnico.filter(s=>s.estatusProyecto==='ARRIBADO' && s.fechaRealArribo)
-    .map(s=>{ const p = M.pedidos.find(pp=>pp.pedido===s.pedido); const dias = p&&p.fechaPedido ? daysBetween(p.fechaPedido, s.fechaRealArribo) : null;
-      return {dias, peso: s.pesoBrutoKg||s.entregadoKg||0}; })
-    .filter(e=>e.dias!==null && e.dias>0 && e.peso>0);
-  const pesoTotalLead = leadEventos.reduce((a,e)=>a+e.peso,0);
-  const leadTimeProm = pesoTotalLead>0 ? Math.round(leadEventos.reduce((a,e)=>a+e.dias*e.peso,0)/pesoTotalLead) : null;
+  // Lead time de cumplimiento: metodología de 2 pasos (ver buildModel) — un leadtime por PEDIDO (ya
+  // ponderado por Kg de sus propias entregas), promediado aquí por RECENCIA sobre la cohorte del año
+  // seleccionado. Mismo array que usan Vista 2 (ranking por proveedor) y Vista 10 (mix) — una sola fuente.
+  const leadTimePedidosAnio = M.leadTimePorPedidoArr.filter(p=>pedidosAnioSet.has(p.pedido));
+  const leadTimeProm = leadTimePedidosAnio.length ? Math.round(weightedMean(leadTimePedidosAnio.map(p=>({valor:p.dias, fecha:p.fecha})))) : null;
 
   // Etiqueta de año para las dos tarjetas de arribo/entrada (16-sep, a pedido de Sebastián: separadas en
   // tarjetas propias — antes "Entrado en Y" vivía como sub-línea chica dentro de "Pedidos del período",
@@ -3271,6 +3423,28 @@ function buildPedidosNuevosProyectados(M, opts={}){
     return pesoTotal>0 ? leadPonderado/pesoTotal : 150;
   }
 
+  // 23-sep, Tanda 21 (a pedido explícito de Sebastián, tras revisar el Tablero de la Tanda 20 con sus datos
+  // reales: "no nos basemos como restricción el pedido máximo atendido... el proveedor debe crecer... sugiere
+  // el pedido necesario, proyecta cómo lo entregaría según su comportamiento, y esto será nuestra meta a
+  // alcanzar desde compras"). Reemplaza el techo arbitrario de 1.6x del déficit (Tanda 18) por un techo real y
+  // auditable: lo más grande que cada proveedor del mix ha despachado alguna vez (maxPedidoKgHistoricoProveedor,
+  // arriba), multiplicado por CRECIMIENTO_MAX_VS_HISTORICO — política de crecimiento ACOTADO que Sebastián
+  // eligió explícitamente (ni ilimitado, ni congelado al máximo histórico). El techo se calcula en Ton para el
+  // PEDIDO TOTAL de la familia, tomando el proveedor más restrictivo del mix (el que primero tocaría su propio
+  // techo dado su % de participación) — así ningún proveedor individual queda forzado más allá de lo acotado
+  // aunque el pedido total de la familia sea grande.
+  const CRECIMIENTO_MAX_VS_HISTORICO = 2.5;
+  function techoPedidoTonMix(mix){
+    if(!mix || !mix.length) return null;
+    let techo = Infinity;
+    mix.forEach(({proveedor, share})=>{
+      if(!(share>0)) return;
+      const maxKgProv = M.statsProveedor.maxPedidoKgHistoricoProveedor(proveedor);
+      if(maxKgProv>0) techo = Math.min(techo, (maxKgProv*CRECIMIENTO_MAX_VS_HISTORICO)/share/1000);
+    });
+    return isFinite(techo) ? techo : null; // null: ningún proveedor del mix tiene historial propio ni de respaldo GLOBAL (no debería pasar con datos reales)
+  }
+
   mesesHorizonte.forEach(mesNecesidad=>{
     const ppto = M.pptoPorMes[mesNecesidad];
     if(!ppto){ mesesSinPpto.push(mesNecesidad); return; }
@@ -3383,20 +3557,48 @@ function buildPedidosNuevosProyectados(M, opts={}){
           // Dimensionamiento consciente de parciales: un pedido grande se reparte en varios parciales
           // (numParcialesPorCapacidad) y NO todos llegan a tiempo para el mes objetivo — solo el primero está
           // anclado a fechaArriboObjetivo, los siguientes se escalonan después (avgEntreParciales, Tanda 17).
-          // Se prueba el tamaño base y, si no toda la Ton. necesaria llega hasta el mes objetivo inclusive, se
-          // infla en pasos del 10% hasta un tope de 1.6x — igual de honesto que en tandas anteriores: si ni el
-          // tope alcanza (techo físico real de capacidad/concurrencia del proveedor), se pide el tamaño que
-          // maximiza lo entregado a tiempo y el remanente queda registrado, no oculto.
-          let mejorCandidato = deficitBase, mejorATiempo = 0;
-          for(let paso=0; paso<=6; paso++){
-            const tam = deficitBase*(1+paso*0.1);
+          // 23-sep, Tanda 21: se prueba el tamaño base y, si no toda la Ton. necesaria llega a tiempo al mes
+          // objetivo, se busca (búsqueda binaria) el tamaño MÍNIMO que sí la cierra — ya no un múltiplo
+          // arbitrario del déficit, sino acotado por el techo real de crecimiento del mix (techoPedidoTonMix,
+          // arriba: lo más grande que cada proveedor ha despachado, × crecimiento acotado). La búsqueda binaria
+          // es válida porque tonATiempo(tam) es monótona no-decreciente en tam: el primer parcial siempre ancla
+          // exacto a fechaArriboObjetivo sin importar el tamaño total (solo cambia el Kg de cada parcial), así
+          // que pedir más nunca hace que llegue MENOS a tiempo. Si ni el techo de crecimiento acotado alcanza a
+          // cerrar el hueco (techo físico/de política real, ya no un límite inventado), se pide el techo
+          // completo y el remanente queda honesto en huecoNoCerradoEnVentanaTon — visible en Vista 10.1, no
+          // oculto, y ahora es una señal real de "hace falta desarrollar más a este proveedor", no un artefacto
+          // del propio motor.
+          // OJO: el techo NO se sube artificialmente hasta deficitBase — si el techo de crecimiento acotado
+          // queda POR DEBAJO del propio déficit crudo (el caso que de verdad importa: una necesidad real mayor
+          // a lo que este proveedor ha manejado alguna vez), el pedido se limita al techo de todas formas y el
+          // resto queda como brecha honesta — subir el techo al déficit habría anulado por completo la política
+          // de crecimiento acotado justo en el escenario donde existe para proteger.
+          const techoTon = techoPedidoTonMix(mix) ?? (deficitBase*CRECIMIENTO_MAX_VS_HISTORICO); // respaldo generoso: ningún proveedor del mix con historial (no debería ocurrir con datos reales)
+          const tonATiempoDe = (tam)=>{
             const filasProbe = construirParcialesPedido(mix, tam, mesNecesidad, fechaArriboObjetivo, familia);
-            const tonATiempo = filasProbe.filter(f=>f.mesArribo<=mesObjetivoPedido).reduce((a,f)=>a+f.ton,0);
-            if(tonATiempo>mejorATiempo){ mejorATiempo=tonATiempo; mejorCandidato=tam; }
-            if(tonATiempo >= deficitBase - 1e-6){ mejorCandidato=tam; break; }
+            return filasProbe.filter(f=>f.mesArribo<=mesObjetivoPedido).reduce((a,f)=>a+f.ton,0);
+          };
+          if(techoTon <= deficitBase + 1e-6){
+            // El techo de crecimiento acotado es más restrictivo que el propio déficit crudo: no hay margen
+            // para inflar y compensar el reparto en parciales. Se pide el techo completo (lo máximo defendible
+            // bajo la política elegida) y el remanente queda honesto.
+            pedidoTon = techoTon;
+            huecoNoCerradoEnVentanaTon = Math.max(0, deficitBase - tonATiempoDe(techoTon));
+          } else {
+            const tonATiempoEnTecho = tonATiempoDe(techoTon);
+            if(tonATiempoEnTecho < deficitBase - 1e-6){
+              pedidoTon = techoTon;
+              huecoNoCerradoEnVentanaTon = Math.max(0, deficitBase - tonATiempoEnTecho);
+            } else {
+              let lo = deficitBase, hi = techoTon;
+              for(let iter=0; iter<12; iter++){ // 12 pasos ~ precisión de 1/4096 del rango [deficitBase, techoTon], de sobra
+                const mid = (lo+hi)/2;
+                if(tonATiempoDe(mid) >= deficitBase - 1e-6) hi = mid; else lo = mid;
+              }
+              pedidoTon = hi;
+              huecoNoCerradoEnVentanaTon = 0;
+            }
           }
-          huecoNoCerradoEnVentanaTon = Math.max(0, deficitBase - mejorATiempo);
-          pedidoTon = mejorCandidato;
         } else {
           pedidoTon = deficitBase;
         }
@@ -3438,6 +3640,9 @@ function buildPedidosNuevosProyectados(M, opts={}){
            // leadTimeCierreDiasFamilia se expone por la misma razón (Tanda 18): permitir que el arnés de
            // pruebas verifique de forma aislada el lead time real de cierre calculado para una familia/mix.
            leadTimeCierreDiasFamilia,
+           // techoPedidoTonMix/CRECIMIENTO_MAX_VS_HISTORICO expuestos por la misma razón (Tanda 21): permitir
+           // que el arnés de pruebas verifique de forma aislada el techo de crecimiento acotado por mix.
+           techoPedidoTonMix, CRECIMIENTO_MAX_VS_HISTORICO,
            bandaInventario: {min:BANDA_INVENTARIO_MIN, objetivo:BANDA_INVENTARIO_OBJETIVO, max:BANDA_INVENTARIO_MAX} };
 }
 
@@ -3494,7 +3699,7 @@ function renderDesempenoProveedor(M){
   const porProveedor = {};
   M.pedidos.forEach(p=>{
     if(!p.proveedor || !enAnio(p.fechaPedido)) return;
-    if(!porProveedor[p.proveedor]) porProveedor[p.proveedor] = {proveedor:p.proveedor, tonPedidas:0, tonEntregadas:0, eventosPago:[], eventosLead:[]};
+    if(!porProveedor[p.proveedor]) porProveedor[p.proveedor] = {proveedor:p.proveedor, tonPedidas:0, tonEntregadas:0, eventosPago:[]};
     const g = porProveedor[p.proveedor];
     g.tonPedidas += (p.pedidoKg||0);
     g.tonEntregadas += (p.entregadoKg||0);
@@ -3503,8 +3708,16 @@ function renderDesempenoProveedor(M){
   });
   M.enriquecidosUnico.forEach(e=>{
     const g = porProveedor[e.proveedor]; if(!g || !enAnio(e.fechaPedido)) return;
-    if(e.fechaRealArribo && e.fechaPedido && e.entregadoKg) g.eventosLead.push({dias: daysBetween(e.fechaPedido, e.fechaRealArribo), peso: e.entregadoKg});
     if(e.diasProformaPago!==null && e.entregadoKg) g.eventosPago.push({dias: e.diasProformaPago, peso: e.entregadoKg});
+  });
+  // Lead Time: metodología de 2 pasos (ver buildModel/leadTimePorPedidoArr) — un leadtime por PEDIDO
+  // (ya ponderado por Kg de sus propias entregas), promediado aquí por RECENCIA sobre los pedidos de
+  // este proveedor en el año seleccionado. Misma fuente que el KPI de la barra superior y Vista 10.
+  const leadTimePedidosPorProveedorAnio = {};
+  M.leadTimePorPedidoArr.forEach(p=>{
+    if(!enAnio(p.fecha)) return; // filtra por la fecha del leadtime del pedido (cuándo se completó), coherente con "Visión del año"
+    leadTimePedidosPorProveedorAnio[p.proveedor] = leadTimePedidosPorProveedorAnio[p.proveedor] || [];
+    leadTimePedidosPorProveedorAnio[p.proveedor].push({valor:p.dias, fecha:p.fecha});
   });
 
   function promedioPonderado(eventos){
@@ -3514,9 +3727,10 @@ function renderDesempenoProveedor(M){
     return validos.reduce((a,x)=>a+x.dias*x.peso,0)/sumPeso;
   }
 
-  const filas = Object.values(porProveedor).map(g=>({
-    ...g, leadTime: promedioPonderado(g.eventosLead), diasPago: promedioPonderado(g.eventosPago)
-  })).filter(g=>g.tonPedidas>0);
+  const filas = Object.values(porProveedor).map(g=>{
+    const arr = leadTimePedidosPorProveedorAnio[g.proveedor];
+    return {...g, leadTime: arr&&arr.length ? weightedMean(arr) : null, diasPago: promedioPonderado(g.eventosPago)};
+  }).filter(g=>g.tonPedidas>0);
 
   const rankSel = document.getElementById('v2_rankPor');
   function pintar(){
@@ -3861,7 +4075,7 @@ function renderView3(){
       html += `<tr class="${bad?'row-bad':''}">
         <td><button type="button" onclick="const e=document.getElementById('${rid}'); const abierto = e.style.display==='table-row'; e.style.display = abierto?'none':'table-row'; this.textContent = abierto?'💳 Ver pagos':'✕ Ocultar';" style="background:var(--navy);color:#fff;border:none;border-radius:6px;padding:6px 10px;font-size:10.5px;font-weight:600;cursor:pointer;white-space:nowrap;">💳 Ver pagos</button></td>
         <td class="txt">${s.pedido}</td><td class="txt"><b>${s.proyecto}</b></td><td class="txt">${s.proveedor}</td>
-        <td>${fmt(s.valorFactura)}</td><td>${fmt(s.reclasificacion)}</td><td>${fmt(s.notasCredito)}</td>
+        <td>${fmt(s.valorFactura)}</td><td>${fmt(s.reclasificacion)}</td><td>${fmt(s.notasCredito)}${s.notasCreditoDeclarada&&Math.abs(s.notasCreditoDeclarada-s.notasCredito)>0.5?' <span class="pill warn" title="La hoja trae '+fmt(s.notasCreditoDeclarada)+' repetido en las filas de este proyecto; se prorrateó por participación en la factura.">prorrateada</span>':''}</td>
         <td class="txt">${s.fechaBL?fmtMesLabel(monthKey(s.fechaBL)):'—'}</td>
         <td>${fmtDate(s.fechaBL)}</td><td>${fmt(s.saldoCalculado)}</td>
         <td style="${difiere?'color:var(--amber);font-weight:600;':''}">${fmt(s.saldoUSD)}</td>
