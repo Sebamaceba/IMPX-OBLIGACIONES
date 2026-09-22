@@ -1393,6 +1393,23 @@ function buildModel({profRaw, spRaw, pgRaw, gfRaw, nacRaw, pedDetRaw, impRaw, pp
     const sumPeso = eventos.reduce((a,x)=>a+x.peso,0); if(!sumPeso) return null;
     return eventos.reduce((a,x)=>a+x.dias*x.peso,0)/sumPeso;
   }
+  // 21-sep — Respaldo GLOBAL para el Lead Time real (Pedido→Arribo), a pedido de Sebastián: el punto de
+  // reorden de "Pedidos Nuevos Proyectados" (Vista 10) necesita saber CUÁNTO tiempo real hace falta entre
+  // colocar un pedido y que llegue, para poder lanzarlo con la anticipación necesaria — no solo usarlo como
+  // criterio de desempate del mix, que era su único uso hasta ahora. Misma cascada de respaldo que el resto
+  // del modelo: propio (si tiene ≥MIN_MUESTRA eventos reales) > GLOBAL (todos los proveedores, ponderado por
+  // Kg) > estimado como avgPrimerZarpe+días de navegación típicos (real pero menos directo, último recurso).
+  const GLOBAL_leadTimeEventosArr = Object.values(leadTimeEventosPorProveedor).flat();
+  const GLOBAL_pesoLeadTime = GLOBAL_leadTimeEventosArr.reduce((a,x)=>a+x.peso,0);
+  const GLOBAL_leadTimePromedio = GLOBAL_pesoLeadTime>0
+    ? GLOBAL_leadTimeEventosArr.reduce((a,x)=>a+x.dias*x.peso,0)/GLOBAL_pesoLeadTime
+    : null;
+  function leadTimePromedioProveedorConRespaldo(prov){
+    const propio = leadTimePromedioProveedor(prov);
+    if(propio!==null) return propio;
+    if(GLOBAL_leadTimePromedio!==null) return GLOBAL_leadTimePromedio;
+    return (avgPrimerZarpe(prov)||60) + (diasNavegacionProveedor(prov)||45);
+  }
 
   // ---- MIX empírico Familia -> Proveedor (Kg), para repartir los "Pedidos Nuevos Proyectados" (Vista 10) ----
   // El criterio PRINCIPAL sigue siendo el volumen histórico (Kg) — derivado en vivo de "Cuadro Pedidos"
@@ -1604,11 +1621,27 @@ function buildModel({profRaw, spRaw, pgRaw, gfRaw, nacRaw, pedDetRaw, impRaw, pp
   // iguales), su propio MÁXIMO histórico plano, sin recurrir al ajuste GLOBAL (sería mezclar su comportamiento
   // real y bien conocido con el de otros proveedores distintos); (3) si no alcanza muestra propia, la curva
   // GLOBAL (todos los proveedores) si es viable; (4) como último respaldo, el máximo histórico GLOBAL plano.
+  // 21-sep — Umbral mínimo de R² para confiar en la curva PROPIA de un proveedor (a pedido de Sebastián,
+  // revisando la Vista 6 con datos reales: "debemos validar que las curvas cumplan con cierta acertividad").
+  // Con datos reales se encontraron proveedores con muestra técnicamente suficiente (≥MIN_MUESTRA) pero un
+  // ajuste log-log prácticamente sin poder explicativo (R²=6-8%, es decir casi ruido) — y aun así, por estar
+  // antes en la cascada de preferencia, ese ajuste basura se usaba en vez de la curva GLOBAL (R²≈84% con los
+  // mismos datos reales, mucho mejor comportada). El umbral se fija en 0.30: muy por encima del 6-8% que se
+  // observó en los casos problemáticos, y por debajo de cualquier ajuste con señal real; no pretende ser un
+  // estándar estadístico universal, solo una barrera práctica contra curvas propias que son ruido puro. Si una
+  // curva propia no alcanza el umbral, NO se salta directo a la curva GLOBAL — se cae al siguiente escalón ya
+  // existente en la cascada (el máximo histórico PLANO de ese mismo proveedor, un hecho empírico simple que no
+  // depende de extrapolar una tendencia dudosa), y solo si tampoco hay muestra propia suficiente se usa GLOBAL.
+  const MIN_R2_CURVA_PROPIA = 0.30;
   function capacidadEmbarque(prov, pedidoKg){
     const obs = capacidadPorProveedor[prov] || [];
     const tieneMuestraPropia = obs.length>=MIN_MUESTRA;
     const fitPropio = fitCapacidadPorProveedor[prov]; // undefined = sin muestra suficiente; null = con muestra pero sin ajuste viable; objeto = ajuste viable
-    if(fitPropio && pedidoKg>0) return Math.exp(Math.log(fitPropio.a) + fitPropio.b*Math.log(pedidoKg));
+    // r2===null ocurre cuando ssTot≈0 (todas las capacidades observadas prácticamente iguales pese a variar el
+    // tamaño del pedido) — un ajuste "capacidad constante" perfectamente determinista, no un ajuste débil, así
+    // que se trata como confiable pese a no tener un R² numérico que compararle al umbral.
+    const fitPropioConfiable = fitPropio && (fitPropio.r2===null || fitPropio.r2>=MIN_R2_CURVA_PROPIA);
+    if(fitPropioConfiable && pedidoKg>0) return Math.exp(Math.log(fitPropio.a) + fitPropio.b*Math.log(pedidoKg));
     if(tieneMuestraPropia){
       const planoProv = maxArr(obs.map(o=>o.capacidad));
       if(planoProv) return planoProv;
@@ -1620,6 +1653,28 @@ function buildModel({profRaw, spRaw, pgRaw, gfRaw, nacRaw, pedDetRaw, impRaw, pp
     const cap = capacidadEmbarque(prov, pedidoKg);
     if(!cap || !pedidoKg) return 1;
     return Math.max(1, Math.ceil(pedidoKg / cap));
+  }
+
+  // ---- Concurrencia histórica de pedidos por proveedor (21-sep, a pedido de Sebastián: con datos reales de
+  // Seguimiento Proyectos confirmó que un mismo proveedor puede tener VARIOS pedidos padre corriendo al mismo
+  // tiempo dentro de un mes calendario — no solo parciales secuenciales de UN pedido. Ejemplo real: un
+  // proveedor con 4 pedidos padre distintos colocados en el mismo mes). Se cuenta, por proveedor y mes-
+  // calendario de fechaPedido, cuántos pedidos padre DISTINTOS arrancaron ese mes, y se toma el máximo
+  // histórico observado como techo de concurrencia real — nunca un número inventado. Respaldo si el proveedor
+  // no tiene histórico propio: 1 (sin evidencia de que pueda correr más de un pedido a la vez, se asume que
+  // no puede — el mismo criterio conservador que ya rige el resto de la cascada de capacidad).
+  const pedidosPorProveedorMes = {};
+  pedidos.forEach(p=>{
+    if(!p.proveedor || !p.mesPedido) return;
+    pedidosPorProveedorMes[p.proveedor] = pedidosPorProveedorMes[p.proveedor] || {};
+    pedidosPorProveedorMes[p.proveedor][p.mesPedido] = (pedidosPorProveedorMes[p.proveedor][p.mesPedido]||0) + 1;
+  });
+  const maxConcurrentesPorProveedor = {};
+  Object.keys(pedidosPorProveedorMes).forEach(prov=>{
+    maxConcurrentesPorProveedor[prov] = Math.max(1, ...Object.values(pedidosPorProveedorMes[prov]));
+  });
+  function concurrenciaMaxProveedor(prov){
+    return maxConcurrentesPorProveedor[prov] || 1;
   }
 
   function diasNavegacionPedido(pedido){ return nav.diasNavegacion(ton.paisPorPedido[pedido]); }
@@ -1843,11 +1898,16 @@ function buildModel({profRaw, spRaw, pgRaw, gfRaw, nacRaw, pedDetRaw, impRaw, pp
   const estadProveedor = [...proveedoresSet].filter(Boolean).sort().map(prov=>{
     const obsProv = capacidadPorProveedor[prov]||[];
     const fitPropio = fitCapacidadPorProveedor[prov]; // undefined=sin muestra suficiente; null=con muestra pero sin ajuste viable; objeto=ajuste viable
-    // Misma cascada de preferencia que capacidadEmbarque(): curva propia > plano propio (muestra suficiente
-    // pero sin variación de tamaños) > curva GLOBAL > plano GLOBAL — aquí solo para etiquetar de dónde salen
-    // los coeficientes a/b/R² mostrados, el valor numérico de 'capacidad' ya lo calcula capacidadEmbarque().
+    // Misma cascada de preferencia que capacidadEmbarque() — incluido el filtro de R² mínimo (21-sep, ver
+    // MIN_R2_CURVA_PROPIA): curva propia (solo si R²≥umbral) > plano propio (muestra suficiente pero sin
+    // variación de tamaños, O curva propia descartada por R² bajo) > curva GLOBAL > plano GLOBAL — aquí solo
+    // para etiquetar de dónde salen los coeficientes a/b/R² mostrados; el valor numérico de 'capacidad' ya lo
+    // calcula capacidadEmbarque() con exactamente esta misma lógica (una sola fuente de verdad para la regla,
+    // dos lugares que la aplican igual — si un día cambia el umbral, debe cambiar en ambos).
+    const fitPropioConfiable = fitPropio && (fitPropio.r2===null || fitPropio.r2>=MIN_R2_CURVA_PROPIA);
     let capacidad_fuente, fitMostrado;
-    if(fitPropio){ capacidad_fuente = 'curva propia'; fitMostrado = fitPropio; }
+    if(fitPropioConfiable){ capacidad_fuente = 'curva propia'; fitMostrado = fitPropio; }
+    else if(fitPropio){ capacidad_fuente = 'máximo propio (curva propia descartada por R² bajo)'; fitMostrado = fitPropio; }
     else if(obsProv.length>=MIN_MUESTRA){ capacidad_fuente = 'máximo propio (sin variación de tamaños)'; fitMostrado = null; }
     else if(GLOBAL_fitCapacidad){ capacidad_fuente = 'curva GLOBAL (muestra propia insuficiente)'; fitMostrado = GLOBAL_fitCapacidad; }
     else { capacidad_fuente = 'máximo GLOBAL (muestra propia insuficiente)'; fitMostrado = null; }
@@ -1864,6 +1924,7 @@ function buildModel({profRaw, spRaw, pgRaw, gfRaw, nacRaw, pedDetRaw, impRaw, pp
       capacidad_esGlobal: capacidad_fuente.includes('GLOBAL'),
       n_blPago: (porProveedor[prov]?.blPago||[]).length, blPago: avgBlPago(prov),
       n_condicionDias: (motorPagos.diasPorProveedor[prov]||[]).length, condicionDias: motorPagos.diasBLProveedor(prov),
+      concurrenciaMax: concurrenciaMaxProveedor(prov),
     };
   });
   const estadGlobal = {
@@ -1879,7 +1940,8 @@ function buildModel({profRaw, spRaw, pgRaw, gfRaw, nacRaw, pedDetRaw, impRaw, pp
            // (flujo de caja de compras aún no realizadas) — antes eran closures privadas de buildModel().
            statsProveedor: { avgPrimerZarpe, avgEntreParciales, avgGap1, avgGap2Plus, avgProformaPago, avgBlPago,
                               avgAnticipoPago, avgPctAnticipo, numParcialesPorCapacidad, capacidadEmbarque, diasNavegacionPedido,
-                              diasNavegacionProveedor, paisTipicoProveedor, condicionRepresentativaPedido },
+                              diasNavegacionProveedor, paisTipicoProveedor, condicionRepresentativaPedido, concurrenciaMaxProveedor,
+                              leadTimePromedioProveedorConRespaldo },
            mixFamiliaProveedor,
            ton, nav, pptoPorMes, inventarioInicialPorMes, estadProveedor, estadGlobal, MIN_MUESTRA_MODELO: MIN_MUESTRA, VIDA_MEDIA_MODELO: VIDA_MEDIA_DIAS,
            excluidosPorCorte, FECHA_CORTE_DATA_CONFIABLE, excluidosPorTolerancia,
@@ -2101,24 +2163,26 @@ function renderView8(){
   const fmtPct1 = v => v===null||v===undefined ? '—' : (v*100).toFixed(0)+'%';
   const fmtCoef = v => v===null||v===undefined ? '—' : v.toFixed(2);
   let html = `<tr><th>Proveedor</th><th>Gap 1→2 parcial</th><th>Gap parciales 2+</th><th>Días a 1er zarpe</th>
-    <th>Capacidad por embarque (Ton, ilustrativa*)</th><th>Curva ajustada (Kg/parcial = a·pedidoKg^b)</th><th>Días BL→Pago (histórico)</th><th>Días BL→Pago (condición)</th></tr>`;
+    <th>Capacidad por embarque (Ton, ilustrativa*)</th><th>Curva ajustada (Kg/parcial = a·pedidoKg^b)</th><th>Días BL→Pago (histórico)</th><th>Días BL→Pago (condición)</th><th>Concurrencia máx. (pedidos padre/mes)</th></tr>`;
   M.estadProveedor.forEach(e=>{
+    const r2Bajo = e.capacidad_fuente.includes('descartada por R²');
     html += `<tr>
       <td class="txt"><b>${e.proveedor}</b></td>
       <td${badge(e.n_gap1)}>${fmtD(e.gap1)} <span style="color:var(--ink-soft);font-size:9.5px;">(n=${e.n_gap1})</span></td>
       <td${badge(e.n_gap2plus)}>${fmtD(e.gap2plus)} <span style="color:var(--ink-soft);font-size:9.5px;">(n=${e.n_gap2plus})</span></td>
       <td${badge(e.n_primerZarpe)}>${fmtD(e.primerZarpe)} <span style="color:var(--ink-soft);font-size:9.5px;">(n=${e.n_primerZarpe})</span></td>
       <td${badge(e.n_capacidad)}>${fmtTon(e.capacidad)} <span style="color:var(--ink-soft);font-size:9.5px;">(n=${e.n_capacidad})</span></td>
-      <td style="font-size:10.5px;color:var(--ink-soft);">${e.capacidad_a!==null? `a=${fmtCoef(e.capacidad_a)}, b=${fmtCoef(e.capacidad_b)}, R²=${fmtPct1(e.capacidad_r2)}` : 'sin curva ajustable'} <i>(${e.capacidad_fuente})</i></td>
+      <td style="font-size:10.5px;color:var(--ink-soft);">${e.capacidad_a!==null? `a=${fmtCoef(e.capacidad_a)}, b=${fmtCoef(e.capacidad_b)}, R²=${fmtPct1(e.capacidad_r2)}` : 'sin curva ajustable'} <i>(${e.capacidad_fuente})</i>${r2Bajo?' <b style="color:var(--red,#B4232A);">— R² bajo, se usó respaldo</b>':''}</td>
       <td${badge(e.n_blPago)}>${fmtD(e.blPago)} <span style="color:var(--ink-soft);font-size:9.5px;">(n=${e.n_blPago})</span></td>
       <td${badge(e.n_condicionDias)}>${fmtD(e.condicionDias)} <span style="color:var(--ink-soft);font-size:9.5px;">(n=${e.n_condicionDias})</span></td>
+      <td style="text-align:center;">${e.concurrenciaMax}×</td>
     </tr>`;
   });
   html += `<tr style="background:var(--paper);font-weight:700;"><td class="txt">RESPALDO GLOBAL</td>
     <td>${fmtD(M.estadGlobal.gap1)}</td><td>${fmtD(M.estadGlobal.gap2plus)}</td><td>${fmtD(M.estadGlobal.primerZarpe)}</td>
     <td>${fmtTon(M.estadGlobal.capacidad)}</td>
     <td style="font-size:10.5px;">a=${fmtCoef(M.estadGlobal.capacidad_a)}, b=${fmtCoef(M.estadGlobal.capacidad_b)}, R²=${fmtPct1(M.estadGlobal.capacidad_r2)} (n=${M.estadGlobal.capacidad_n})</td>
-    <td>${fmtD(M.estadGlobal.blPago)}</td><td>${fmtD(M.estadGlobal.condicionDias)}</td></tr>`;
+    <td>${fmtD(M.estadGlobal.blPago)}</td><td>${fmtD(M.estadGlobal.condicionDias)}</td><td>—</td></tr>`;
   document.getElementById('tbl_estad_proveedor').innerHTML = html;
   const notaCap = document.getElementById('v8_nota_capacidad');
   if(notaCap) notaCap.innerHTML = `* La capacidad por embarque ya no es un número fijo: se ajusta una curva (Kg por parcial en función del tamaño del pedido) por proveedor con historial suficiente, o la curva GLOBAL si no. El valor de esta columna es solo ilustrativo (evaluado en el pedido mediano histórico del proveedor); el cálculo real de parciales usa el tamaño exacto de cada pedido nuevo. Cuando R² es bajo o "b" está cerca de 0, la curva aporta poco y el sistema puede estar usando el máximo histórico plano como respaldo — revisar con más datos.`;
@@ -2903,6 +2967,21 @@ function buildPedidosNuevosProyectados(M, opts={}){
   // disparar pedidos adicionales que sí hacían falta, mientras el gráfico (con la fecha real) seguía mostrando
   // el hueco. Ahora ambos usan exactamente la misma fecha de arribo — una sola fuente de verdad.
   const entradasNuevasFuturasPorMes = {}; // mesArribo -> familia -> Ton
+  // 21-sep — Un solo disparo temprano por (familia, mes objetivo) — salvaguarda del disparador con
+  // anticipación (ver `leadTimeMesesMix`/`proyectarSinNuevosPedidos` más abajo). Probado con el arnés de
+  // pruebas: sin esta salvaguarda, cuando el hueco proyectado es grande (más de lo que un solo pedido alcanza
+  // a entregar dentro del Lead Time), CADA mes anterior dentro de la ventana de anticipación redescubre el
+  // MISMO hueco futuro (porque buena parte de las oleadas del pedido anterior, limitadas por capacidad y
+  // concurrencia reales, todavía no habían aterrizado ahí) y dispara OTRO pedido de refuerzo completo para
+  // cubrirlo — sobre-pedido en cascada, el mismo defecto de fondo que ya se había revertido en la duodécima
+  // tanda (aunque por una causa distinta). La corrección: una vez que un mes YA disparó un pedido con
+  // anticipación apuntando a un mes objetivo futuro G, ningún mes POSTERIOR (todavía anterior a G) vuelve a
+  // disparar OTRO pedido para ese mismo G — el primer disparo ocurrió en el punto de mayor anticipación
+  // posible (tan pronto la ventana de anticipación alcanzó a G), así que un disparo posterior desde un punto
+  // más tardío no puede llegar MÁS rápido, solo duplicaría el gasto. Si ese primer pedido resulta insuficiente,
+  // el propio disparador REACTIVO de G (que no usa esta salvaguarda) sigue funcionando como red de seguridad
+  // cuando el ciclo realmente llegue a G, con la cifra exacta de lo que todavía falte en ese momento.
+  const objetivosDisparadosTemprano = {}; // familia -> Set(mesObjetivo) ya cubiertos por un disparo con anticipación
 
   // Construye los parciales de UN pedido candidato (una familia, un mes de necesidad, un tamaño en Ton a
   // probar), sin efectos secundarios (no toca alertasRetraso/entradasNuevasFuturasPorMes/pedidosNuevos) — se
@@ -2920,47 +2999,118 @@ function buildPedidosNuevosProyectados(M, opts={}){
       const diasPedidoAZarpe = stats.avgPrimerZarpe(proveedor) || 60;
       const nParciales = Math.max(1, stats.numParcialesPorCapacidad(proveedor, kgTotalProveedor));
       const kgPorParcial = kgTotalProveedor / nParciales;
-      let zarpeAnterior = null;
-      let fechaPedidoOrden = null;
-      for(let i=0;i<nParciales;i++){
-        let fechaZarpe, fechaPedido, retrasado = false;
-        if(i===0){
-          fechaZarpe = addDays(fechaArriboObjetivo, -diasNav);
-          fechaPedido = addDays(fechaZarpe, -diasPedidoAZarpe);
-          if(fechaPedido < HOY){
-            retrasado = true;
-            fechaPedido = HOY;
-            fechaZarpe = addDays(fechaPedido, diasPedidoAZarpe);
-          }
-          fechaPedidoOrden = fechaPedido;
-        } else {
-          fechaZarpe = addDays(zarpeAnterior, stats.avgEntreParciales(proveedor, i) || 30);
-          fechaPedido = null;
-          if(fechaZarpe < HOY){ retrasado = true; fechaZarpe = HOY; }
+      // 21-sep — Pedidos CONCURRENTES por proveedor (a pedido de Sebastián — "un mismo proveedor puede tener
+      // varios pedidos andando" — confirmado con datos reales de Seguimiento Proyectos: varios proveedores
+      // colocaron 4-8 pedidos padre distintos dentro de un mismo mes calendario). Antes de este cambio, las
+      // `nParciales` divisiones por capacidad de embarque se trataban SIEMPRE como parciales sucesivos de UN
+      // solo pedido grande, cada uno esperando el hueco del anterior (avgEntreParciales) para zarpar — de ahí
+      // que en la Vista 10.3 solo llegara a tiempo el primer parcial y el resto se regara varios meses después,
+      // exactamente lo que Sebastián señaló con las capturas reales. Ahora se agrupan en OLEADAS de tamaño
+      // `concurrencia` (el máximo de pedidos padre simultáneos que ESE proveedor ha demostrado poder atender en
+      // un mismo mes — concurrenciaMaxProveedor(), nunca un número supuesto ni "todos en paralelo sin límite"):
+      // los ítems de una misma oleada comparten fecha de zarpe (pedidos independientes colocados a la vez,
+      // como en la realidad); si `nParciales` excede la concurrencia máxima histórica, el excedente forma una
+      // oleada siguiente, escalonada por avgEntreParciales respecto a la oleada anterior — igual criterio de
+      // espaciamiento que antes, solo que ahora entre OLEADAS en vez de entre cada parcial individual. Cada
+      // ítem es un pedido independiente con SU PROPIO anticipo pagado en su propia fecha de pedido — ya no una
+      // continuación del primero sin desembolso propio — porque eso es justamente lo que son: pedidos padre
+      // distintos, cada uno con su propio evento de caja, que es lo que de verdad le importa a este proyecto.
+      const concurrencia = Math.max(1, Math.min(nParciales, stats.concurrenciaMaxProveedor(proveedor)));
+      const nOleadas = Math.ceil(nParciales / concurrencia);
+      let zarpeOleadaAnterior = null;
+      for(let ola=0; ola<nOleadas; ola++){
+        const itemsEnOleada = Math.min(concurrencia, nParciales - ola*concurrencia);
+        let fechaZarpe = ola===0
+          ? addDays(fechaArriboObjetivo, -diasNav)
+          : addDays(zarpeOleadaAnterior, stats.avgEntreParciales(proveedor, ola) || 30);
+        let fechaPedido = addDays(fechaZarpe, -diasPedidoAZarpe);
+        let retrasado = false;
+        if(fechaPedido < HOY){
+          retrasado = true;
+          fechaPedido = HOY;
+          fechaZarpe = addDays(fechaPedido, diasPedidoAZarpe);
         }
-        zarpeAnterior = fechaZarpe;
+        zarpeOleadaAnterior = fechaZarpe;
         const fechaArribo = addDays(fechaZarpe, diasNav);
         const fechaPagoSaldo = addDays(fechaZarpe, stats.avgBlPago(proveedor) ?? 15);
-        const fechaPagoAnticipo = fechaPedido ? addDays(fechaPedido, stats.avgAnticipoPago(proveedor) ?? 0) : null;
+        const fechaPagoAnticipo = addDays(fechaPedido, stats.avgAnticipoPago(proveedor) ?? 0);
         const pctAnt = stats.avgPctAnticipo(proveedor);
         const pctAnticipo = (pctAnt===null || pctAnt===undefined || isNaN(pctAnt)) ? pctAnticipoRespaldo : pctAnt;
         const precioUsdTon = PRECIOS_REF_USD_TON[familia] || 0;
         const valorUsd = (kgPorParcial/1000) * precioUsdTon;
-        const montoAnticipoUsd = i===0 ? valorUsd*pctAnticipo : 0;
-        const montoSaldoUsd = i===0 ? valorUsd*(1-pctAnticipo) : valorUsd;
+        const montoAnticipoUsd = valorUsd*pctAnticipo; // cada ítem es su propio pedido: siempre paga su propio anticipo
+        const montoSaldoUsd = valorUsd*(1-pctAnticipo);
         const mesArribo = monthKey(fechaArribo);
         const fechaNac = primeraSemanaSiguienteMes(mesArribo);
         const montoNacUsd = valorUsd * arancelPct * (1+ivaPct);
-        filas.push({
-          mesNecesidad, familia, proveedor, kg:kgPorParcial, ton: kgPorParcial/1000,
-          fechaPedido: fechaPedido || fechaPedidoOrden, fechaZarpe, fechaArribo, fechaPagoAnticipo, fechaPagoSaldo, fechaNac, mesArribo,
-          retrasado, precioUsdTon, valorUsd, pctAnticipo,
-          montoAnticipoUsd, montoSaldoUsd, montoNacUsd,
-          parcial: i+1, deParciales: nParciales,
-        });
+        for(let j=0;j<itemsEnOleada;j++){
+          const i = ola*concurrencia + j;
+          filas.push({
+            mesNecesidad, familia, proveedor, kg:kgPorParcial, ton: kgPorParcial/1000,
+            fechaPedido, fechaZarpe, fechaArribo, fechaPagoAnticipo, fechaPagoSaldo, fechaNac, mesArribo,
+            retrasado, precioUsdTon, valorUsd, pctAnticipo,
+            montoAnticipoUsd, montoSaldoUsd, montoNacUsd,
+            parcial: i+1, deParciales: nParciales, oleada: ola+1, deOleadas: nOleadas,
+          });
+        }
       }
     });
     return filas;
+  }
+
+  // 21-sep — Punto de reorden con anticipación real (a pedido de Sebastián, tras confirmar con datos reales
+  // que el problema NO es de caja sino de capacidad/velocidad del proveedor — "hay que hacer los pedidos con
+  // la anticipación necesaria"). El disparador reactivo de abajo (`posicionInicio < bandaMin`) solo detecta un
+  // hueco cuando la posición de ESTE mes ya cayó por debajo del mínimo — pero como el Lead Time real (Pedido→
+  // Arribo, medido de verdad, no supuesto) suele ser de varios meses, mucho más que lo que bandaMin alcanza a
+  // cubrir, para cuando el disparador reactivo se activa ya es demasiado tarde para llegar a tiempo (de ahí el
+  // patrón que Sebastián señaló: "por más que pidas, lo que va a llegar va a llegar tarde"). Estas dos
+  // funciones convierten el disparador en uno con anticipación: `leadTimeMesesMix` calcula cuántos meses de
+  // anticipación hacen falta según el Lead Time real ponderado del mix de proveedores de la familia, y
+  // `proyectarSinNuevosPedidos` proyecta HACIA ADELANTE, sin inventar ni disparar ningún pedido hipotético,
+  // qué pasaría con la posición de inventario de un mes futuro si HOY no se decide nada más — usando solo lo
+  // que ya se sabe con certeza (PPTO ya publicado de los meses intermedios y lo que ya está en camino por
+  // pedidos decididos en una iteración ANTERIOR de este mismo cálculo). Si el PPTO de algún mes intermedio
+  // todavía no está publicado, la proyección se detiene y devuelve null — sin datos no se fuerza un disparo
+  // temprano por especulación, y el disparador reactivo de respaldo sigue cubriendo ese caso exactamente como
+  // antes de este cambio (comportamiento 100% aditivo: una familia/mes sin suficiente visibilidad futura se
+  // comporta igual que hoy).
+  function leadTimeMesesMix(mix){
+    if(!mix || !mix.length) return 1;
+    let sumaPonderada = 0, sumaShare = 0;
+    mix.forEach(({proveedor, share})=>{
+      const dias = M.statsProveedor.leadTimePromedioProveedorConRespaldo(proveedor);
+      if(dias===null || dias===undefined || !share) return;
+      sumaPonderada += dias*share; sumaShare += share;
+    });
+    if(sumaShare<=0) return 1;
+    return Math.max(1, Math.ceil((sumaPonderada/sumaShare)/30.44));
+  }
+  function proyectarSinNuevosPedidos(familia, idxInicio, idxObjetivo, invInicialInicio, posicionInicioInicio, necesidadTonInicio){
+    let posicionInicioSim = posicionInicioInicio, necesidadTonSim = necesidadTonInicio;
+    for(let idx=idxInicio; idx<idxObjetivo; idx++){
+      const mesSig = mesesHorizonte[idx+1];
+      if(!mesSig) return null;
+      const pptoSig = M.pptoPorMes[mesSig];
+      if(!pptoSig) return null; // sin PPTO publicado tan lejos: no hay base para proyectar, se rinde sin forzar nada
+      const invInicialSimCierre = Math.max(0, posicionInicioSim - necesidadTonSim); // cierre sin pedido nuevo = arranque del mes siguiente
+      necesidadTonSim = pptoSig[familia] || 0;
+      const cubiertoSig = llegadasIdx[mesSig];
+      const cubiertoYaPedidoKgSig = cubiertoSig ? (cubiertoSig.cierto[familia]||0) + (cubiertoSig.estimado[familia]||0) : 0;
+      const entradasNuevasSig = (entradasNuevasFuturasPorMes[mesSig] && entradasNuevasFuturasPorMes[mesSig][familia]) || 0;
+      const cubiertoTonSig = cubiertoYaPedidoKgSig/1000 + entradasNuevasSig;
+      const invRealSig = M.inventarioInicialPorMes[mesSig];
+      const tieneInvRealSig = invRealSig && invRealSig[familia]!==null && invRealSig[familia]!==undefined;
+      const invInicialSig = tieneInvRealSig ? invRealSig[familia] : invInicialSimCierre;
+      posicionInicioSim = invInicialSig + cubiertoTonSig;
+    }
+    const mesObjetivo = mesesHorizonte[idxObjetivo];
+    const ventaRealObjetivo = ventaRealDeducidaPorMes[mesObjetivo] && ventaRealDeducidaPorMes[mesObjetivo][familia];
+    const ventaBaseObjetivo = (necesidadTonSim>0 && ventaRealObjetivo>0) ? ventaRealObjetivo : necesidadTonSim;
+    return {
+      posicionInicio: posicionInicioSim, necesidadTon: necesidadTonSim, ventaBase: ventaBaseObjetivo,
+      bandaMin: BANDA_INVENTARIO_MIN*ventaBaseObjetivo, bandaObjetivo: BANDA_INVENTARIO_OBJETIVO*ventaBaseObjetivo,
+    };
   }
 
   // 16-sep, decimotercera tanda — INTENTADO Y REVERTIDO EN LA MISMA SESIÓN (historial, se conserva el
@@ -3017,64 +3167,98 @@ function buildPedidosNuevosProyectados(M, opts={}){
       const bandaObjetivo = BANDA_INVENTARIO_OBJETIVO * ventaBase;
 
       const mix = M.mixFamiliaProveedor[familia];
-      // Se dispara un pedido nuevo si la posición de inicio de mes cae por debajo del mínimo (política de
-      // punto de reorden s,S) — YA NO si el gap del mes es >0 como antes, que dimensionaba el pedido para
-      // dejar el inventario de cierre en ~0 (sin ningún colchón, el problema que Sebastián detectó en 10.2b).
-      const disparaPedido = necesidadTon>0 && mix && mix.length>0 && posicionInicio < bandaMin - 1e-6;
+      const idxMesNecesidad = mesesHorizonte.indexOf(mesNecesidad);
+      // 21-sep — Punto de reorden con anticipación real (ver comentario extenso junto a `leadTimeMesesMix` /
+      // `proyectarSinNuevosPedidos` más arriba). Antes, el único disparador era reactivo: la posición de ESTE
+      // mes por debajo de bandaMin. Ahora, si ESTE mes ya está bien, se mira hacia adelante hasta el Lead Time
+      // real del mix (en meses) buscando el PRIMER mes futuro cuya posición proyectada — sin intervenir nada
+      // más — caería por debajo del mínimo; si existe, se dispara HOY para cubrir ESE mes futuro (con la
+      // anticipación exacta que su Lead Time real exige), en vez de esperar a estar ya encima del hueco. Si el
+      // mes de ESTE ciclo ya está por debajo del mínimo, ese sigue siendo el caso más urgente y tiene prioridad
+      // (equivale al comportamiento reactivo de siempre, ahora como caso particular de "mes objetivo = mes
+      // actual"). Si no hay evidencia suficiente para proyectar tan lejos (PPTO no publicado todavía), no se
+      // fuerza ningún disparo temprano — el mismo disparador reactivo de antes sigue cubriendo ese caso cuando
+      // llegue el momento.
+      let mesObjetivo = null, idxObjetivo = null, ventaBaseObjetivo = null, bandaMinObjetivo = null, necesidadTonObjetivoBase = null, posicionInicioObjetivo = null;
+      if(necesidadTon>0 && mix && mix.length>0){
+        if(posicionInicio < bandaMin - 1e-6){
+          mesObjetivo = mesNecesidad; idxObjetivo = idxMesNecesidad;
+          ventaBaseObjetivo = ventaBase; bandaMinObjetivo = bandaMin; necesidadTonObjetivoBase = necesidadTon; posicionInicioObjetivo = posicionInicio;
+        } else {
+          const leadMeses = leadTimeMesesMix(mix);
+          const yaDisparadosFamilia = objetivosDisparadosTemprano[familia];
+          for(let dG=1; dG<=leadMeses; dG++){
+            const idxG = idxMesNecesidad + dG;
+            if(idxG>=mesesHorizonte.length) break;
+            if(yaDisparadosFamilia && yaDisparadosFamilia.has(mesesHorizonte[idxG])) continue; // ya cubierto por un disparo anterior, más anticipado — no duplicar
+            const proy = proyectarSinNuevosPedidos(familia, idxMesNecesidad, idxG, invInicial, posicionInicio, necesidadTon);
+            if(!proy) break; // sin PPTO publicado tan lejos: no se especula, se deja al disparador reactivo
+            if(proy.posicionInicio < proy.bandaMin - 1e-6){
+              mesObjetivo = mesesHorizonte[idxG]; idxObjetivo = idxG;
+              ventaBaseObjetivo = proy.ventaBase; bandaMinObjetivo = proy.bandaMin; necesidadTonObjetivoBase = proy.necesidadTon; posicionInicioObjetivo = proy.posicionInicio;
+              break;
+            }
+          }
+        }
+      }
+      const disparaPedido = mesObjetivo !== null;
       // Dimensionamiento del pedido (corrección 16-sep, décima revisión, a pedido de Sebastián: "no debería
       // pedir para tener de más... creo que es calculable y debe quedar en el rango"). El objetivo NO se mide
-      // contra la venta de ESTE mes (que ya está a punto de consumirse) sino contra la venta del mes
-      // SIGUIENTE — porque lo que de verdad importa es que el inventario de CIERRE de este mes (que se
+      // contra la venta del mes objetivo (que ya está a punto de consumirse) sino contra la venta del mes
+      // SIGUIENTE a él — porque lo que de verdad importa es que el inventario de CIERRE de ese mes (que se
       // convierte en el inventario de ARRANQUE del mes siguiente) alcance para ese mes siguiente. Medirlo
-      // contra la venta de este mismo mes es lo que producía el hallazgo estructural documentado en la
-      // Metodología: 2.15x de la venta de este mes, menos un mes completo de esa misma venta, cierra en 1.15x
-      // — por debajo del mínimo del mes siguiente incluso si las ventas no cambian. Al anclar el objetivo a la
-      // venta del mes QUE VIENE, el pedido se calcula exactamente para lo que hace falta (ni de más ni de
-      // menos) y dos meses seguidos con pedido SÍ alcanzan a mantener el arranque de cada mes dentro de la
-      // banda, sin inflar artificialmente el multiplicador objetivo. Si el mes siguiente todavía no tiene PPTO
-      // publicado (borde del horizonte), se usa la venta base de este mismo mes como respaldo (comportamiento
-      // idéntico al de antes de esta corrección, para no romper el borde del horizonte).
-      const idxMesNecesidad = mesesHorizonte.indexOf(mesNecesidad);
-      const mesSiguienteKey = mesesHorizonte[idxMesNecesidad+1];
-      const pptoSiguiente = mesSiguienteKey ? M.pptoPorMes[mesSiguienteKey] : null;
-      const ventaBaseSiguiente = (pptoSiguiente && pptoSiguiente[familia]>0) ? pptoSiguiente[familia] : ventaBase;
-      const bandaObjetivoSiguiente = BANDA_INVENTARIO_OBJETIVO * ventaBaseSiguiente;
-      // 16-sep, duodécima tanda — INTENTADO Y REVERTIDO EN LA MISMA SESIÓN (historial, se conserva el
-      // diagnóstico): a pedido de Sebastián ("consolidar los parciales para cada mes y correr hacia atrás
-      // cuánto se tiene que pedir") se probaron dos variantes de un dimensionamiento consolidado (una mirando
-      // solo el mes siguiente, otra neteando una ventana de 6 meses hacia adelante contra lo ya
-      // confirmado/en tránsito, recalculada desde cero en cada mes). Ambas fallaron, en direcciones opuestas
-      // (300-380% y 500-800% del mínimo sostenido en la fixture de prueba) — se revirtieron ese mismo día.
-      //
-      // 16-sep, decimotercera tanda — corrección parcial que SÍ se conserva (ver comentario extenso más abajo,
-      // junto a `mesesHorizonte.forEach`, sobre el tope por parcial único que se probó y se revirtió el mismo
-      // día): la fórmula no restaba lo que YA viene en camino para el mes siguiente por un pedido nuevo
-      // decidido en una iteración ANTERIOR de este mismo cálculo (`entradasNuevasFuturasPorMes`, el acumulador
-      // que ya existe y ya se prueba) — sin esto, un hueco que un pedido anterior ya estaba cerrando podía "no
-      // verse" y disparar un pedido adicional redundante (el defecto exacto de la Variante 1 de la duodécima
-      // tanda, en miniatura). Se corrige leyendo ese acumulador, NO inventando una ventana de neteo nueva (eso
-      // fue lo que hizo fallar a la Variante 2) — un cambio mínimo y seguro, verificado con el mismo arnés.
-      const entradasYaEnCaminoMesSiguiente = mesSiguienteKey
-        ? ((entradasNuevasFuturasPorMes[mesSiguienteKey] && entradasNuevasFuturasPorMes[mesSiguienteKey][familia]) || 0)
+      // contra la venta de ese mismo mes es lo que producía el hallazgo estructural documentado en la
+      // Metodología: 2.15x de esa venta, menos un mes completo de esa misma venta, cierra en 1.15x — por
+      // debajo del mínimo del mes siguiente incluso si las ventas no cambian. Si el mes siguiente al objetivo
+      // todavía no tiene PPTO publicado (borde del horizonte), se usa la venta base del mes objetivo como
+      // respaldo (comportamiento idéntico al de antes de esta corrección, para no romper el borde del
+      // horizonte). 16-sep, decimotercera tanda: también se neta lo que YA viene en camino para ese mes
+      // siguiente por un pedido nuevo decidido en una iteración ANTERIOR de este mismo cálculo
+      // (`entradasNuevasFuturasPorMes`) — sin esto, un hueco que un pedido anterior ya estaba cerrando podía
+      // "no verse" y disparar un pedido adicional redundante.
+      const mesSiguienteObjetivoKey = disparaPedido ? mesesHorizonte[idxObjetivo+1] : null;
+      const pptoSiguienteObjetivo = mesSiguienteObjetivoKey ? M.pptoPorMes[mesSiguienteObjetivoKey] : null;
+      const ventaBaseSiguienteObjetivo = (pptoSiguienteObjetivo && pptoSiguienteObjetivo[familia]>0) ? pptoSiguienteObjetivo[familia] : ventaBaseObjetivo;
+      const bandaObjetivoSiguienteFinal = disparaPedido ? BANDA_INVENTARIO_OBJETIVO * ventaBaseSiguienteObjetivo : 0;
+      const entradasYaEnCaminoMesSiguienteObjetivo = mesSiguienteObjetivoKey
+        ? ((entradasNuevasFuturasPorMes[mesSiguienteObjetivoKey] && entradasNuevasFuturasPorMes[mesSiguienteObjetivoKey][familia]) || 0)
         : 0;
+      // "Posición proyectada al objetivo, menos su propia venta" = cierre-si-no-se-pide del mes objetivo; para
+      // el caso reactivo (objetivo = mes actual) es exactamente `posicionInicio - necesidadTon` de siempre.
+      // Se reutiliza `posicionInicioObjetivo` ya calculado arriba (al encontrar el hueco) — no se vuelve a
+      // proyectar desde cero, para que no haya forma de que este número diverja del que disparó la decisión.
+      const cierreSiNoHayPedidoObjetivo = disparaPedido ? (posicionInicioObjetivo - necesidadTonObjetivoBase) : 0;
       const pedidoTon = disparaPedido
-        ? Math.max(0, bandaObjetivoSiguiente - (posicionInicio - necesidadTon) - entradasYaEnCaminoMesSiguiente)
+        ? Math.max(0, bandaObjetivoSiguienteFinal - cierreSiNoHayPedidoObjetivo - entradasYaEnCaminoMesSiguienteObjetivo)
         : 0;
       let tonLlegaEsteMes = 0;
       let filasDeEsteMes = [];
 
       if(disparaPedido && pedidoTon>0 && mix && mix.length>0){
-        // Fecha objetivo de arribo: dentro del mes de necesidad, respetando el "día de gabela" para que
+        // Fecha objetivo de arribo: dentro del mes OBJETIVO (que puede ser este mes o uno futuro, si el
+        // disparador con anticipación adelantó la decisión), respetando el "día de gabela" para que
         // mesDisponibilidad() lo cuente en ese mismo mes — consistente con el criterio ya usado en Vista 9.
-        const [yy,mm] = mesNecesidad.split('-').map(Number);
+        const [yy,mm] = mesObjetivo.split('-').map(Number);
         const diaObjetivo = Math.min(diaGabela, new Date(yy,mm,0).getDate());
         const fechaArriboObjetivo = new Date(yy, mm-1, diaObjetivo);
 
-        filasDeEsteMes = construirParcialesPedido(mix, pedidoTon, mesNecesidad, fechaArriboObjetivo, familia);
+        filasDeEsteMes = construirParcialesPedido(mix, pedidoTon, mesObjetivo, fechaArriboObjetivo, familia);
 
-        // Cierre de inventario del mes = posición de inicio − venta del mes + lo que el pedido alcanza a
-        // aportar DENTRO de este mismo mes (herencia de la corrección de la novena tanda: solo lo que llega
-        // en mesArribo===mesNecesidad se acredita aquí; el resto queda como spillover futuro).
+        // Marca este mes objetivo como ya cubierto por un disparo con anticipación (ver comentario junto a
+        // `objetivosDisparadosTemprano` más arriba) — solo aplica cuando el objetivo es un mes FUTURO distinto
+        // del mes reactivo actual; el caso reactivo (idxObjetivo===idxMesNecesidad) no necesita esta marca,
+        // nada escanea hacia atrás para volver a encontrarlo.
+        if(idxObjetivo!==idxMesNecesidad){
+          objetivosDisparadosTemprano[familia] = objetivosDisparadosTemprano[familia] || new Set();
+          objetivosDisparadosTemprano[familia].add(mesObjetivo);
+        }
+
+        // Cierre de inventario de ESTE mes (el del ciclo actual, `mesNecesidad`) = posición de inicio − venta
+        // del mes + lo que el pedido alcanza a aportar DENTRO de este mismo mes (herencia de la corrección de
+        // la novena tanda: solo lo que llega en mesArribo===mesNecesidad se acredita aquí). Cuando el
+        // disparador con anticipación adelantó la decisión para un mes objetivo FUTURO, ningún parcial
+        // debería aterrizar en este mismo mes — quedan todos como spillover en entradasNuevasFuturasPorMes,
+        // para que el propio mes objetivo los recoja cuando el ciclo llegue a él.
         tonLlegaEsteMes = filasDeEsteMes.filter(f=>f.mesArribo===mesNecesidad).reduce((a,f)=>a+f.ton,0);
         filasDeEsteMes.forEach(fila=>{
           if(fila.retrasado) alertasRetraso.push(fila);
@@ -3086,7 +3270,8 @@ function buildPedidosNuevosProyectados(M, opts={}){
       }
 
       inventarioPorMes.push({mes:mesNecesidad, familia, invInicial, esReal: !!tieneInvReal,
-        posicionInicio, ventaBase, ventaRealDeducida: ventaRealMes>0?ventaRealMes:null, bandaMin, bandaObjetivo, pedidoTon, disparaPedido});
+        posicionInicio, ventaBase, ventaRealDeducida: ventaRealMes>0?ventaRealMes:null, bandaMin, bandaObjetivo, pedidoTon, disparaPedido,
+        mesObjetivo: mesObjetivo!==mesNecesidad ? mesObjetivo : null}); // solo se anota si es distinto del mes actual (disparo con anticipación)
 
       inventarioCorriente[familia] = Math.max(0, posicionInicio - necesidadTon + tonLlegaEsteMes);
       filasDeEsteMes.forEach(fila=> pedidosNuevos.push(fila));
