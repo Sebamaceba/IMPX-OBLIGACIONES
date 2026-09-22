@@ -2404,7 +2404,7 @@ function renderView10(){
   const hayInventarioReal = (R.inventarioPorMes||[]).some(x=>x.esReal);
   const hayVentaRealDeducida = (R.inventarioPorMes||[]).some(x=>x.ventaRealDeducida!==null && x.ventaRealDeducida!==undefined);
   const banda = R.bandaInventario || {min:1.8, objetivo:2.15, max:2.5};
-  let htmlN = `<tr><th>Mes</th><th>Familia</th><th>PPTO Ventas (Ton)</th><th>Venta real deducida (Ton)</th><th>Posición inicio de mes (Ton)</th><th>Mínimo ${banda.min}× / Objetivo ${banda.objetivo}×</th><th>Pedido nuevo proyectado (Ton)</th></tr>`;
+  let htmlN = `<tr><th>Mes</th><th>Familia</th><th>PPTO Ventas (Ton)</th><th>Venta real deducida (Ton)</th><th>Posición inicio de mes (Ton)</th><th>Mínimo ${banda.min}× / Objetivo ${banda.objetivo}×</th><th>Pedido nuevo proyectado (Ton)</th><th>Mes objetivo del pedido</th></tr>`;
   let totNecesidad=0, totPosicion=0, totNuevo=0;
   mesesConDato.forEach(m=>{
     const ppto = M.pptoPorMes[m];
@@ -2415,13 +2415,20 @@ function renderView10(){
       const nuevoTon = pedidosNuevos.filter(p=>p.mesNecesidad===m && p.familia===fam).reduce((a,p)=>a+p.ton,0);
       totNecesidad+=necesidad; totPosicion+=inv.posicionInicio; totNuevo+=nuevoTon;
       const bajoMinimo = inv.disparaPedido;
+      // Tanda 18: el pedido de este mes puede estar apuntando a cubrir un mes bastante más adelante (no
+      // siempre "el siguiente") cuando el PPTO trae una subida dentro del lead time real de la familia — se
+      // muestra explícitamente para que quede trazable, junto con el remanente honesto si ni inflando el
+      // pedido se alcanza a cerrar del todo a tiempo.
+      const mesObjTxt = (nuevoTon>0.01 && inv.mesObjetivoPedido && inv.mesObjetivoPedido!==m) ? fmtMesLabel(inv.mesObjetivoPedido) : (nuevoTon>0.01 ? '(este mismo mes)' : '—');
+      const huecoTxt = (inv.huecoNoCerradoEnVentanaTon>0.01) ? ` <span class="pill bad">remanente sin cerrar a tiempo: ${fmtTonDirecto(inv.huecoNoCerradoEnVentanaTon)}</span>` : '';
       htmlN += `<tr${bajoMinimo?' class="row-bad"':''}><td class="txt">${fmtMesLabel(m)}</td><td class="txt">${fam}</td><td>${fmtTonDirecto(necesidad)}</td><td>${inv.ventaRealDeducida?fmtTonDirecto(inv.ventaRealDeducida):'<span style="color:var(--ink-soft);">—</span>'}</td>` +
         `<td>${fmtTonDirecto(inv.posicionInicio)}${bajoMinimo?' <span class="pill bad">bajo mínimo</span>':''}</td>` +
         `<td style="font-size:11px;color:var(--ink-soft);">${fmtTonDirecto(inv.bandaMin)} / ${fmtTonDirecto(inv.bandaObjetivo)}</td>` +
-        `<td>${nuevoTon>0.01?fmtTonDirecto(nuevoTon):'—'}</td></tr>`;
+        `<td>${nuevoTon>0.01?fmtTonDirecto(nuevoTon):'—'}${huecoTxt}</td>` +
+        `<td class="txt" style="font-size:11px;color:var(--ink-soft);">${mesObjTxt}</td></tr>`;
     });
   });
-  htmlN += `<tr style="background:var(--paper);font-weight:700;"><td class="txt" colspan="2">TOTAL</td><td>${fmtTonDirecto(totNecesidad)}</td><td></td><td>${fmtTonDirecto(totPosicion)}</td><td></td><td>${fmtTonDirecto(totNuevo)}</td></tr>`;
+  htmlN += `<tr style="background:var(--paper);font-weight:700;"><td class="txt" colspan="2">TOTAL</td><td>${fmtTonDirecto(totNecesidad)}</td><td></td><td>${fmtTonDirecto(totPosicion)}</td><td></td><td>${fmtTonDirecto(totNuevo)}</td><td></td></tr>`;
   if(!hayInventarioReal) htmlN += `<tr><td class="txt" colspan="7" style="color:var(--ink-soft);font-size:11.5px;">Todavía no hay ningún mes con inventario inicial REAL cargado en la hoja de PPTO — "Posición inicio de mes" se proyecta 100% desde 0 (comportamiento igual al de antes de este cambio). En cuanto Sebastián cargue el primer mes con conteo físico, el modelo empieza a proyectar el inventario hacia adelante desde ahí.</td></tr>`;
   if(!hayVentaRealDeducida) htmlN += `<tr><td class="txt" colspan="7" style="color:var(--ink-soft);font-size:11.5px;">"Venta real deducida" solo se calcula para un mes cuando hay conteo físico REAL cargado en ESE mes y en el siguiente (dos anclas consecutivas) — con un solo mes ancla cargado todavía no hay ninguno; se activa sola en cuanto Sebastián cargue un segundo mes con conteo físico. Mientras tanto la banda de mínimo/objetivo usa el PPTO de ventas.</td></tr>`;
   if(mesesSinPpto.length) htmlN += `<tr><td class="txt" colspan="7" style="color:var(--ink-soft);font-size:11.5px;">Sin PPTO publicado todavía para: ${mesesSinPpto.map(fmtMesLabel).join(', ')} — no se proyecta pedido nuevo para esos meses hasta que se publique el presupuesto.</td></tr>`;
@@ -3139,6 +3146,42 @@ function buildPedidosNuevosProyectados(M, opts={}){
     return filas;
   }
 
+  // 23-sep, Tanda 18 (a pedido de Sebastián, con evidencia real de su propia corrida: Láminas cae por debajo
+  // del mínimo hacia jun-ago-27 pese a la revisión periódica cada 4 semanas) — corrige un defecto real de la
+  // Tanda 17: la revisión periódica decide BIEN si hay que pedir, pero hasta ahora el TAMAÑO y la fecha
+  // objetivo de arribo del pedido solo miraban "el mes siguiente". Cuando la venta viene en ascenso (como en
+  // el PPTO de Sebastián hacia jun-jul-27), eso no alcanza: el ciclo real de cierre de un pedido (Fecha de
+  // Pedido → llegada del ÚLTIMO parcial) es de varios meses — para Láminas, dominado por JIANGSU_DAMING_,
+  // ronda los 150 días / 5 meses (ver Tanda 17) — mucho más que "un mes adelante". Esta función calcula ese
+  // lead time real de cierre COMPLETO, ponderado por el mix de proveedores de la familia (mismas estadísticas
+  // ya validadas: avgPrimerZarpe, diasNavegacionProveedor, numParcialesPorCapacidad, avgEntreParciales) — para
+  // saber cuántos meses hacia adelante hay que mirar al dimensionar, en vez de un mes fijo.
+  // tonReferencia debe ser un tamaño de pedido TÍPICO real (p.ej. el hueco típico entre mínimo y objetivo), no
+  // la venta completa de un mes — usar la venta completa sobre-estima cuántos parciales necesitaría un
+  // proveedor de baja participación en el mix (un proveedor con 10% del mix y capacidad chica no recibe
+  // pedidos del tamaño de "la venta completa del mes", recibe pedidos del tamaño de SU porción típica de un
+  // pedido normal). nParciales se topa además en MAX_PARCIALES_LEAD_TIME (4, el rango realmente observado con
+  // los proveedores reales de Imporinox — ver Tanda 17) como salvaguarda: un proveedor de capacidad muy chica
+  // o sin historial de tamaño no debe poder inflar el lead time estimado a valores no realistas.
+  const MAX_PARCIALES_LEAD_TIME = 4;
+  function leadTimeCierreDiasFamilia(mix, tonReferencia){
+    const stats = M.statsProveedor;
+    if(!mix || !mix.length || !(tonReferencia>0)) return 150; // respaldo: ~cierre real ponderado top-3 proveedores (Tanda 17)
+    let pesoTotal=0, leadPonderado=0;
+    mix.forEach(({proveedor, share})=>{
+      if(!(share>0)) return;
+      const kgProveedor = tonReferencia*1000*share;
+      const diasNav = stats.diasNavegacionProveedor(proveedor)||45;
+      const diasPedidoAZarpe = stats.avgPrimerZarpe(proveedor)||60;
+      const nParciales = Math.min(MAX_PARCIALES_LEAD_TIME, Math.max(1, stats.numParcialesPorCapacidad(proveedor, kgProveedor)));
+      let diasEntreParciales = 0;
+      for(let i=1;i<nParciales;i++) diasEntreParciales += stats.avgEntreParciales(proveedor, i)||30;
+      const leadTotal = diasPedidoAZarpe + diasEntreParciales + diasNav; // pedido→zarpe1→(gaps hasta el último zarpe)→arribo del ÚLTIMO parcial
+      pesoTotal += share; leadPonderado += share*leadTotal;
+    });
+    return pesoTotal>0 ? leadPonderado/pesoTotal : 150;
+  }
+
   mesesHorizonte.forEach(mesNecesidad=>{
     const ppto = M.pptoPorMes[mesNecesidad];
     if(!ppto){ mesesSinPpto.push(mesNecesidad); return; }
@@ -3191,28 +3234,83 @@ function buildPedidosNuevosProyectados(M, opts={}){
         proximaRevisionPorFamilia[familia] = addDays(inicioMes, intervaloSemanas*7);
       }
 
-      // Dimensionamiento del pedido (sin cambios respecto a la corrección del 16-sep, décima revisión): el
-      // objetivo se mide contra la venta del mes SIGUIENTE (lo que de verdad importa es que el inventario de
-      // CIERRE de este mes alcance para el mes que viene), neteando lo que YA viene en camino por un pedido
-      // decidido en una iteración anterior de este mismo cálculo.
-      const mesSiguienteKey = disparaPedido ? mesesHorizonte[idxMesNecesidad+1] : null;
-      const pptoSiguiente = mesSiguienteKey ? M.pptoPorMes[mesSiguienteKey] : null;
-      const ventaBaseSiguiente = (pptoSiguiente && pptoSiguiente[familia]>0) ? pptoSiguiente[familia] : ventaBase;
-      const bandaObjetivoSiguiente = disparaPedido ? BANDA_INVENTARIO_OBJETIVO * ventaBaseSiguiente : 0;
-      const entradasYaEnCaminoMesSiguiente = mesSiguienteKey
-        ? ((entradasNuevasFuturasPorMes[mesSiguienteKey] && entradasNuevasFuturasPorMes[mesSiguienteKey][familia]) || 0)
-        : 0;
-      const cierreSiNoHayPedido = disparaPedido ? (posicionInicio - necesidadTon) : 0;
-      const pedidoTon = disparaPedido
-        ? Math.max(0, bandaObjetivoSiguiente - cierreSiNoHayPedido - entradasYaEnCaminoMesSiguiente)
-        : 0;
-
-      // Fecha objetivo de arribo: dentro de ESTE mes — ya no hay disparo con anticipación hacia un mes futuro
-      // distinto (esa anticipación ahora viene de revisar con frecuencia, no de proyectar varios meses adelante).
-      let fechaArriboObjetivo = null;
+      // Dimensionamiento del pedido — Tanda 18 (corrige un defecto real de la Tanda 17, encontrado por
+      // Sebastián con su propia corrida: Láminas cae por debajo del mínimo hacia jun-ago-27 pese a la revisión
+      // periódica). El objetivo ya NO se mide contra "el mes siguiente" fijo, sino contra el mes que está a
+      // Lmeses de distancia, donde Lmeses = lead time REAL de cierre completo de la familia
+      // (leadTimeCierreDiasFamilia, arriba) redondeado a meses — exactamente la lógica clásica de un punto de
+      // reorden con lead time L: lo que se pide HOY solo puede llegar dentro de L meses, así que hay que medir
+      // la posición contra la necesidad de DENTRO DE L MESES, no la de dentro de 1. Con Lmeses=1 (lead time
+      // corto, ≤1 mes) esto converge EXACTO a la fórmula de la Tanda 17. La primera versión de este fix (mirar
+      // "el peor mes de una ventana") tenía un defecto: al proyectar sin pedidos nuevos adicionales, el déficit
+      // crece monótonamente mientras más lejos se mire, así que "el peor mes" siempre terminaba siendo el
+      // último de la ventana — daba el resultado correcto por una razón incorrecta. Medir directo contra
+      // mes+Lmeses (no buscar el peor) es la formulación correcta y evita ese artefacto.
+      let pedidoTon = 0, fechaArriboObjetivo = null, mesObjetivoPedido = null, huecoNoCerradoEnVentanaTon = 0;
       if(disparaPedido){
-        const diaObjetivo = Math.min(diaGabela, new Date(yyM, mmM, 0).getDate());
-        fechaArriboObjetivo = new Date(yyM, mmM-1, diaObjetivo);
+        const leadDias = leadTimeCierreDiasFamilia(mix, ventaBase*(BANDA_INVENTARIO_OBJETIVO-BANDA_INVENTARIO_MIN));
+        const Lmeses = Math.max(1, Math.round(leadDias/30));
+        const mesInmediatoSiguiente = mesesHorizonte[idxMesNecesidad+1] || mesNecesidad;
+        // Si el horizonte no alcanza a llegar Lmeses adelante (cola del horizonte, u horizontes de prueba
+        // cortos), se degrada con gracia al último mes disponible del horizonte — nunca peor que el
+        // comportamiento de la Tanda 17, que ya usaba "el mes siguiente" (o el propio mes, en horizontes de 1).
+        mesObjetivoPedido = mesesHorizonte[idxMesNecesidad+Lmeses] || mesesHorizonte[mesesHorizonte.length-1] || mesNecesidad;
+        // Posición proyectada AL INICIO del mes objetivo, SIN pedidos nuevos adicionales: arrastra el cierre de
+        // este mes, resta la venta y suma lo que YA viene en camino (de revisiones anteriores) en cada mes
+        // intermedio, y finalmente suma lo que ya viene en camino y llega justo en el mes objetivo — igual
+        // criterio de neteo que la Tanda 17, extendido a varios meses en vez de uno.
+        // ambos tipos de "entrada ya en camino" cuentan: pedidos NUEVOS decididos en revisiones anteriores de
+        // este mismo cálculo (entradasNuevasFuturasPorMes) Y pedidos YA colocados antes de correr el Tablero
+        // (llegadasIdx, el mismo índice de "ya pedido" que usa cada mes para su propio posicionInicio) —
+        // omitir este segundo grupo subestimaría lo que de verdad va a llegar y sobre-dimensionaría el pedido.
+        const entradasYaPedidoTon = (mesX)=>{ const c = llegadasIdx[mesX]; return c ? ((c.cierto[familia]||0)+(c.estimado[familia]||0))/1000 : 0; };
+        let posicionProyectada = posicionInicio - necesidadTon; // cierre de este mes
+        const idxObjetivo = mesesHorizonte.indexOf(mesObjetivoPedido);
+        for(let k=idxMesNecesidad+1; k<idxObjetivo; k++){
+          const mesK = mesesHorizonte[k];
+          const pptoK = M.pptoPorMes[mesK];
+          const ventaK = (pptoK && pptoK[familia]>0) ? pptoK[familia] : ventaBase;
+          const entradasK = (entradasNuevasFuturasPorMes[mesK] && entradasNuevasFuturasPorMes[mesK][familia]) || 0;
+          posicionProyectada = posicionProyectada + entradasK + entradasYaPedidoTon(mesK) - ventaK;
+        }
+        const entradasEnMesObjetivo = (entradasNuevasFuturasPorMes[mesObjetivoPedido] && entradasNuevasFuturasPorMes[mesObjetivoPedido][familia]) || 0;
+        posicionProyectada += entradasEnMesObjetivo + entradasYaPedidoTon(mesObjetivoPedido);
+        const pptoObjetivo = M.pptoPorMes[mesObjetivoPedido];
+        const ventaObjetivo = (pptoObjetivo && pptoObjetivo[familia]>0) ? pptoObjetivo[familia] : ventaBase;
+        const deficitBase = Math.max(0, BANDA_INVENTARIO_OBJETIVO*ventaObjetivo - posicionProyectada);
+
+        const [yyO, mmO] = mesObjetivoPedido.split('-').map(Number);
+        const diaObjetivo = Math.min(diaGabela, new Date(yyO, mmO, 0).getDate());
+        fechaArriboObjetivo = new Date(yyO, mmO-1, diaObjetivo);
+
+        // El dimensionamiento consciente de parciales (inflar el candidato para que más Ton. lleguen a tiempo
+        // al mes objetivo) solo se activa cuando la anticipación real está en juego (mesObjetivoPedido va más
+        // allá de "el mes siguiente") — para el caso base (Lmeses=1 efectivo, igual que la Tanda 17) el
+        // comportamiento queda IDÉNTICO al ya verificado: el pedido se dimensiona directo, sin inflar, y la
+        // fracción que un proveedor no alcanza a entregar a tiempo se sigue contabilizando honestamente mes a
+        // mes vía entradasNuevasFuturasPorMes, sin necesidad de compensarla aquí.
+        const anticipacionRealActiva = mesObjetivoPedido !== mesInmediatoSiguiente;
+        if(anticipacionRealActiva && deficitBase>0 && mix && mix.length>0){
+          // Dimensionamiento consciente de parciales: un pedido grande se reparte en varios parciales
+          // (numParcialesPorCapacidad) y NO todos llegan a tiempo para el mes objetivo — solo el primero está
+          // anclado a fechaArriboObjetivo, los siguientes se escalonan después (avgEntreParciales, Tanda 17).
+          // Se prueba el tamaño base y, si no toda la Ton. necesaria llega hasta el mes objetivo inclusive, se
+          // infla en pasos del 10% hasta un tope de 1.6x — igual de honesto que en tandas anteriores: si ni el
+          // tope alcanza (techo físico real de capacidad/concurrencia del proveedor), se pide el tamaño que
+          // maximiza lo entregado a tiempo y el remanente queda registrado, no oculto.
+          let mejorCandidato = deficitBase, mejorATiempo = 0;
+          for(let paso=0; paso<=6; paso++){
+            const tam = deficitBase*(1+paso*0.1);
+            const filasProbe = construirParcialesPedido(mix, tam, mesNecesidad, fechaArriboObjetivo, familia);
+            const tonATiempo = filasProbe.filter(f=>f.mesArribo<=mesObjetivoPedido).reduce((a,f)=>a+f.ton,0);
+            if(tonATiempo>mejorATiempo){ mejorATiempo=tonATiempo; mejorCandidato=tam; }
+            if(tonATiempo >= deficitBase - 1e-6){ mejorCandidato=tam; break; }
+          }
+          huecoNoCerradoEnVentanaTon = Math.max(0, deficitBase - mejorATiempo);
+          pedidoTon = mejorCandidato;
+        } else {
+          pedidoTon = deficitBase;
+        }
       }
 
       let tonLlegaEsteMes = 0;
@@ -3231,7 +3329,9 @@ function buildPedidosNuevosProyectados(M, opts={}){
 
       inventarioPorMes.push({mes:mesNecesidad, familia, invInicial, esReal: !!tieneInvReal,
         posicionInicio, ventaBase, ventaRealDeducida: ventaRealMes>0?ventaRealMes:null, bandaMin, bandaObjetivo, pedidoTon, disparaPedido,
-        revisionProgramada: revisionProgramadaEsteMes, disparoReactivo: disparaPorReactivo});
+        revisionProgramada: revisionProgramadaEsteMes, disparoReactivo: disparaPorReactivo,
+        mesObjetivoPedido: disparaPedido ? mesObjetivoPedido : null, // Tanda 18: mes real que este pedido busca cubrir (puede ser varios meses adelante, no siempre "el siguiente")
+        huecoNoCerradoEnVentanaTon: disparaPedido ? huecoNoCerradoEnVentanaTon : 0});
 
       inventarioCorriente[familia] = Math.max(0, posicionInicio - necesidadTon + tonLlegaEsteMes);
       filasDeEsteMes.forEach(fila=> pedidosNuevos.push(fila));
@@ -3246,6 +3346,9 @@ function buildPedidosNuevosProyectados(M, opts={}){
            // lógica de partición en parciales de forma aislada, con un tamaño candidato elegido a propósito —
            // no se usa en ningún otro lugar del Tablero.
            construirParcialesPedido,
+           // leadTimeCierreDiasFamilia se expone por la misma razón (Tanda 18): permitir que el arnés de
+           // pruebas verifique de forma aislada el lead time real de cierre calculado para una familia/mix.
+           leadTimeCierreDiasFamilia,
            bandaInventario: {min:BANDA_INVENTARIO_MIN, objetivo:BANDA_INVENTARIO_OBJETIVO, max:BANDA_INVENTARIO_MAX} };
 }
 
