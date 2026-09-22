@@ -571,7 +571,11 @@
     <div class="panel">
       <h2>3b · Detalle: de qué pedido madre viene cada llegada estimada</h2>
       <div class="desc">Cada fila es un parcial proyectado (de Grupo A o Grupo B, Vista 4), repartido por Familia — para saber a qué pedido reclamarle si un arribo se atrasa.</div>
-      <div class="filters"><input id="v9_buscar_pedido" placeholder="Buscar pedido, proveedor o proyecto..."></div>
+      <div class="filters">
+        <input id="v9_buscar_pedido" placeholder="Buscar pedido, proveedor o proyecto...">
+        <select id="v9_filtro_familia"><option value="">Todas las familias</option></select>
+        <select id="v9_filtro_mes"><option value="">Todos los meses de llegada</option></select>
+      </div>
       <div class="scroll"><table id="tbl_llegadas_detalle_pedido"></table></div>
     </div>
     <div class="panel">
@@ -2474,9 +2478,25 @@ function renderView9(){
   document.getElementById('tbl_llegadas_sinparcial').innerHTML = tSinParcial.html;
 
   // 3b: detalle de cada llegada estimada, con su pedido madre (para trazabilidad operativa)
+  const selFamiliaV9 = document.getElementById('v9_filtro_familia');
+  if(!selFamiliaV9.dataset.poblado){
+    selFamiliaV9.innerHTML = '<option value="">Todas las familias</option>' + FAMILIAS_ORDEN.map(f=>`<option value="${f}">${f}</option>`).join('');
+    selFamiliaV9.dataset.poblado = '1';
+    selFamiliaV9.onchange = renderDetallePedido;
+  }
+  const selMesV9 = document.getElementById('v9_filtro_mes');
+  if(!selMesV9.dataset.poblado){
+    const mesesDisponiblesV9 = [...new Set(estimadoTodo.map(it=>it.mesDisp).filter(Boolean))].sort();
+    selMesV9.innerHTML = '<option value="">Todos los meses de llegada</option>' + mesesDisponiblesV9.map(m=>`<option value="${m}">${fmtMesLabel(m)}</option>`).join('');
+    selMesV9.dataset.poblado = '1';
+    selMesV9.onchange = renderDetallePedido;
+  }
   function renderDetallePedido(){
     const q = (document.getElementById('v9_buscar_pedido').value||'').toLowerCase();
-    const filas = estimadoTodo.filter(it=>!q || (it.pedido||'').toLowerCase().includes(q) || (it.proveedor||'').toLowerCase().includes(q))
+    const fFamilia = selFamiliaV9.value;
+    const fMes = selMesV9.value;
+    const filas = estimadoTodo.filter(it=>(!q || (it.pedido||'').toLowerCase().includes(q) || (it.proveedor||'').toLowerCase().includes(q))
+        && (!fFamilia || it.familia===fFamilia) && (!fMes || it.mesDisp===fMes))
       .sort((a,b)=>(a.fechaArribo||0)-(b.fechaArribo||0));
     let htmlDet = '<tr><th>Pedido Madre</th><th>Proveedor</th><th>Tipo</th><th>Parcial</th><th>Familia</th><th>Ton. Estimadas</th><th>Fecha Arribo Estimada</th><th>Mes Disponible</th></tr>';
     filas.forEach(it=>{
@@ -2644,7 +2664,7 @@ function renderView10(){
       if(!inv) return;
       const nuevoTon = pedidosNuevos.filter(p=>p.mesNecesidad===m && p.familia===fam).reduce((a,p)=>a+p.ton,0);
       totNecesidad+=necesidad; totPosicion+=inv.posicionInicio; totNuevo+=nuevoTon;
-      const bajoMinimo = inv.disparaPedido;
+      const bajoMinimo = inv.posicionInicio < inv.bandaMin - 1e-6;
       // Tanda 18: el pedido de este mes puede estar apuntando a cubrir un mes bastante más adelante (no
       // siempre "el siguiente") cuando el PPTO trae una subida dentro del lead time real de la familia — se
       // muestra explícitamente para que quede trazable, junto con el remanente honesto si ni inflando el
@@ -3514,33 +3534,40 @@ function buildPedidosNuevosProyectados(M, opts={}){
         const leadDias = leadTimeCierreDiasFamilia(mix, ventaBase*(BANDA_INVENTARIO_OBJETIVO-BANDA_INVENTARIO_MIN), familia);
         const Lmeses = Math.max(1, Math.round(leadDias/30));
         const mesInmediatoSiguiente = mesesHorizonte[idxMesNecesidad+1] || mesNecesidad;
-        // Si el horizonte no alcanza a llegar Lmeses adelante (cola del horizonte, u horizontes de prueba
-        // cortos), se degrada con gracia al último mes disponible del horizonte — nunca peor que el
-        // comportamiento de la Tanda 17, que ya usaba "el mes siguiente" (o el propio mes, en horizontes de 1).
-        mesObjetivoPedido = mesesHorizonte[idxMesNecesidad+Lmeses] || mesesHorizonte[mesesHorizonte.length-1] || mesNecesidad;
-        // Posición proyectada AL INICIO del mes objetivo, SIN pedidos nuevos adicionales: arrastra el cierre de
-        // este mes, resta la venta y suma lo que YA viene en camino (de revisiones anteriores) en cada mes
-        // intermedio, y finalmente suma lo que ya viene en camino y llega justo en el mes objetivo — igual
-        // criterio de neteo que la Tanda 17, extendido a varios meses en vez de uno.
+        // 22-sep, Tanda 23 (a pedido de Sebastián, con evidencia real: Láminas no pedía hasta nov-26 pese a
+        // que la posición ya venía cayendo desde sep-26): medir el déficit en UN SOLO punto (mes+Lmeses, Tanda
+        // 18) tiene un punto ciego — si el quiebre real de inventario cae DESPUÉS de ese punto puntual, no se ve
+        // todavía en la revisión de hoy, y solo se detecta cuando, revisión a revisión, el punto Lmeses-adelante
+        // se acerca lo suficiente al quiebre real. Eso es exactamente lo que producía pedidos tardíos y grandes
+        // (aparecían de golpe varias revisiones después) en vez de anticiparse desde la primera revisión posible.
+        // Fix: escanear TODA la ventana entre mes+1 y mes+Lmeses+(1 ciclo de revisión) — no solo el punto
+        // Lmeses — y dimensionar contra el PEOR déficit encontrado en esa ventana, sea cual sea el mes exacto
+        // donde caiga. La ventana se acota (no es todo el horizonte) a propósito: un lookahead sin límite repite
+        // el artefacto ya descartado en la Tanda 17 ("el peor mes siempre es el último", porque sin pedidos
+        // nuevos el déficit crece monótonamente cuanto más lejos se mire) — acotar a Lmeses+1 ciclo de revisión
+        // da margen para ver más allá del punto único sin caer en ese artefacto.
+        const mesesExtraVentana = Math.max(1, Math.ceil(intervaloSemanas/4.33));
+        const idxVentanaFin = Math.min(mesesHorizonte.length-1, idxMesNecesidad + Lmeses + mesesExtraVentana);
         // ambos tipos de "entrada ya en camino" cuentan: pedidos NUEVOS decididos en revisiones anteriores de
         // este mismo cálculo (entradasNuevasFuturasPorMes) Y pedidos YA colocados antes de correr el Tablero
         // (llegadasIdx, el mismo índice de "ya pedido" que usa cada mes para su propio posicionInicio) —
         // omitir este segundo grupo subestimaría lo que de verdad va a llegar y sobre-dimensionaría el pedido.
         const entradasYaPedidoTon = (mesX)=>{ const c = llegadasIdx[mesX]; return c ? ((c.cierto[familia]||0)+(c.estimado[familia]||0))/1000 : 0; };
         let posicionProyectada = posicionInicio - necesidadTon; // cierre de este mes
-        const idxObjetivo = mesesHorizonte.indexOf(mesObjetivoPedido);
-        for(let k=idxMesNecesidad+1; k<idxObjetivo; k++){
+        let peorDeficit = -Infinity, mesPeorDeficit = null;
+        for(let k=idxMesNecesidad+1; k<=idxVentanaFin; k++){
           const mesK = mesesHorizonte[k];
           const pptoK = M.pptoPorMes[mesK];
           const ventaK = (pptoK && pptoK[familia]>0) ? pptoK[familia] : ventaBase;
           const entradasK = (entradasNuevasFuturasPorMes[mesK] && entradasNuevasFuturasPorMes[mesK][familia]) || 0;
           posicionProyectada = posicionProyectada + entradasK + entradasYaPedidoTon(mesK) - ventaK;
+          const deficitK = BANDA_INVENTARIO_OBJETIVO*ventaK - posicionProyectada;
+          if(deficitK > peorDeficit){ peorDeficit = deficitK; mesPeorDeficit = mesK; }
         }
-        const entradasEnMesObjetivo = (entradasNuevasFuturasPorMes[mesObjetivoPedido] && entradasNuevasFuturasPorMes[mesObjetivoPedido][familia]) || 0;
-        posicionProyectada += entradasEnMesObjetivo + entradasYaPedidoTon(mesObjetivoPedido);
-        const pptoObjetivo = M.pptoPorMes[mesObjetivoPedido];
-        const ventaObjetivo = (pptoObjetivo && pptoObjetivo[familia]>0) ? pptoObjetivo[familia] : ventaBase;
-        const deficitBase = Math.max(0, BANDA_INVENTARIO_OBJETIVO*ventaObjetivo - posicionProyectada);
+        // Si el horizonte no alcanza (cola del horizonte, u horizontes de prueba cortos), se degrada con
+        // gracia al último mes disponible — nunca peor que el comportamiento de la Tanda 17.
+        mesObjetivoPedido = mesPeorDeficit || mesesHorizonte[mesesHorizonte.length-1] || mesNecesidad;
+        const deficitBase = Math.max(0, peorDeficit);
 
         const [yyO, mmO] = mesObjetivoPedido.split('-').map(Number);
         const diaObjetivo = Math.min(diaGabela, new Date(yyO, mmO, 0).getDate());
