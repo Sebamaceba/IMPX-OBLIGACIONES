@@ -506,6 +506,17 @@
       <p><b>Partición en parciales según capacidad de embarque (aplicado el 16-sep, a pedido de Sebastián: "apliquémosle la curva, esto aumenta la asertividad").</b> Cada orden que le toca a un proveedor ya NO se asume como un embarque único sin importar su tamaño — se reutiliza exactamente la misma curva de capacidad de embarque que Vista 9 usa para pedidos reales sin parcial todavía (punto 4 más arriba: capacidad evaluada en el tamaño específico de esta orden, ajustada por regresión al historial de ese proveedor). El primer parcial se fecha hacia atrás desde la fecha objetivo de arribo (como antes); si la orden requiere más de un parcial, los siguientes se encadenan hacia ADELANTE desde el zarpe del primero, usando los mismos intervalos históricos entre parciales de ese proveedor (Vista 9) — así una orden grande para un proveedor con capacidad de embarque chica se refleja llegando fraccionada y más espaciada en el tiempo, no de un solo golpe, igual que ocurriría en la realidad. El anticipo se paga una sola vez (con el primer parcial, que es el que abre la orden completa); los parciales siguientes se facturan por su propio saldo. La tabla 10.3 y la exportación a Excel ahora muestran una columna "Parcial" (ej. "2 de 3") para que quede visible cuándo una orden se dividió.</p>
 
       <p><b>Cómo se arrastra el inventario mes a mes (el "kardex a futuro").</b> El cierre de inventario de un mes = posición de inicio − venta del mes (PPTO), <u>más</u> lo que un parcial recién disparado (o de una orden anterior) alcanza a aportar DENTRO de ese mismo mes. Lo que llegue en un mes FUTURO (proveedor retrasado, o un parcial 2° o posterior de una orden grande, que por naturaleza llega después del primero) se registra aparte y solo se acredita cuando el cálculo llega cronológicamente a ese mes futuro — así el motor "ve venir" sus propios pedidos en tránsito en vez de asumir que llegan instantáneamente o de perderlos de vista. <span style="color:var(--red);">Bug corregido el 16-sep (novena revisión):</span> antes de esta corrección, el tonelaje de un pedido NO retrasado de un solo embarque (el caso más común, que por construcción siempre llegaba dentro del mismo mes que necesitaba cubrir) se registraba bajo una clave de mes que el cálculo ya había leído, y por lo tanto nunca se acreditaba al inventario interno del motor — aunque sí aparecía como barra de "entrada" en el gráfico 10.2b. Esto hacía que el gráfico mostrara grandes entradas de pedidos nuevos cada mes mientras la línea de inventario se quedaba pegada en cero, sin ninguna relación visible entre ambas cosas.</p>
+
+      <h3 style="margin-top:22px;color:var(--navy);">10 · Frecuencia de revisión de pedidos por Familia (editable, 22-sep)</h3>
+      <p>Cada Familia se revisa cada N semanas: al llegar ese momento, el motor dispara un pedido nuevo "hasta el objetivo" (2.15×) sin importar si la posición ya está por encima del mínimo — es el mecanismo PRINCIPAL de disparo (ver punto 9 más arriba); el disparo por posición baja (reactivo) sigue existiendo como red de seguridad entre dos revisiones. Los valores de partida (4/6/7/11 semanas) salen de la rotación real de cada Familia, confirmados por Sebastián. <b>A diferencia del lead time de entrega</b> (punto 4, que sí se recalcula solo con cada pedido cerrado), esta frecuencia de revisión es una decisión de política que el equipo controla directamente — no se auto-ajusta con la data. Cámbiela aquí si la operación cambia (más o menos pedidos por temporada, nuevo proveedor con otro ritmo, etc.): Vista 10 recalcula de inmediato con el nuevo valor.</p>
+      <div class="filters">
+        <label style="font-size:11.5px;color:var(--ink-soft);">Láminas (semanas) <input id="meta_rev_laminas" type="number" min="1" step="1" value="4" style="width:55px;"></label>
+        <label style="font-size:11.5px;color:var(--ink-soft);">Tubos (semanas) <input id="meta_rev_tubos" type="number" min="1" step="1" value="6" style="width:55px;"></label>
+        <label style="font-size:11.5px;color:var(--ink-soft);">Perfiles (semanas) <input id="meta_rev_perfiles" type="number" min="1" step="1" value="7" style="width:55px;"></label>
+        <label style="font-size:11.5px;color:var(--ink-soft);">Otros Productos (semanas) <input id="meta_rev_otros" type="number" min="1" step="1" value="11" style="width:55px;"></label>
+      </div>
+      <div class="note info" style="margin-top:8px;">Como el resto de campos editables del Tablero (Arancel/IVA de Vista 5, horizonte de Vista 10, día de gabela de Vista 9), estos valores <b>no quedan guardados</b> al recargar la página — vuelven a 4/6/7/11 cada vez que se abre el Tablero. Si prefieren que este ajuste quede fijo entre sesiones, avísenme y lo agrego (requiere guardar el valor en el navegador, algo que hoy el Tablero no hace en ningún campo).</div>
+      <div class="note warn" style="margin-top:8px;"><b>Límite real a tener en cuenta:</b> el motor decide si dispara un pedido nuevo <b>una vez por mes calendario</b> por Familia — no reevalúa semana a semana. Eso significa que <b>4 semanas o menos</b> (ej. poner Láminas en 1, 2 o 3) se comporta exactamente igual que 4: "revisar todos los meses", porque no puede haber más de un disparo por mes en el diseño actual. El campo sí es útil para <b>espaciar</b> revisiones a más de un mes (5, 6, 7, 11 semanas, como Tubos/Perfiles/Otros Productos hoy) — ahí cada valor adicional de semana sí cambia en qué meses se dispara o no un pedido. Si en algún momento se necesita revisar más de una vez al mes para alguna Familia, ese es un cambio de diseño más grande (el motor tendría que decidir por semana, no por mes) — avísenme si eso llega a hacer falta.</div>
     </div>
   </div>
 
@@ -2350,8 +2361,17 @@ function renderView10(){
   const arancel = (parseFloat(document.getElementById('v4_arancel').value)||6)/100;
   const iva = (parseFloat(document.getElementById('v4_iva').value)||19)/100;
   const diaGabela = parseInt(document.getElementById('v9_gabela').value||'20',10);
+  // Frecuencia de revisión por Familia (22-sep, a pedido de Sebastián): editable desde Vista 8/Metodología en
+  // vez de solo por código — se lee cada input y, si está vacío/inválido, se cae al valor de política por
+  // defecto (POLITICA_REVISION_SEMANAS) para no romper nada si el campo no existe o el usuario lo deja en blanco.
+  const politicaRevisionSemanas = {
+    'Láminas': parseFloat(document.getElementById('meta_rev_laminas')?.value) || POLITICA_REVISION_SEMANAS['Láminas'],
+    'Tubos': parseFloat(document.getElementById('meta_rev_tubos')?.value) || POLITICA_REVISION_SEMANAS['Tubos'],
+    'Perfiles': parseFloat(document.getElementById('meta_rev_perfiles')?.value) || POLITICA_REVISION_SEMANAS['Perfiles'],
+    'Otros Productos': parseFloat(document.getElementById('meta_rev_otros')?.value) || POLITICA_REVISION_SEMANAS['Otros Productos'],
+  };
 
-  const R = buildPedidosNuevosProyectados(M, {horizonteMeses:horizonte, diaGabela, arancelPct:arancel, ivaPct:iva});
+  const R = buildPedidosNuevosProyectados(M, {horizonteMeses:horizonte, diaGabela, arancelPct:arancel, ivaPct:iva, politicaRevisionSemanas});
   const {pedidosNuevos, alertasRetraso, mesesSinPpto, mesesHorizonte} = R;
 
   // ---- Alertas de retraso: consolidadas por mes+familia (antes una fila por proveedor, lo que repetía el
@@ -2624,6 +2644,10 @@ function renderView10(){
   document.getElementById('f10_familia').onchange = pintarDetalle;
   document.getElementById('f10_proveedor').onchange = pintarDetalle;
   document.getElementById('v10_horizonte').onchange = renderView10;
+  ['meta_rev_laminas','meta_rev_tubos','meta_rev_perfiles','meta_rev_otros'].forEach(id=>{
+    const el = document.getElementById(id);
+    if(el) el.oninput = renderView10;
+  });
   pintarDetalle();
 
   // ---- 10.4 Mix Familia -> Proveedor ----
@@ -3013,7 +3037,7 @@ const BANDA_INVENTARIO_MAX = 2.5;       // máximo deseado (referencia visual; e
 const POLITICA_REVISION_SEMANAS = { 'Láminas':4, 'Tubos':6, 'Perfiles':7, 'Otros Productos':11 };
 
 function buildPedidosNuevosProyectados(M, opts={}){
-  const { horizonteMeses=12, diaGabela=20, arancelPct=0.06, ivaPct=0.19, pctAnticipoRespaldo=0.20 } = opts;
+  const { horizonteMeses=12, diaGabela=20, arancelPct=0.06, ivaPct=0.19, pctAnticipoRespaldo=0.20, politicaRevisionSemanas=POLITICA_REVISION_SEMANAS } = opts;
   const HOY = new Date();
   const llegadas = M._llegadasCache || (M._llegadasCache = buildLlegadasPorFamilia(M));
   const llegadasPorMes = consolidarLlegadasPorMes(llegadas, diaGabela);
@@ -3219,7 +3243,7 @@ function buildPedidosNuevosProyectados(M, opts={}){
       // en pasos de `intervaloSemanas` hasta salir del mes actual, marcando si alguno de esos pasos cayó DENTRO
       // del mes (puede no caer ninguno, si el intervalo es más largo que un mes — ej. Otros Productos a veces
       // salta un mes entero, por diseño de su cadencia de 11 semanas).
-      const intervaloSemanas = POLITICA_REVISION_SEMANAS[familia] || 4;
+      const intervaloSemanas = politicaRevisionSemanas[familia] || POLITICA_REVISION_SEMANAS[familia] || 4;
       let revisionProgramadaEsteMes = false;
       while(proximaRevisionPorFamilia[familia] < inicioMesSiguiente){
         if(proximaRevisionPorFamilia[familia] >= inicioMes) revisionProgramadaEsteMes = true;
