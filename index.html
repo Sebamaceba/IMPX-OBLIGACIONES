@@ -615,6 +615,7 @@
     <div class="panel">
       <h2>10.1 · Necesidad de compra por mes y Familia — parte gerencial</h2>
       <div class="desc">PPTO de ventas (Ton) vs. lo que ya va a llegar (cierto + estimado, Vista 9) vs. inventario inicial (real o proyectado) vs. el faltante a cubrir con pedidos nuevos.</div>
+      <div class="filters"><select id="f101_familia"><option value="">Todas las familias</option></select></div>
       <div class="scroll"><table id="tbl_v10_necesidad"></table></div>
     </div>
 
@@ -2654,35 +2655,38 @@ function renderView10(){
   const hayInventarioReal = (R.inventarioPorMes||[]).some(x=>x.esReal);
   const hayVentaRealDeducida = (R.inventarioPorMes||[]).some(x=>x.ventaRealDeducida!==null && x.ventaRealDeducida!==undefined);
   const banda = R.bandaInventario || {min:1.8, objetivo:2.15, max:2.5};
-  let htmlN = `<tr><th>Mes</th><th>Familia</th><th>PPTO Ventas (Ton)</th><th>Venta real deducida (Ton)</th><th>Posición inicio de mes (Ton)</th><th>Mínimo ${banda.min}× / Objetivo ${banda.objetivo}×</th><th>Pedido nuevo proyectado (Ton)</th><th>Mes objetivo del pedido</th></tr>`;
-  let totNecesidad=0, totPosicion=0, totNuevo=0;
-  mesesConDato.forEach(m=>{
-    const ppto = M.pptoPorMes[m];
-    FAMILIAS_ORDEN.forEach(fam=>{
-      const necesidad = ppto[fam]||0; if(necesidad<=0) return;
-      const inv = invIdx[m+'|'+fam];
-      if(!inv) return;
-      const nuevoTon = pedidosNuevos.filter(p=>p.mesNecesidad===m && p.familia===fam).reduce((a,p)=>a+p.ton,0);
-      totNecesidad+=necesidad; totPosicion+=inv.posicionInicio; totNuevo+=nuevoTon;
-      const bajoMinimo = inv.posicionInicio < inv.bandaMin - 1e-6;
-      // Tanda 18: el pedido de este mes puede estar apuntando a cubrir un mes bastante más adelante (no
-      // siempre "el siguiente") cuando el PPTO trae una subida dentro del lead time real de la familia — se
-      // muestra explícitamente para que quede trazable, junto con el remanente honesto si ni inflando el
-      // pedido se alcanza a cerrar del todo a tiempo.
-      const mesObjTxt = (nuevoTon>0.01 && inv.mesObjetivoPedido && inv.mesObjetivoPedido!==m) ? fmtMesLabel(inv.mesObjetivoPedido) : (nuevoTon>0.01 ? '(este mismo mes)' : '—');
-      const huecoTxt = (inv.huecoNoCerradoEnVentanaTon>0.01) ? ` <span class="pill bad">remanente sin cerrar a tiempo: ${fmtTonDirecto(inv.huecoNoCerradoEnVentanaTon)}</span>` : '';
-      htmlN += `<tr${bajoMinimo?' class="row-bad"':''}><td class="txt">${fmtMesLabel(m)}</td><td class="txt">${fam}</td><td>${fmtTonDirecto(necesidad)}</td><td>${inv.ventaRealDeducida?fmtTonDirecto(inv.ventaRealDeducida):'<span style="color:var(--ink-soft);">—</span>'}</td>` +
-        `<td>${fmtTonDirecto(inv.posicionInicio)}${bajoMinimo?' <span class="pill bad">bajo mínimo</span>':''}</td>` +
-        `<td style="font-size:11px;color:var(--ink-soft);">${fmtTonDirecto(inv.bandaMin)} / ${fmtTonDirecto(inv.bandaObjetivo)}</td>` +
-        `<td>${nuevoTon>0.01?fmtTonDirecto(nuevoTon):'—'}${huecoTxt}</td>` +
-        `<td class="txt" style="font-size:11px;color:var(--ink-soft);">${mesObjTxt}</td></tr>`;
+  function pintarNecesidad(){
+    const fFamNec = document.getElementById('f101_familia').value;
+    const familiasAMostrar = fFamNec ? [fFamNec] : FAMILIAS_ORDEN;
+    let htmlN = `<tr><th>Mes</th><th>Familia</th><th>PPTO Ventas (Ton)</th><th>Venta real deducida (Ton)</th><th>Posición inicio de mes (Ton)</th><th>Mínimo ${banda.min}× / Objetivo ${banda.objetivo}×</th><th>Pedido nuevo proyectado (Ton)</th><th>Mes objetivo del pedido</th></tr>`;
+    let totNecesidad=0, totPosicion=0, totNuevo=0;
+    mesesConDato.forEach(m=>{
+      const ppto = M.pptoPorMes[m];
+      familiasAMostrar.forEach(fam=>{
+        const necesidad = ppto[fam]||0; if(necesidad<=0) return;
+        const inv = invIdx[m+'|'+fam];
+        if(!inv) return;
+        const nuevoTon = pedidosNuevos.filter(p=>p.mesNecesidad===m && p.familia===fam).reduce((a,p)=>a+p.ton,0);
+        totNecesidad+=necesidad; totPosicion+=inv.posicionInicio; totNuevo+=nuevoTon;
+        const bajoMinimo = inv.posicionInicio < inv.bandaMin - 1e-6;
+        const mesObjTxt = (nuevoTon>0.01 && inv.mesObjetivoPedido && inv.mesObjetivoPedido!==m) ? fmtMesLabel(inv.mesObjetivoPedido) : (nuevoTon>0.01 ? '(este mismo mes)' : '—');
+        const huecoTxt = (inv.huecoNoCerradoEnVentanaTon>0.01) ? ` <span class="pill bad">remanente sin cerrar a tiempo: ${fmtTonDirecto(inv.huecoNoCerradoEnVentanaTon)}</span>` : '';
+        htmlN += `<tr${bajoMinimo?' class="row-bad"':''}><td class="txt">${fmtMesLabel(m)}</td><td class="txt">${fam}</td><td>${fmtTonDirecto(necesidad)}</td><td>${inv.ventaRealDeducida?fmtTonDirecto(inv.ventaRealDeducida):'<span style="color:var(--ink-soft);">—</span>'}</td>` +
+          `<td>${fmtTonDirecto(inv.posicionInicio)}${bajoMinimo?' <span class="pill bad">bajo mínimo</span>':''}</td>` +
+          `<td style="font-size:11px;color:var(--ink-soft);">${fmtTonDirecto(inv.bandaMin)} / ${fmtTonDirecto(inv.bandaObjetivo)}</td>` +
+          `<td>${nuevoTon>0.01?fmtTonDirecto(nuevoTon):'—'}${huecoTxt}</td>` +
+          `<td class="txt" style="font-size:11px;color:var(--ink-soft);">${mesObjTxt}</td></tr>`;
+      });
     });
-  });
-  htmlN += `<tr style="background:var(--paper);font-weight:700;"><td class="txt" colspan="2">TOTAL</td><td>${fmtTonDirecto(totNecesidad)}</td><td></td><td>${fmtTonDirecto(totPosicion)}</td><td></td><td>${fmtTonDirecto(totNuevo)}</td><td></td></tr>`;
-  if(!hayInventarioReal) htmlN += `<tr><td class="txt" colspan="7" style="color:var(--ink-soft);font-size:11.5px;">Todavía no hay ningún mes con inventario inicial REAL cargado en la hoja de PPTO — "Posición inicio de mes" se proyecta 100% desde 0 (comportamiento igual al de antes de este cambio). En cuanto Sebastián cargue el primer mes con conteo físico, el modelo empieza a proyectar el inventario hacia adelante desde ahí.</td></tr>`;
-  if(!hayVentaRealDeducida) htmlN += `<tr><td class="txt" colspan="7" style="color:var(--ink-soft);font-size:11.5px;">"Venta real deducida" solo se calcula para un mes cuando hay conteo físico REAL cargado en ESE mes y en el siguiente (dos anclas consecutivas) — con un solo mes ancla cargado todavía no hay ninguno; se activa sola en cuanto Sebastián cargue un segundo mes con conteo físico. Mientras tanto la banda de mínimo/objetivo usa el PPTO de ventas.</td></tr>`;
-  if(mesesSinPpto.length) htmlN += `<tr><td class="txt" colspan="7" style="color:var(--ink-soft);font-size:11.5px;">Sin PPTO publicado todavía para: ${mesesSinPpto.map(fmtMesLabel).join(', ')} — no se proyecta pedido nuevo para esos meses hasta que se publique el presupuesto.</td></tr>`;
-  document.getElementById('tbl_v10_necesidad').innerHTML = htmlN;
+    htmlN += `<tr style="background:var(--paper);font-weight:700;"><td class="txt" colspan="2">TOTAL</td><td>${fmtTonDirecto(totNecesidad)}</td><td></td><td>${fmtTonDirecto(totPosicion)}</td><td></td><td>${fmtTonDirecto(totNuevo)}</td><td></td></tr>`;
+    if(!hayInventarioReal) htmlN += `<tr><td class="txt" colspan="7" style="color:var(--ink-soft);font-size:11.5px;">Todavía no hay ningún mes con inventario inicial REAL cargado en la hoja de PPTO — "Posición inicio de mes" se proyecta 100% desde 0 (comportamiento igual al de antes de este cambio). En cuanto Sebastián cargue el primer mes con conteo físico, el modelo empieza a proyectar el inventario hacia adelante desde ahí.</td></tr>`;
+    if(!hayVentaRealDeducida) htmlN += `<tr><td class="txt" colspan="7" style="color:var(--ink-soft);font-size:11.5px;">"Venta real deducida" solo se calcula para un mes cuando hay conteo físico REAL cargado en ESE mes y en el siguiente (dos anclas consecutivas) — con un solo mes ancla cargado todavía no hay ninguno; se activa sola en cuanto Sebastián cargue un segundo mes con conteo físico. Mientras tanto la banda de mínimo/objetivo usa el PPTO de ventas.</td></tr>`;
+    if(mesesSinPpto.length) htmlN += `<tr><td class="txt" colspan="7" style="color:var(--ink-soft);font-size:11.5px;">Sin PPTO publicado todavía para: ${mesesSinPpto.map(fmtMesLabel).join(', ')} — no se proyecta pedido nuevo para esos meses hasta que se publique el presupuesto.</td></tr>`;
+    document.getElementById('tbl_v10_necesidad').innerHTML = htmlN;
+  }
+  poblarSelect('f101_familia', FAMILIAS_ORDEN);
+  document.getElementById('f101_familia').onchange = pintarNecesidad;
+  pintarNecesidad();
 
   // ---- 10.2 Flujo de caja de compras: histórico reciente + ya pedido + pedidos nuevos ----
   const mesActual = monthKey(new Date());
@@ -3562,7 +3566,16 @@ function buildPedidosNuevosProyectados(M, opts={}){
           // a lo que este proveedor ha manejado alguna vez), el pedido se limita al techo de todas formas y el
           // resto queda como brecha honesta — subir el techo al déficit habría anulado por completo la política
           // de crecimiento acotado justo en el escenario donde existe para proteger.
-          const techoTon = techoPedidoTonMix(mix) ?? (deficitBase*CRECIMIENTO_MAX_VS_HISTORICO); // respaldo generoso: ningún proveedor del mix con historial (no debería ocurrir con datos reales)
+          // 24-sep, Tanda 25 (a pedido de Sebastián, con evidencia real: Tubos pedía 2.017 Ton en oct-26 para
+          // un objetivo de solo ~506 Ton, porque PS_GLOBAL necesita 11 parciales para entregar su parte — para
+          // que su PRIMER parcial llegara a tiempo, había que inflar el pedido total, arrastrando 10 parciales
+          // más que llegan meses después de la fecha objetivo, puro excedente sin necesidad real detrás).
+          // Se acota cuánto se puede inflar el pedido para intentar que llegue a tiempo: nunca más de
+          // FACTOR_MAX_INFLACION_DEFICIT veces el déficit real. Si ni así alcanza a cerrar el hueco a tiempo,
+          // se acepta honestamente el remanente en huecoNoCerradoEnVentanaTon (visible en 10.1) en vez de
+          // seguir subiendo el pedido.
+          const FACTOR_MAX_INFLACION_DEFICIT = 1.75;
+          const techoTon = Math.min(techoPedidoTonMix(mix) ?? (deficitBase*CRECIMIENTO_MAX_VS_HISTORICO), deficitBase*FACTOR_MAX_INFLACION_DEFICIT);
           const tonATiempoDe = (tam)=>{
             const filasProbe = construirParcialesPedido(mix, tam, mesNecesidad, fechaArriboObjetivo, familia);
             return filasProbe.filter(f=>f.mesArribo<=mesObjetivoPedido).reduce((a,f)=>a+f.ton,0);
@@ -3590,6 +3603,49 @@ function buildPedidosNuevosProyectados(M, opts={}){
           }
         } else {
           pedidoTon = deficitBase;
+        }
+      }
+
+      // 24-sep, Tanda 26 (verificador explícito pedido por Sebastián: "no quiero que se pase del límite, y si
+      // se pasa más de un 15%, que corrija hacia atrás"): después de decidir pedidoTon por cualquiera de las
+      // rutas de arriba, se simula la posición que resultaría en los meses siguientes CON este pedido ya
+      // sumado, y se busca el peor punto (mayor posición vs. el máximo de referencia = 2.5× la venta de ese
+      // mes). Si ese peor punto supera 115% del máximo, se reduce pedidoTon proporcionalmente (unas pocas
+      // iteraciones, porque la relación no es perfectamente lineal por el redondeo de parciales) hasta quedar
+      // dentro de ese 115% — el remanente que ya no se puede cerrar sin pasarse del techo de sobre-stock queda
+      // honesto en huecoNoCerradoEnVentanaTon, igual que el resto de topes de este motor.
+      const TOPE_SOBRE_MAXIMO = 1.15;
+      if(disparaPedido && pedidoTon>0 && mix && mix.length>0){
+        const evaluarPico = (tonCandidato)=>{
+          const filasProbe = construirParcialesPedido(mix, tonCandidato, mesNecesidad, fechaArriboObjetivo, familia);
+          const entradasPorMesProbe = {};
+          filasProbe.forEach(f=>{ entradasPorMesProbe[f.mesArribo] = (entradasPorMesProbe[f.mesArribo]||0) + f.ton; });
+          let pos = posicionInicio - necesidadTon;
+          let peorRatio = -Infinity, posPeor=null, maxPeor=null;
+          const idxFin = Math.min(mesesHorizonte.length-1, idxMesNecesidad + Lmeses + 3);
+          for(let k=idxMesNecesidad+1; k<=idxFin; k++){
+            const mesK = mesesHorizonte[k];
+            const pptoK = M.pptoPorMes[mesK];
+            const ventaK = (pptoK && pptoK[familia]>0) ? pptoK[familia] : ventaBase;
+            const entradasYaK = (entradasNuevasFuturasPorMes[mesK] && entradasNuevasFuturasPorMes[mesK][familia]) || 0;
+            const entradasYaPedidoK = (llegadasIdx[mesK] ? ((llegadasIdx[mesK].cierto[familia]||0)+(llegadasIdx[mesK].estimado[familia]||0))/1000 : 0);
+            const entradasNuevoOrdenK = entradasPorMesProbe[mesK] || 0;
+            pos = pos + entradasYaK + entradasYaPedidoK + entradasNuevoOrdenK - ventaK;
+            const maxK = 2.5*ventaK;
+            const ratio = maxK>0 ? pos/maxK : 0;
+            if(ratio>peorRatio){ peorRatio=ratio; posPeor=pos; maxPeor=maxK; }
+          }
+          return {peorRatio, posPeor, maxPeor};
+        };
+        let evalPico = evaluarPico(pedidoTon);
+        if(evalPico.peorRatio > TOPE_SOBRE_MAXIMO){
+          const pedidoTonAntesDelTope = pedidoTon;
+          for(let iter=0; iter<4 && evalPico.peorRatio>TOPE_SOBRE_MAXIMO && pedidoTon>0.01; iter++){
+            const factor = Math.max(0, (TOPE_SOBRE_MAXIMO*evalPico.maxPeor) / evalPico.posPeor);
+            pedidoTon = pedidoTon*factor;
+            evalPico = evaluarPico(pedidoTon);
+          }
+          huecoNoCerradoEnVentanaTon = Math.max(huecoNoCerradoEnVentanaTon, deficitBase - pedidoTon*(deficitBase/pedidoTonAntesDelTope||1));
         }
       }
 
