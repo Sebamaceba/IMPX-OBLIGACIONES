@@ -586,6 +586,11 @@
       </div>
       <div class="scroll"><table id="tbl_llegadas_consolidado"></table></div>
     </div>
+    <div class="panel">
+      <h2>5 · Llegadas Proyectadas vs. Reales — ¿qué tan bien acertamos?</h2>
+      <div class="desc">Compara lo que este Tablero proyectaba que iba a llegar cada mes (congelado el día 5 del mes anterior, antes de que ese mes empezara) contra lo que realmente arribó. Necesita al menos 1 mes de historial en la Bitácora para mostrar algo.</div>
+      <div class="scroll"><table id="tbl_v9_comparacion_llegadas"></table></div>
+    </div>
   </div>
 
   <div class="view" id="v10">
@@ -618,6 +623,12 @@
       <div class="desc">PPTO de ventas (Ton) vs. lo que ya va a llegar (cierto + estimado, Vista 9) vs. inventario inicial (real o proyectado) vs. el faltante a cubrir con pedidos nuevos.</div>
       <div class="filters"><select id="f101_familia"><option value="">Todas las familias</option></select></div>
       <div class="scroll"><table id="tbl_v10_necesidad"></table></div>
+    </div>
+
+    <div class="panel">
+      <h2>10.1b · Pedidos Sugeridos vs. Realizados — ¿estamos ejecutando lo que el modelo recomienda?</h2>
+      <div class="desc">Compara lo que este módulo sugería comprar cada mes (congelado el día 5, antes de que ese mes empezara) contra lo que Compras realmente colocó. Necesita al menos 1 mes de historial en la Bitácora para mostrar algo.</div>
+      <div class="scroll"><table id="tbl_v10_comparacion_sugeridos"></table></div>
     </div>
 
     <div class="panel">
@@ -800,6 +811,30 @@ const CSV_URLS = {
   // PPTO de ventas por familia (Ton), pestaña agregada 16-sep-2026 para el módulo de Pedidos Nuevos Proyectados.
   ppto: 'https://docs.google.com/spreadsheets/d/e/2PACX-1vTMOQUv-oE-Vs3VvrpHc6g-8X04Qf_s-2gkFzialLhlD2KwMBr6GiNtgzYPUvI1EJpsy2qjQpVoqQQD/pub?gid=66861670&single=true&output=csv'
 };
+// Bitácora mensual (Meta congelada) — reemplazar 'PENDIENTE' por el gid real una vez creadas las 2 pestañas
+// nuevas en el Sheet (ver Bitacora_AppsScript.gs para el nombre exacto y encabezados de cada una).
+const BITACORA_BASE_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vTMOQUv-oE-Vs3VvrpHc6g-8X04Qf_s-2gkFzialLhlD2KwMBr6GiNtgzYPUvI1EJpsy2qjQpVoqQQD/pub?gid=';
+const BITACORA_SUGERIDOS_GID = '2022778074';
+const BITACORA_LLEGADAS_GID = '814976937';
+let BITACORA_HIST = {sugeridos:[], llegadas:[]}; // se llena de forma asíncrona después de init(), sin bloquear el resto del Tablero
+async function cargarBitacoraHistorica(){
+  const resultado = {sugeridos:[], llegadas:[]};
+  if(BITACORA_SUGERIDOS_GID!=='PENDIENTE'){
+    try{
+      const text = await fetchWithFallback(BITACORA_BASE_URL+BITACORA_SUGERIDOS_GID+'&single=true&output=csv');
+      const parsed = Papa.parse(text, {skipEmptyLines:true, header:true});
+      resultado.sugeridos = parsed.data.map(r=>({ fechaCorte:r['Fecha de Corte'], mesNecesidad:r['Mes Necesidad'], familia:r['Familia'], proveedor:r['Proveedor'], tonSugeridas:parseFloat(r['Ton Sugeridas'])||0 }));
+    } catch(e){ console.warn('No se pudo leer la bitácora de pedidos sugeridos (¿ya existe la pestaña y el gid es correcto?):', e); }
+  }
+  if(BITACORA_LLEGADAS_GID!=='PENDIENTE'){
+    try{
+      const text = await fetchWithFallback(BITACORA_BASE_URL+BITACORA_LLEGADAS_GID+'&single=true&output=csv');
+      const parsed = Papa.parse(text, {skipEmptyLines:true, header:true});
+      resultado.llegadas = parsed.data.map(r=>({ fechaCorte:r['Fecha de Corte'], mesDisponible:r['Mes Disponible'], familia:r['Familia'], tonCierto:parseFloat(r['Ton Cierto'])||0, tonEstimado:parseFloat(r['Ton Estimado'])||0 }));
+    } catch(e){ console.warn('No se pudo leer la bitácora de llegadas proyectadas (¿ya existe la pestaña y el gid es correcto?):', e); }
+  }
+  return resultado;
+}
 
 const ANCHORS = {
   proformas: ['PROYECTO EN PRODUCCIÓN','PROFORMA','PROVEEDOR'],
@@ -2364,6 +2399,8 @@ async function init(){
     document.getElementById('ultimaActualizacion').textContent = `Última actualización: ${horaActual}`;
     setStatus('ok', `Última actualización: ${new Date().toLocaleString('es-CO')} · ${MODEL.pedidos.length} pedidos, ${MODEL.spAll.length} proyectos parciales, ${MODEL.pg.length} pagos, ${MODEL.gf.length} giros financieros.`);
     document.getElementById('loadOverlay').style.display='none';
+    intentarGuardarBitacoraMensual(MODEL); // silencioso — no bloquea nada si falla
+    cargarBitacoraHistorica().then(hist=>{ BITACORA_HIST = hist; if(hist.sugeridos.length||hist.llegadas.length){ renderComparacionSugeridosVsReal(); renderComparacionLlegadasVsReal(); } });
   } catch(err){
     setStatus('error', 'Error: ' + err.message);
     document.getElementById('loadMsg').innerHTML = `⚠ ${err.message}<br><br><button id="retryBtn">Reintentar</button>`;
@@ -2373,6 +2410,61 @@ async function init(){
 }
 
 Chart.register(ChartDataLabels);
+
+// ================= BITÁCORA MENSUAL (Meta congelada: Pedidos Sugeridos + Llegadas Proyectadas) =================
+// IMPORTANTE: reemplazar por la URL real una vez desplegado el Apps Script (ver Bitacora_AppsScript.gs).
+const BITACORA_WEBAPP_URL = 'https://script.google.com/macros/s/AKfycbzjCjRTWQDcVKGVD7bm1itSstGRSdRmGpBUCKvgcK4OyM0hj2u2JPRlJPwZHynewBJqyA/exec';
+
+function intentarGuardarBitacoraMensual(M){
+  try{
+    if(!BITACORA_WEBAPP_URL || BITACORA_WEBAPP_URL.startsWith('PENDIENTE')) return; // aún no configurado, no hacer nada
+    const HOY = new Date();
+    if(HOY.getDate() < 5) return; // antes del día 5, todavía no toca
+
+    // Cortesía local para no reintentar cada vez que alguien recarga la página el mismo día (el servidor
+    // igual es quien de verdad evita duplicados — esto solo reduce tráfico innecesario).
+    const mesActual = monthKey(HOY);
+    const yaIntentadoHoy = sessionStorage.getItem('bitacora_intentada_'+mesActual);
+    if(yaIntentadoHoy) return;
+    sessionStorage.setItem('bitacora_intentada_'+mesActual, '1');
+
+    const fechaCorte = HOY.getFullYear()+'-'+String(HOY.getMonth()+1).padStart(2,'0')+'-'+String(HOY.getDate()).padStart(2,'0');
+
+    // 1) Pedidos Sugeridos: de Grupo A (sin parcial) + Grupo B (parcial incompleto), agregados por
+    // mes de necesidad + proveedor (misma fuente que Vista 10 / la proyección de llegadas).
+    const filasSugeridos = [];
+    const acumSug = {};
+    [...M.grupoA, ...M.grupoB].forEach(p=>{
+      (p.parciales||[]).forEach(par=>{
+        const mesNecesidad = monthKey(par.fechaZarpeEstimada || par.fechaPagoEstimada);
+        if(!mesNecesidad) return;
+        // Nota: el desglose fino por Familia ya vive en vivo en Vista 9/10 — la bitácora congela el TOTAL
+        // sugerido por mes+proveedor, que es suficiente para medir "cuánto se sugirió vs. cuánto se pidió".
+        const k = mesNecesidad+'|'+p.proveedor;
+        acumSug[k] = acumSug[k] || {mesNecesidad, familia:'Total', proveedor:p.proveedor, tonSugeridas:0};
+        acumSug[k].tonSugeridas += (par.kgEstimado||0)/1000;
+      });
+    });
+    Object.values(acumSug).forEach(f=>filasSugeridos.push(f));
+
+    // 2) Llegadas Proyectadas: de Vista 9 (M._llegadasCache), consolidadas por mes disponible + familia
+    const llegadas = M._llegadasCache || buildLlegadasPorFamilia(M);
+    const diaGabelaDefecto = 20;
+    const consolidado = consolidarLlegadasPorMes(llegadas, diaGabelaDefecto);
+    const filasLlegadas = [];
+    consolidado.forEach(c=>{
+      FAMILIAS_ORDEN.forEach(fam=>{
+        const tonCierto = (c.cierto[fam]||0)/1000, tonEstimado = (c.estimado[fam]||0)/1000;
+        if(tonCierto<=0 && tonEstimado<=0) return;
+        filasLlegadas.push({mesDisponible:c.mes, familia:fam, tonCierto, tonEstimado});
+      });
+    });
+
+    if(filasSugeridos.length) fetch(BITACORA_WEBAPP_URL, {method:'POST', mode:'no-cors', body:JSON.stringify({tipo:'pedidos_sugeridos', fechaCorte, filas:filasSugeridos})}).catch(()=>{});
+    if(filasLlegadas.length) fetch(BITACORA_WEBAPP_URL, {method:'POST', mode:'no-cors', body:JSON.stringify({tipo:'llegadas_proyectadas', fechaCorte, filas:filasLlegadas})}).catch(()=>{});
+  } catch(err){ console.warn('Bitácora mensual: no se pudo guardar (no afecta el resto del dashboard):', err); }
+}
+
 function destroyChart(id){ if(charts[id]){ charts[id].destroy(); delete charts[id]; } }
 function deepMerge(a,b){
   const out = {...a};
@@ -2755,6 +2847,82 @@ function renderView11(){
   });
 }
 
+// ================= COMPARACIÓN CONTRA LA BITÁCORA (Meta congelada vs. Real) =================
+function tablaSinHistorial(tblId, colspan, mensaje){
+  document.getElementById(tblId).innerHTML = `<tr><td class="txt" style="color:var(--ink-soft);padding:14px;">${mensaje}</td></tr>`;
+}
+
+function renderComparacionLlegadasVsReal(){
+  const tbl = document.getElementById('tbl_v9_comparacion_llegadas');
+  if(!tbl) return;
+  if(!BITACORA_HIST.llegadas.length){
+    tablaSinHistorial('tbl_v9_comparacion_llegadas', 1, 'Todavía no hay historial en la Bitácora — en cuanto pase el día 5 de un mes con el Apps Script conectado, empieza a acumularse automáticamente. Vuelve a revisar el mes que viene.');
+    return;
+  }
+  const M = MODEL;
+  const HOY = new Date();
+  const mesActualStr = monthKey(HOY);
+  // Para cada mes+familia, se usa la ÚLTIMA foto tomada ANTES de que ese mes empezara (la más refinada
+  // disponible en su momento, sin usar información que en su momento todavía no existía).
+  const porMesFamilia = {};
+  BITACORA_HIST.llegadas.forEach(r=>{
+    if(!r.mesDisponible || r.mesDisponible>=mesActualStr) return; // solo meses ya vencidos, se puede comparar contra la realidad
+    if(r.fechaCorte.slice(0,7) >= r.mesDisponible) return; // la foto se tomó en o después del mes que proyecta: no cuenta como "anticipada"
+    const k = r.mesDisponible+'|'+r.familia;
+    if(!porMesFamilia[k] || r.fechaCorte>porMesFamilia[k].fechaCorte) porMesFamilia[k] = r;
+  });
+  if(!Object.keys(porMesFamilia).length){
+    tablaSinHistorial('tbl_v9_comparacion_llegadas', 1, 'Hay fotos en la Bitácora, pero ninguna todavía corresponde a un mes ya vencido — vuelve a revisar cuando pase al menos 1 mes completo desde la primera foto.');
+    return;
+  }
+  // Real: toneladas que efectivamente arribaron ese mes (Peso Bruto real, Control de Importaciones)
+  const llegadas = M._llegadasCache || buildLlegadasPorFamilia(M);
+  let html = '<tr><th>Mes</th><th>Familia</th><th>Meta (proyectada)</th><th>Real (arribado)</th><th>Diferencia (Ton)</th><th>% Cumplimiento</th></tr>';
+  Object.values(porMesFamilia).sort((a,b)=>a.mesDisponible.localeCompare(b.mesDisponible)).forEach(r=>{
+    const metaTon = r.tonCierto + r.tonEstimado;
+    const realTon = llegadas.confirmadoReal.filter(it=>it.familia===r.familia && mesDisponibilidad(it.fechaArribo,20)===r.mesDisponible).reduce((a,it)=>a+it.kg,0)/1000;
+    const dif = realTon - metaTon;
+    const pct = metaTon>0 ? Math.round(realTon/metaTon*100) : null;
+    const sem = pct===null?'neutral':(pct>=95?'ok':(pct>=80?'warn':'bad'));
+    html += `<tr><td class="txt">${fmtMesLabel(r.mesDisponible)}</td><td class="txt">${r.familia}</td><td>${fmtTonDirecto(metaTon)}</td><td>${fmtTonDirecto(realTon)}</td>
+      <td style="color:${dif>=0?'var(--green)':'var(--red)'};">${dif>=0?'+':''}${fmtTonDirecto(dif)}</td><td><span class="pill ${sem}">${pct!==null?pct+'%':'—'}</span></td></tr>`;
+  });
+  document.getElementById('tbl_v9_comparacion_llegadas').innerHTML = html;
+}
+
+function renderComparacionSugeridosVsReal(){
+  const tbl = document.getElementById('tbl_v10_comparacion_sugeridos');
+  if(!tbl) return;
+  if(!BITACORA_HIST.sugeridos.length){
+    tablaSinHistorial('tbl_v10_comparacion_sugeridos', 1, 'Todavía no hay historial en la Bitácora — en cuanto pase el día 5 de un mes con el Apps Script conectado, empieza a acumularse automáticamente. Vuelve a revisar el mes que viene.');
+    return;
+  }
+  const M = MODEL;
+  const HOY = new Date();
+  const mesActualStr = monthKey(HOY);
+  const porMesProveedor = {};
+  BITACORA_HIST.sugeridos.forEach(r=>{
+    if(!r.mesNecesidad || r.mesNecesidad>=mesActualStr) return;
+    if(r.fechaCorte.slice(0,7) >= r.mesNecesidad) return;
+    const k = r.mesNecesidad+'|'+r.proveedor;
+    if(!porMesProveedor[k] || r.fechaCorte>porMesProveedor[k].fechaCorte) porMesProveedor[k] = r;
+  });
+  if(!Object.keys(porMesProveedor).length){
+    tablaSinHistorial('tbl_v10_comparacion_sugeridos', 1, 'Hay fotos en la Bitácora, pero ninguna todavía corresponde a un mes ya vencido — vuelve a revisar cuando pase al menos 1 mes completo desde la primera foto.');
+    return;
+  }
+  let html = '<tr><th>Mes</th><th>Proveedor</th><th>Sugerido</th><th>Realmente Pedido</th><th>Diferencia (Ton)</th><th>% Cumplimiento</th></tr>';
+  Object.values(porMesProveedor).sort((a,b)=>a.mesNecesidad.localeCompare(b.mesNecesidad)).forEach(r=>{
+    const realTon = M.pedidos.filter(p=>p.proveedor===r.proveedor && p.mesPedido===r.mesNecesidad).reduce((a,p)=>a+(p.pedidoKg||0),0)/1000;
+    const dif = realTon - r.tonSugeridas;
+    const pct = r.tonSugeridas>0 ? Math.round(realTon/r.tonSugeridas*100) : null;
+    const sem = pct===null?'neutral':(pct>=95?'ok':(pct>=80?'warn':'bad'));
+    html += `<tr><td class="txt">${fmtMesLabel(r.mesNecesidad)}</td><td class="txt">${r.proveedor}</td><td>${fmtTonDirecto(r.tonSugeridas)}</td><td>${fmtTonDirecto(realTon)}</td>
+      <td style="color:${dif>=0?'var(--green)':'var(--red)'};">${dif>=0?'+':''}${fmtTonDirecto(dif)}</td><td><span class="pill ${sem}">${pct!==null?pct+'%':'—'}</span></td></tr>`;
+  });
+  document.getElementById('tbl_v10_comparacion_sugeridos').innerHTML = html;
+}
+
 function renderView9(){
   const M = MODEL;
   const diaGabela = parseInt(document.getElementById('v9_gabela').value||'20',10);
@@ -2882,6 +3050,7 @@ function renderView9(){
     XLSX.utils.book_append_sheet(wb, wsR, 'Consolidado');
     XLSX.writeFile(wb, `Llegadas_por_Familia_${fmtDate(new Date())}.xlsx`);
   };
+  renderComparacionLlegadasVsReal();
 }
 
 // ================= VISTA 10 · PEDIDOS NUEVOS PROYECTADOS =================
@@ -3224,6 +3393,7 @@ function renderView10(){
     XLSX.utils.book_append_sheet(wb, wsNec, 'Necesidad por Mes');
     XLSX.writeFile(wb, `Pedidos_Nuevos_Proyectados_${fmtDate(new Date())}.xlsx`);
   };
+  renderComparacionSugeridosVsReal();
 }
 
 function renderDiag(){
