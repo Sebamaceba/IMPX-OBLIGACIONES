@@ -683,7 +683,9 @@
     <div class="panel">
       <h2>1 · Producción</h2>
       <div class="desc">Pedido (Fecha Proforma) → última Fecha Real de Producción. Meta = compromiso ORIGINAL del proveedor (días estimados de producción de la primera línea de esa proforma+producto).</div>
+      <div class="filters"><select id="f11_e1_mes"><option value="">Todos los meses</option></select></div>
       <div class="mini-kpis" id="v11_e1_resumen"></div>
+      <div style="margin-top:14px;background:var(--paper);border:1px solid var(--amber);border-radius:8px;padding:12px 14px;"><h3 style="font-size:12.5px;color:var(--navy);margin:0 0 8px;">⚠ Abiertos ahora mismo (en riesgo o ya pasados de meta)</h3><div class="scroll"><table id="tbl_v11_e1_abiertos"></table></div></div>
     </div>
     <div class="panel">
       <h2>1 · Producción — Tendencia mensual (Real vs. Meta, ponderado por Ton)</h2>
@@ -704,7 +706,9 @@
     <div class="panel">
       <h2>2 · Embarque</h2>
       <div class="desc">Producción real → Zarpe real. Meta fija: 15 días para todos los proveedores.</div>
+      <div class="filters"><select id="f11_e2_mes"><option value="">Todos los meses</option></select></div>
       <div class="mini-kpis" id="v11_e2_resumen"></div>
+      <div style="margin-top:14px;background:var(--paper);border:1px solid var(--amber);border-radius:8px;padding:12px 14px;"><h3 style="font-size:12.5px;color:var(--navy);margin:0 0 8px;">⚠ Abiertos ahora mismo (en riesgo o ya pasados de meta)</h3><div class="scroll"><table id="tbl_v11_e2_abiertos"></table></div></div>
     </div>
     <div class="panel">
       <h2>2 · Embarque — Tendencia mensual (Real vs. Meta, ponderado por Ton)</h2>
@@ -725,7 +729,9 @@
     <div class="panel">
       <h2>3 · Navegación</h2>
       <div class="desc">Zarpe real → Arribo real. Meta = P80 histórico por país de origen (mismo criterio ya usado en el resto del Tablero).</div>
+      <div class="filters"><select id="f11_e3_mes"><option value="">Todos los meses</option></select></div>
       <div class="mini-kpis" id="v11_e3_resumen"></div>
+      <div style="margin-top:14px;background:var(--paper);border:1px solid var(--amber);border-radius:8px;padding:12px 14px;"><h3 style="font-size:12.5px;color:var(--navy);margin:0 0 8px;">⚠ Abiertos ahora mismo (en riesgo o ya pasados de meta)</h3><div class="scroll"><table id="tbl_v11_e3_abiertos"></table></div></div>
     </div>
     <div class="panel">
       <h2>3 · Navegación — Tendencia mensual (Real vs. Meta, ponderado por Ton)</h2>
@@ -746,7 +752,9 @@
     <div class="panel">
       <h2>4 · Nacionalización</h2>
       <div class="desc">Arribo real → Fecha Levante DIM. Meta = P80 histórico global (provisional, hasta definir meta oficial).</div>
+      <div class="filters"><select id="f11_e4_mes"><option value="">Todos los meses</option></select></div>
       <div class="mini-kpis" id="v11_e4_resumen"></div>
+      <div style="margin-top:14px;background:var(--paper);border:1px solid var(--amber);border-radius:8px;padding:12px 14px;"><h3 style="font-size:12.5px;color:var(--navy);margin:0 0 8px;">⚠ Abiertos ahora mismo (en riesgo o ya pasados de meta)</h3><div class="scroll"><table id="tbl_v11_e4_abiertos"></table></div></div>
     </div>
     <div class="panel">
       <h2>4 · Nacionalización — Tendencia mensual (Real vs. Meta, ponderado por Ton)</h2>
@@ -2571,7 +2579,17 @@ function semaforoCumplimiento(real, meta){
   if(real<=meta*1.10) return 'warn';
   return 'bad';
 }
-function renderEtapaCumplimiento(prefix, datos){
+function renderEtapaCumplimiento(prefix, datosCompletos, abiertos){
+  const selMes = document.getElementById(`f11_${prefix}_mes`);
+  if(!selMes.dataset.poblado){
+    const mesesDisp = [...new Set(datosCompletos.map(o=>o.fecha?monthKey(o.fecha):null).filter(Boolean))].sort();
+    selMes.innerHTML = '<option value="">Todos los meses</option>' + mesesDisp.map(m=>`<option value="${m}">${fmtMesLabel(m)}</option>`).join('');
+    selMes.dataset.poblado = '1';
+    selMes.onchange = ()=>renderView11();
+  }
+  const fMes = selMes.value;
+  const datos = fMes ? datosCompletos.filter(o=>o.fecha && monthKey(o.fecha)===fMes) : datosCompletos;
+
   const realProm = promedioPonderadoGenerico(datos, 'realDias', 'peso');
   const metaProm = promedioPonderadoGenerico(datos, 'metaDias', 'peso');
   const pctCumpl = (realProm && metaProm) ? (metaProm/realProm*100) : null;
@@ -2580,18 +2598,19 @@ function renderEtapaCumplimiento(prefix, datos){
     <div class="mini-kpi ${sem}"><span>Real Prom. Ponderado</span><b>${realProm!==null?Math.round(realProm)+' d':'—'}</b></div>
     <div class="mini-kpi"><span>Meta</span><b>${metaProm!==null?Math.round(metaProm)+' d':'—'}</b></div>
     <div class="mini-kpi ${sem}"><span>% Cumplimiento</span><b>${pctCumpl!==null?Math.round(pctCumpl)+'%':'—'}</b></div>
-    <div class="mini-kpi"><span># Observaciones</span><b>${datos.length}</b></div>
+    <div class="mini-kpi"><span># Observaciones (cerradas)</span><b>${datos.length}</b></div>
   `;
 
-  // Tendencia mensual: ¿mejora o empeora con el tiempo?
+  // Tendencia mensual: ¿mejora o empeora con el tiempo? (usa siempre TODOS los meses, no el filtrado — para
+  // poder ver la tendencia completa aunque el resto de la sección esté mirando un mes puntual)
   const porMes = {};
-  datos.forEach(o=>{ if(!o.fecha) return; const m = monthKey(o.fecha); porMes[m] = porMes[m]||[]; porMes[m].push(o); });
+  datosCompletos.forEach(o=>{ if(!o.fecha) return; const m = monthKey(o.fecha); porMes[m] = porMes[m]||[]; porMes[m].push(o); });
   const meses = Object.keys(porMes).sort();
   const realPorMes = meses.map(m=>promedioPonderadoGenerico(porMes[m],'realDias','peso'));
   const metaPorMes = meses.map(m=>promedioPonderadoGenerico(porMes[m],'metaDias','peso'));
   lineChart(`c_v11_${prefix}_tendencia`, meses.map(fmtMesLabel), [
     {label:'Real (ponderado por Ton)', data:realPorMes, borderColor:COLORS.navy, backgroundColor:COLORS.navy},
-    {label:'Meta', data:metaPorMes, borderColor:COLORS.gold, backgroundColor:COLORS.gold, borderDash:[6,4]},
+    {label:'Meta', data:metaPorMes, borderColor:COLORS.slate, backgroundColor:COLORS.slate, borderDash:[6,4]},
   ]);
 
   // Ranking por proveedor
@@ -2606,6 +2625,7 @@ function renderEtapaCumplimiento(prefix, datos){
     const pct = (f.real&&f.meta) ? Math.round(f.meta/f.real*100) : null;
     htmlProv += `<tr><td class="txt">${f.proveedor}</td><td>${f.real!==null?Math.round(f.real)+' d':'—'}</td><td>${f.meta!==null?Math.round(f.meta)+' d':'—'}</td><td><span class="pill ${s}">${pct!==null?pct+'%':'—'}</span></td><td>${f.n}</td></tr>`;
   });
+  if(!filasProv.length) htmlProv += '<tr><td colspan="5" class="txt" style="color:var(--ink-soft);">Sin suficientes observaciones para este mes.</td></tr>';
   document.getElementById(`tbl_v11_${prefix}_proveedor`).innerHTML = htmlProv;
 
   // Por familia
@@ -2619,9 +2639,23 @@ function renderEtapaCumplimiento(prefix, datos){
     const pct = (real&&meta) ? Math.round(meta/real*100) : null;
     htmlFam += `<tr><td class="txt">${fam}</td><td>${real!==null?Math.round(real)+' d':'—'}</td><td>${meta!==null?Math.round(meta)+' d':'—'}</td><td><span class="pill ${s}">${pct!==null?pct+'%':'—'}</span></td><td>${arr.length}</td></tr>`;
   });
+  if(!Object.keys(porFamilia).length) htmlFam += '<tr><td colspan="5" class="txt" style="color:var(--ink-soft);">Sin suficientes observaciones para este mes.</td></tr>';
   document.getElementById(`tbl_v11_${prefix}_familia`).innerHTML = htmlFam;
 
-  return {realProm, metaProm};
+  // Abiertos ahora mismo: en progreso, sin cerrar todavía — ¿a punto de pasarse de la meta, o ya se pasaron?
+  const abiertosRiesgo = (abiertos||[]).filter(o=>o.metaDias>0 && o.transcurridos >= o.metaDias*0.8)
+    .sort((a,b)=>(b.transcurridos/b.metaDias)-(a.transcurridos/a.metaDias));
+  let htmlAb = '<tr><th>Referencia</th><th>Proveedor</th><th>Familia</th><th>Días Transcurridos</th><th>Meta</th><th>Estado</th></tr>';
+  abiertosRiesgo.forEach(o=>{
+    const yaSePaso = o.transcurridos > o.metaDias;
+    htmlAb += `<tr class="${yaSePaso?'row-bad':''}"><td class="txt">${o.referencia||'—'}</td><td class="txt">${o.proveedor||'—'}</td><td class="txt">${o.familia||'—'}</td>
+      <td>${Math.round(o.transcurridos)} d</td><td>${Math.round(o.metaDias)} d</td>
+      <td><span class="pill ${yaSePaso?'bad':'warn'}">${yaSePaso?'Ya se pasó':'A punto de pasarse'}</span></td></tr>`;
+  });
+  if(!abiertosRiesgo.length) htmlAb += '<tr><td colspan="6" class="txt" style="color:var(--ink-soft);">Nada abierto en riesgo ahora mismo — todo lo que sigue en curso todavía tiene margen frente a su meta.</td></tr>';
+  document.getElementById(`tbl_v11_${prefix}_abiertos`).innerHTML = htmlAb;
+
+  return {realProm, metaProm, nAbiertosRiesgo: abiertosRiesgo.length};
 }
 
 function lineChart(canvasId, labels, datasets){
@@ -2635,10 +2669,10 @@ function renderView11(){
   const M = MODEL;
   const C = M._cascadaCache || (M._cascadaCache = buildCascadaCumplimiento(M));
 
-  const r1 = renderEtapaCumplimiento('e1', C.etapa1);
-  const r2 = renderEtapaCumplimiento('e2', C.etapa2);
-  const r3 = renderEtapaCumplimiento('e3', C.etapa3);
-  const r4 = renderEtapaCumplimiento('e4', C.etapa4);
+  const r1 = renderEtapaCumplimiento('e1', C.etapa1, C.abierto1);
+  const r2 = renderEtapaCumplimiento('e2', C.etapa2, C.abierto2);
+  const r3 = renderEtapaCumplimiento('e3', C.etapa3, C.abierto3);
+  const r4 = renderEtapaCumplimiento('e4', C.etapa4, C.abierto4);
 
   // Resumen global: promedio ponderado por Ton de las 4 etapas juntas (Pedido -> Levante)
   const todas = [...C.etapa1, ...C.etapa2, ...C.etapa3, ...C.etapa4];
@@ -2648,21 +2682,48 @@ function renderView11(){
   const semGlobal = semaforoCumplimiento(realGlobal, metaGlobal);
   const etapas = [{n:'Producción', r:r1}, {n:'Embarque', r:r2}, {n:'Navegación', r:r3}, {n:'Nacionalización', r:r4}];
   const cuello = etapas.filter(e=>e.r.realProm!==null && e.r.metaProm!==null).sort((a,b)=>(b.r.realProm-b.r.metaProm)-(a.r.realProm-a.r.metaProm))[0];
+  const totalAbiertosRiesgo = (r1.nAbiertosRiesgo||0)+(r2.nAbiertosRiesgo||0)+(r3.nAbiertosRiesgo||0)+(r4.nAbiertosRiesgo||0);
   document.getElementById('v11_resumenGlobal').innerHTML = `
     <div class="mini-kpi ${semGlobal}"><span>% Cumplimiento del Proceso (Pedido→Levante)</span><b>${pctGlobal!==null?pctGlobal+'%':'—'}</b></div>
     <div class="mini-kpi"><span>Días Reales Totales (suma de las 4 etapas)</span><b>${Math.round((r1.realProm||0)+(r2.realProm||0)+(r3.realProm||0)+(r4.realProm||0))} d</b></div>
     <div class="mini-kpi"><span>Meta Total</span><b>${Math.round((r1.metaProm||0)+(r2.metaProm||0)+(r3.metaProm||0)+(r4.metaProm||0))} d</b></div>
     <div class="mini-kpi bad"><span>Cuello de botella</span><b>${cuello?cuello.n:'—'}</b></div>
+    <div class="mini-kpi ${totalAbiertosRiesgo>0?'warn':'ok'}"><span>Abiertos en riesgo (todas las etapas)</span><b>${totalAbiertosRiesgo}</b></div>
   `;
 
-  // Cascada / waterfall: Real vs Meta por etapa
+  // Cascada: UNA barra por etapa (el Real, coloreado por semáforo: verde=dentro de meta, ámbar=hasta 10%
+  // sobre meta, rojo=más de 10%), con la Meta superpuesta como una marca angosta a esa altura — no dos barras
+  // lado a lado, para que se lea de un vistazo si el Real se pasó de la Meta o no, sin tener que comparar
+  // alturas de dos barras separadas.
   const etapasNombres = ['Producción','Embarque','Navegación','Nacionalización'];
   const realesArr = [r1.realProm, r2.realProm, r3.realProm, r4.realProm].map(v=>v||0);
   const metasArr = [r1.metaProm, r2.metaProm, r3.metaProm, r4.metaProm].map(v=>v||0);
-  barChart('c_v11_cascada', etapasNombres, [
-    {label:'Real', data:realesArr, backgroundColor:COLORS.navy},
-    {label:'Meta', data:metasArr, backgroundColor:COLORS.gold},
-  ], {}, true, v=>Math.round(v)+'d');
+  const coloresReal = realesArr.map((v,i)=>{
+    const s = semaforoCumplimiento(v, metasArr[i]);
+    return s==='ok'?COLORS.green:(s==='warn'?COLORS.amber:(s==='bad'?COLORS.red:COLORS.slate));
+  });
+  const elCascada = document.getElementById('c_v11_cascada');
+  if(elCascada._chart) elCascada._chart.destroy();
+  elCascada._chart = new Chart(elCascada, {
+    type:'bar',
+    data:{ labels:etapasNombres, datasets:[
+      // Meta: barra ancha, angosta en altura (floating bar min/max), detrás — se ve como una marca de referencia
+      {label:'Meta', data:metasArr.map(v=>[Math.max(0,v-0.6), v+0.6]), backgroundColor:COLORS.slate, barPercentage:0.92, categoryPercentage:0.85, order:2},
+      // Real: barra normal desde 0, coloreada por semáforo, delante
+      {label:'Real', data:realesArr, backgroundColor:coloresReal, barPercentage:0.5, categoryPercentage:0.85, order:1},
+    ]},
+    options:{ responsive:true, maintainAspectRatio:false,
+      scales:{ x:{ stacked:false, grid:{display:false} }, y:{ stacked:false, title:{display:true,text:'días'} } },
+      plugins:{ legend:{display:true, labels:{generateLabels: c=>[
+        {text:'Real: dentro de meta', fillStyle:COLORS.green, strokeStyle:COLORS.green},
+        {text:'Real: hasta 10% sobre meta', fillStyle:COLORS.amber, strokeStyle:COLORS.amber},
+        {text:'Real: más de 10% sobre meta', fillStyle:COLORS.red, strokeStyle:COLORS.red},
+        {text:'Meta', fillStyle:COLORS.slate, strokeStyle:COLORS.slate},
+      ]}},
+      tooltip:{ callbacks:{ label: ctx => ctx.dataset.label==='Meta' ? `Meta: ${Math.round(metasArr[ctx.dataIndex])} d` : `Real: ${Math.round(realesArr[ctx.dataIndex])} d` } },
+      datalabels:{ display:false } }
+    }
+  });
 }
 
 function renderView9(){
@@ -3419,7 +3480,60 @@ function buildCascadaCumplimiento(M){
       proveedor: pedido?pedido.proveedor:null, familia: filaRef?familiaDeProducto(filaRef.producto):null, pedido:pedidoCod};
   });
 
-  return { etapa1, etapa2, etapa3, etapa4, metaNacGlobalP80 };
+  // ---- ABIERTOS (en progreso, sin cerrar todavía) — para saber qué está a punto de pasarse de la meta o ya
+  // se pasó, ANTES de que la etapa cierre y aparezca en las estadísticas de arriba. Días transcurridos = desde
+  // el inicio de la etapa hasta HOY (no hay fecha de cierre todavía, por definición).
+  const HOY_ABIERTOS = new Date();
+  const abierto1 = []; // Producción abierta: primera fila con meta, pero última fila SIN fecha real de producción
+  M.ton.grupos.forEach(g=>{
+    if(!g.filas || !g.filas.length) return;
+    const ordenadas = g.filas.slice().sort((a,b)=>{
+      const fa = a.fechaRealZarpe || a.fechaSeguimientoCantFinal || a.fechaProforma || 0;
+      const fb = b.fechaRealZarpe || b.fechaSeguimientoCantFinal || b.fechaProforma || 0;
+      return fa - fb;
+    });
+    const primera = ordenadas[0], ultima = ordenadas[ordenadas.length-1];
+    if(!primera.fechaProforma || !(primera.diasEstimadosProduccion>0) || ultima.fechaRealProduccion) return; // ya cerró, no es "abierto"
+    const transcurridos = daysBetween(primera.fechaProforma, HOY_ABIERTOS);
+    if(transcurridos===null) return;
+    const pedidoCod = M.ton.proformaToPedido[g.proforma];
+    const pedido = pedidoCod ? pedidoPorCodigo[pedidoCod] : null;
+    abierto1.push({transcurridos, metaDias:primera.diasEstimadosProduccion, peso:g.cantidadPedidaKg||0, proveedor:pedido?pedido.proveedor:null, familia:g.familia, pedido:pedidoCod, referencia:g.proforma+' / '+(primera.producto||'')});
+  });
+  const abierto2 = []; // Embarque abierto: producción real ya ocurrió, pero sin zarpe real todavía
+  (M.ton.rows||[]).forEach(r=>{
+    if(!r.fechaRealProduccion || r.fechaRealZarpe) return;
+    const transcurridos = daysBetween(r.fechaRealProduccion, HOY_ABIERTOS);
+    if(transcurridos===null) return;
+    const pedidoCod = M.ton.proformaToPedido[r.proforma];
+    const pedido = pedidoCod ? pedidoPorCodigo[pedidoCod] : null;
+    abierto2.push({transcurridos, metaDias:15, peso:r.cantidadEntregadaKg||0, proveedor:pedido?pedido.proveedor:null, familia:familiaDeProducto(r.producto), pedido:pedidoCod, referencia:r.nombreProyecto||r.proforma});
+  });
+  const abierto3 = []; // Navegación abierta: zarpó pero no ha arribado (estatus NAVEGANDO)
+  const vistoProyNavAbierto = new Set();
+  (M.ton.rows||[]).forEach(r=>{
+    if(!r.nombreProyecto || !r.fechaRealZarpe || vistoProyNavAbierto.has(r.nombreProyecto)) return;
+    const imp = M.ton.porProyectoImport[r.nombreProyecto];
+    if(imp && imp.fechaRealArribo) return; // ya arribó, no es "abierto"
+    vistoProyNavAbierto.add(r.nombreProyecto);
+    const transcurridos = daysBetween(r.fechaRealZarpe, HOY_ABIERTOS);
+    if(transcurridos===null) return;
+    const pedidoCod = M.ton.proformaToPedido[r.proforma];
+    const pedido = pedidoCod ? pedidoPorCodigo[pedidoCod] : null;
+    abierto3.push({transcurridos, metaDias:M.nav.diasNavegacion(r.paisOrigen), peso:r.cantidadEntregadaKg||0, proveedor:pedido?pedido.proveedor:null, familia:familiaDeProducto(r.producto), pedido:pedidoCod, referencia:r.nombreProyecto});
+  });
+  const abierto4 = []; // Nacionalización abierta: arribó pero sin Fecha Levante DIM todavía
+  Object.values(M.ton.porProyectoImport||{}).forEach(imp=>{
+    if(!imp.fechaRealArribo || imp.fechaLevanteDIM) return;
+    const transcurridos = daysBetween(imp.fechaRealArribo, HOY_ABIERTOS);
+    if(transcurridos===null) return;
+    const filaRef = (M.ton.rows||[]).find(r=>r.nombreProyecto===imp.proyecto);
+    const pedidoCod = filaRef ? M.ton.proformaToPedido[filaRef.proforma] : null;
+    const pedido = pedidoCod ? pedidoPorCodigo[pedidoCod] : null;
+    abierto4.push({transcurridos, metaDias:metaNacGlobalP80, peso:imp.pesoBrutoKg||0, proveedor:pedido?pedido.proveedor:null, familia:filaRef?familiaDeProducto(filaRef.producto):null, pedido:pedidoCod, referencia:imp.proyecto});
+  });
+
+  return { etapa1, etapa2, etapa3, etapa4, metaNacGlobalP80, abierto1, abierto2, abierto3, abierto4 };
 }
 
 function buildLlegadasPorFamilia(M){
