@@ -147,21 +147,25 @@
   <div class="nav-grupo"><span class="nav-grupo-label">Resumen</span>
     <button data-view="v1" class="active">1 · Pedidos y Caja por Mes</button>
   </div>
+  <div class="nav-grupo"><span class="nav-grupo-label">Gestión</span>
+    <button data-view="v12">Tablero de Indicadores</button>
+    <button data-view="v11">Cumplimiento de Tiempos</button>
+  </div>
+  <div class="nav-grupo"><span class="nav-grupo-label">S&OP</span>
+    <button data-view="v_sop">Llegadas y Pronóstico de Compras</button>
+  </div>
   <div class="nav-grupo"><span class="nav-grupo-label">Operación</span>
-    <button data-view="v2">2 · Trazabilidad Pedidos</button>
-    <button data-view="v6">3 · Seguimiento Contable por Pedido</button>
-    <button data-view="v3">4 · Proyectos Comex</button>
-    <button data-view="v9">9 · Llegadas por Familia</button>
-    <button data-view="v11">11 · Cumplimiento de Tiempos</button>
+    <button data-view="v2">Trazabilidad Pedidos</button>
+    <button data-view="v6">Seguimiento Contable por Pedido</button>
+    <button data-view="v3">Proyectos Comex</button>
   </div>
   <div class="nav-grupo"><span class="nav-grupo-label">Finanzas</span>
-    <button data-view="v4">5 · Pendientes por Pagar</button>
-    <button data-view="v5">7 · Nacionalización</button>
-    <button data-view="v10">10 · Pedidos Nuevos Proyectados</button>
+    <button data-view="v4">Pendientes por Pagar</button>
+    <button data-view="v5">Nacionalización</button>
   </div>
   <div class="nav-grupo"><span class="nav-grupo-label">Modelo</span>
-    <button data-view="v8">6 · Estadísticas del Modelo</button>
-    <button data-view="v7">8 · Metodología (léeme)</button>
+    <button data-view="v8">Estadísticas del Modelo</button>
+    <button data-view="v7">Metodología (léeme)</button>
   </div>
 </nav>
 
@@ -535,7 +539,75 @@
     </div>
   </div>
 
-  <div class="view" id="v9">
+  <div class="view" id="v_sop">
+    <div class="panel">
+      <h2>S&OP · Planeación de Ventas y Operaciones — Compras, Inventario y Llegadas</h2>
+      <div class="desc">De lo más resumido a lo más operativo: primero cómo va el inventario y cuánta caja se necesita, luego si Compras está ejecutando lo que el modelo recomienda, y al final el detalle línea por línea de cada pedido nuevo y cada llegada proyectada.</div>
+    </div>
+    <div class="panel" id="v10_alertasPanel" style="display:none;">
+      <h2>⚠ Pedidos que ya deberían haberse colocado</h2>
+      <div class="desc">El lead time del proveedor no alcanza para llegar a tiempo al mes que necesita cubrir — se re-ancla la fecha de pedido a HOY y la llegada real queda más tarde. Riesgo real de desabastecimiento si no se coloca de inmediato. Consolidado por mes y familia (puede involucrar más de un proveedor); usa el filtro para ver un mes puntual.</div>
+      <div class="filters">
+        <label style="font-size:12px;color:var(--ink-soft);">Filtrar por mes:
+          <select id="f10_alertas_mes"><option value="">Todos los meses</option></select>
+        </label>
+      </div>
+      <div class="scroll"><table id="tbl_v10_alertas"></table></div>
+    </div>
+    <div class="panel">
+      <h2>10.2b · Proyección de niveles de inventario (política de reposición 1.8×–2.5×)</h2>
+      <div class="desc">Inventario con el que arrancaría cada mes (Ton. de bodega, sin tránsito ni producción), frente al mínimo/objetivo/máximo de reposición. <a href="#" id="v10_2b_link_metodologia" style="color:var(--navy);text-decoration:underline;">Ver metodología completa (cómo se calcula, y por qué la línea puede quedar por debajo del mínimo varios meses seguidos) →</a></div>
+      <div style="margin:8px 0;"><label style="font-size:12px;color:var(--ink-soft);margin-right:6px;">Ver:</label>
+        <select id="f10_inventario_familia" style="padding:4px 8px;border-radius:6px;border:1px solid var(--line);">
+          <option value="">General (4 familias)</option>
+        </select>
+      </div>
+      <div style="height:340px;"><canvas id="c_v10_inventario"></canvas></div>
+      <div id="v10_inventarioNota" style="margin-top:10px;font-size:11.5px;color:var(--ink-soft);"></div>
+    </div>
+    <div class="panel">
+      <h2>10.2c · Pedidos colocados por mes y su llegada proyectada</h2>
+      <div class="desc">Eje X = mes en que se COLOCA el pedido (Fecha Pedido) — no el mes que busca cubrir. Cada barra apila cuántas Ton. de ese pedido llegan el mismo mes, +1, +2, +3 o +4 meses o más después, según cómo se escalonan sus parciales (avgEntreParciales real por proveedor). Responde directamente a "¿cómo van llegando los pedidos que se van colocando cada mes?": un pedido es UNA sola Fecha de Pedido y UN anticipo, aunque su color se reparta en varios segmentos de llegada.</div>
+      <div style="margin:8px 0;"><label style="font-size:12px;color:var(--ink-soft);margin-right:6px;">Familia:</label>
+        <select id="f10_pedidos_familia" style="padding:4px 8px;border-radius:6px;border:1px solid var(--line);">
+          <option value="">Todas las familias</option>
+        </select>
+      </div>
+      <div style="height:340px;"><canvas id="c_v10_pedidosColocados"></canvas></div>
+      <div id="v10_pedidosColocadosNota" style="margin-top:10px;font-size:11.5px;color:var(--ink-soft);"></div>
+    </div>
+    <div class="panel">
+      <h2>10.2 · Flujo de caja de compras — histórico reciente + ya pedido + pedidos nuevos proyectados</h2>
+      <div class="desc">Acumula, por mes: anticipos y saldos ya pagados (histórico reciente), obligaciones ya pedidas confirmadas/estimadas (Vista 4/9), y anticipos+saldos+nacionalización de los pedidos nuevos que este módulo proyecta. Así la CFO ve una sola línea de caja de mercancía, no dos herramientas por separado.</div>
+      <div style="height:340px;"><canvas id="c_v10_flujo"></canvas></div>
+      <div id="v10_flujoTotal" style="margin-top:10px;font-family:var(--mono);font-size:14px;font-weight:700;color:var(--navy);"></div>
+    </div>
+    <div class="panel">
+      <h2>10.1b · Pedidos Sugeridos vs. Realizados — ¿estamos ejecutando lo que el modelo recomienda?</h2>
+      <div class="desc">Compara lo que este módulo sugería comprar cada mes (congelado el día 5, antes de que ese mes empezara) contra lo que Compras realmente colocó. Necesita al menos 1 mes de historial en la Bitácora para mostrar algo.</div>
+      <div class="scroll"><table id="tbl_v10_comparacion_sugeridos"></table></div>
+    </div>
+    <div class="panel"><h2 style="color:var(--slate);">Detalle operativo — para quien necesite bajar al día a día</h2><div class="desc">Lo de arriba ya resume la decisión; esto de aquí es la trazabilidad línea por línea, para auditar de dónde sale cada número.</div></div>
+    <div class="panel">
+      <h2>10.1 · Necesidad de compra por mes y Familia — parte gerencial</h2>
+      <div class="desc">PPTO de ventas (Ton) vs. lo que ya va a llegar (cierto + estimado, Vista 9) vs. inventario inicial (real o proyectado) vs. el faltante a cubrir con pedidos nuevos.</div>
+      <div class="filters"><select id="f101_familia"><option value="">Todas las familias</option></select></div>
+      <div class="scroll"><table id="tbl_v10_necesidad"></table></div>
+    </div>
+    <div class="panel">
+      <h2>10.3 · Detalle de pedidos nuevos proyectados</h2>
+      <div class="filters">
+        <select id="f10_familia"><option value="">Todas las familias</option></select>
+        <select id="f10_proveedor"><option value="">Todos los proveedores</option></select>
+        <button id="v10_descargar" type="button" style="background:var(--navy);color:#fff;border:none;border-radius:6px;padding:8px 14px;font-size:12px;cursor:pointer;">⬇ Descargar a Excel</button>
+      </div>
+      <div class="scroll"><table id="tbl_v10_detalle"></table></div>
+    </div>
+    <div class="panel">
+      <h2>10.4 · Mezcla Familia → Proveedor usada para repartir los pedidos nuevos</h2>
+      <div class="desc">Calculada en vivo desde "Cuadro Pedidos" (histórico real, no una tabla copiada de Excel) — proveedores con menos del 3% del Kg histórico de su familia se excluyen por no ser representativos. El % sigue siendo principalmente por volumen histórico; cuando dos proveedores quedan empatados en volumen (a menos de 15% uno del otro), se desempata a favor de quien tiene menor Lead Time (Pedido→Arribo) — la columna "¿Desempatado?" marca dónde ocurrió ese intercambio.</div>
+      <div class="scroll"><table id="tbl_v10_mix"></table></div>
+    </div>
     <div class="panel">
       <h2>9 · Análisis de Llegadas por Familia — Toneladas mes a mes</h2>
       <div class="desc">Objetivo S&OP: saber cuánto material llega (y cuándo queda disponible para vender) por Familia de producto, separando lo <b>certero</b> (ya zarpó o ya arribó) de lo <b>estimado</b> (parciales pendientes de pedidos abiertos, y pedidos sin ningún envío todavía) — usando el mismo motor de estadísticas por proveedor, capacidad de embarque y navegación por país ya validado para los pronósticos de pago.</div>
@@ -545,7 +617,6 @@
       </div>
       <div id="v9_narrativa" style="margin-top:8px;font-size:12.5px;color:var(--ink-soft);line-height:1.6;"></div>
     </div>
-
     <div class="panel">
       <h2>Toneladas de llegada por mes — total y por Familia</h2>
       <div class="desc">Apilado por Familia de producto. Etiqueta arriba = total del mes (incluye lo certero + lo estimado).</div>
@@ -556,7 +627,6 @@
       <div class="desc">Real = ya arribó físicamente. Confirmado en tránsito = ya zarpó, arribo estimado por navegación. Estimado = parciales pendientes + pedidos sin ningún envío, totalmente proyectado.</div>
       <div style="height:340px;"><canvas id="c_llegadasCerteza"></canvas></div>
     </div>
-
     <div class="panel">
       <h2>1 · Confirmado (ya tiene zarpe o ya arribó) — lo más certero</h2>
       <div class="scroll"><table id="tbl_llegadas_confirmado"></table></div>
@@ -593,89 +663,23 @@
     </div>
   </div>
 
-  <div class="view" id="v10">
+  <div class="view" id="v12">
     <div class="panel">
-      <h2>10 · Pedidos Nuevos Proyectados — Flujo de Caja de Compras (histórico + gerencial)</h2>
-      <div class="desc">Cuánto pedir, a qué proveedor y cuándo, para cubrir el PPTO de ventas por Familia en la parte que <b>NO</b> alcanza a cubrir lo que ya está pedido (Vista 9). Usa las mismas estadísticas empíricas por proveedor ya validadas en el resto del Tablero (lead time real Pedido→Zarpe→Arribo, día de pago del saldo anclado al ZARPE, no al arribo) — reemplaza el modelaje que tenía el Kardex de Excel.</div>
-      <div class="note info">Política vigente: se dispara un pedido nuevo cuando la <b>posición de inicio de mes</b> (inventario inicial + lo que ya va a llegar ese mismo mes) cae bajo <b>1.8×</b> la venta de ese mes, dimensionado para llevarla a <b>2.15×</b> (2.5× es solo referencia de techo). El inventario inicial se toma del conteo físico real cargado en PPTO cuando existe; si no, el modelo lo proyecta hacia adelante desde el último mes con dato real. <a href="#" onclick="event.preventDefault(); irAVista('v7');" style="color:var(--navy);text-decoration:underline;">Ver metodología completa →</a></div>
-      <div class="filters">
-        <label style="font-size:12px;color:var(--ink-soft);">Horizonte:
-          <select id="v10_horizonte"><option value="6">Próximos 6 meses</option><option value="12" selected>Próximos 12 meses</option><option value="24">Próximos 24 meses</option></select>
-        </label>
-        <span style="font-size:11px;color:var(--ink-soft);">Arancel/IVA y día de gabela: mismos parámetros de las Vistas 4 y 9 (cámbialos allá si hace falta).</span>
-      </div>
-      <div id="v10_narrativa" style="margin-top:8px;font-size:12.5px;color:var(--ink-soft);line-height:1.6;"></div>
+      <h2>12 · Tablero de Indicadores — Gestión por Metas de Abastecimiento</h2>
+      <div class="desc">Gestión con semáforo, no solo información: cada indicador compara lo que el modelo proyectaba (congelado antes del mes, en la Bitácora) contra lo que realmente pasó. Filtra por Familia para ver el detalle de un rubro puntual.</div>
+      <div class="filters"><label style="font-size:12px;color:var(--ink-soft);">Familia:</label> <select id="f12_familia"><option value="">Todas las familias</option></select></div>
     </div>
-
-    <div class="panel" id="v10_alertasPanel" style="display:none;">
-      <h2>⚠ Pedidos que ya deberían haberse colocado</h2>
-      <div class="desc">El lead time del proveedor no alcanza para llegar a tiempo al mes que necesita cubrir — se re-ancla la fecha de pedido a HOY y la llegada real queda más tarde. Riesgo real de desabastecimiento si no se coloca de inmediato. Consolidado por mes y familia (puede involucrar más de un proveedor); usa el filtro para ver un mes puntual.</div>
-      <div class="filters">
-        <label style="font-size:12px;color:var(--ink-soft);">Filtrar por mes:
-          <select id="f10_alertas_mes"><option value="">Todos los meses</option></select>
-        </label>
-      </div>
-      <div class="scroll"><table id="tbl_v10_alertas"></table></div>
-    </div>
-
     <div class="panel">
-      <h2>10.1 · Necesidad de compra por mes y Familia — parte gerencial</h2>
-      <div class="desc">PPTO de ventas (Ton) vs. lo que ya va a llegar (cierto + estimado, Vista 9) vs. inventario inicial (real o proyectado) vs. el faltante a cubrir con pedidos nuevos.</div>
-      <div class="filters"><select id="f101_familia"><option value="">Todas las familias</option></select></div>
-      <div class="scroll"><table id="tbl_v10_necesidad"></table></div>
+      <h2>Indicador 1 · Pedidos Necesarios Proyectados vs. Realizados</h2>
+      <div class="desc">¿Compras está colocando lo que el modelo recomienda, familia por familia? Ponderado por Ton.</div>
+      <div class="mini-kpis" id="v12_kpi_sugeridos"></div>
+      <div class="scroll"><table id="tbl_v12_sugeridos"></table></div>
     </div>
-
     <div class="panel">
-      <h2>10.1b · Pedidos Sugeridos vs. Realizados — ¿estamos ejecutando lo que el modelo recomienda?</h2>
-      <div class="desc">Compara lo que este módulo sugería comprar cada mes (congelado el día 5, antes de que ese mes empezara) contra lo que Compras realmente colocó. Necesita al menos 1 mes de historial en la Bitácora para mostrar algo.</div>
-      <div class="scroll"><table id="tbl_v10_comparacion_sugeridos"></table></div>
-    </div>
-
-    <div class="panel">
-      <h2>10.2 · Flujo de caja de compras — histórico reciente + ya pedido + pedidos nuevos proyectados</h2>
-      <div class="desc">Acumula, por mes: anticipos y saldos ya pagados (histórico reciente), obligaciones ya pedidas confirmadas/estimadas (Vista 4/9), y anticipos+saldos+nacionalización de los pedidos nuevos que este módulo proyecta. Así la CFO ve una sola línea de caja de mercancía, no dos herramientas por separado.</div>
-      <div style="height:340px;"><canvas id="c_v10_flujo"></canvas></div>
-      <div id="v10_flujoTotal" style="margin-top:10px;font-family:var(--mono);font-size:14px;font-weight:700;color:var(--navy);"></div>
-    </div>
-
-    <div class="panel">
-      <h2>10.2b · Proyección de niveles de inventario (política de reposición 1.8×–2.5×)</h2>
-      <div class="desc">Inventario con el que arrancaría cada mes (Ton. de bodega, sin tránsito ni producción), frente al mínimo/objetivo/máximo de reposición. <a href="#" id="v10_2b_link_metodologia" style="color:var(--navy);text-decoration:underline;">Ver metodología completa (cómo se calcula, y por qué la línea puede quedar por debajo del mínimo varios meses seguidos) →</a></div>
-      <div style="margin:8px 0;"><label style="font-size:12px;color:var(--ink-soft);margin-right:6px;">Ver:</label>
-        <select id="f10_inventario_familia" style="padding:4px 8px;border-radius:6px;border:1px solid var(--line);">
-          <option value="">General (4 familias)</option>
-        </select>
-      </div>
-      <div style="height:340px;"><canvas id="c_v10_inventario"></canvas></div>
-      <div id="v10_inventarioNota" style="margin-top:10px;font-size:11.5px;color:var(--ink-soft);"></div>
-    </div>
-
-    <div class="panel">
-      <h2>10.2c · Pedidos colocados por mes y su llegada proyectada</h2>
-      <div class="desc">Eje X = mes en que se COLOCA el pedido (Fecha Pedido) — no el mes que busca cubrir. Cada barra apila cuántas Ton. de ese pedido llegan el mismo mes, +1, +2, +3 o +4 meses o más después, según cómo se escalonan sus parciales (avgEntreParciales real por proveedor). Responde directamente a "¿cómo van llegando los pedidos que se van colocando cada mes?": un pedido es UNA sola Fecha de Pedido y UN anticipo, aunque su color se reparta en varios segmentos de llegada.</div>
-      <div style="margin:8px 0;"><label style="font-size:12px;color:var(--ink-soft);margin-right:6px;">Familia:</label>
-        <select id="f10_pedidos_familia" style="padding:4px 8px;border-radius:6px;border:1px solid var(--line);">
-          <option value="">Todas las familias</option>
-        </select>
-      </div>
-      <div style="height:340px;"><canvas id="c_v10_pedidosColocados"></canvas></div>
-      <div id="v10_pedidosColocadosNota" style="margin-top:10px;font-size:11.5px;color:var(--ink-soft);"></div>
-    </div>
-
-    <div class="panel">
-      <h2>10.3 · Detalle de pedidos nuevos proyectados</h2>
-      <div class="filters">
-        <select id="f10_familia"><option value="">Todas las familias</option></select>
-        <select id="f10_proveedor"><option value="">Todos los proveedores</option></select>
-        <button id="v10_descargar" type="button" style="background:var(--navy);color:#fff;border:none;border-radius:6px;padding:8px 14px;font-size:12px;cursor:pointer;">⬇ Descargar a Excel</button>
-      </div>
-      <div class="scroll"><table id="tbl_v10_detalle"></table></div>
-    </div>
-
-    <div class="panel">
-      <h2>10.4 · Mezcla Familia → Proveedor usada para repartir los pedidos nuevos</h2>
-      <div class="desc">Calculada en vivo desde "Cuadro Pedidos" (histórico real, no una tabla copiada de Excel) — proveedores con menos del 3% del Kg histórico de su familia se excluyen por no ser representativos. El % sigue siendo principalmente por volumen histórico; cuando dos proveedores quedan empatados en volumen (a menos de 15% uno del otro), se desempata a favor de quien tiene menor Lead Time (Pedido→Arribo) — la columna "¿Desempatado?" marca dónde ocurrió ese intercambio.</div>
-      <div class="scroll"><table id="tbl_v10_mix"></table></div>
+      <h2>Indicador 2 · Toneladas Arribadas Necesarias vs. Reales</h2>
+      <div class="desc">¿Está llegando lo que se proyectó, familia por familia? Ponderado por Ton.</div>
+      <div class="mini-kpis" id="v12_kpi_llegadas"></div>
+      <div class="scroll"><table id="tbl_v12_llegadas"></table></div>
     </div>
   </div>
 
@@ -689,6 +693,12 @@
       <h2>Cascada — dónde se pierde el tiempo (Real vs. Meta, por etapa)</h2>
       <div class="desc">Una sola barra por etapa: el Real, coloreado por semáforo (verde=dentro de meta, ámbar=hasta 10% sobre meta, rojo=más de 10%). La franja gris-azul superpuesta marca la Meta.</div>
       <div style="height:340px;"><canvas id="c_v11_cascada"></canvas></div>
+    </div>
+
+    <div class="panel">
+      <h2>1 · Producción — Pedidos Abiertos Incompletos (Toneladas)</h2>
+      <div class="desc">De todo lo que sigue pendiente de producir/entregar: cuánto ya entregó algo y le falta completar ("parcial pendiente") vs. cuánto no ha entregado absolutamente nada todavía ("cero entregas"). Los saldos con 3+ meses sin ningún movimiento se cierran por inactividad — pero SÍ cuentan como incumplimiento en las estadísticas de arriba, no se excluyen.</div>
+      <div class="mini-kpis" id="v11_produccion_abierta"></div>
     </div>
 
     <div class="panel">
@@ -712,8 +722,23 @@
     <div class="panel">
       <h2>1 · Producción — Abiertos ahora mismo</h2>
       <div class="desc">Pedidos/proyectos que todavía están EN ESTA ETAPA (no ha cerrado todavía) — para actuar antes de que se conviertan en un incumplimiento ya consumado.</div>
+      <div class="filters"><label style="font-size:12px;color:var(--ink-soft);">Familia:</label> <select id="f11_e1_abiertos_familia"><option value="">Todas las familias</option></select></div>
       <div class="mini-kpis" id="v11_e1_abiertos_resumen"></div>
       <div class="scroll"><table id="tbl_v11_e1_abiertos"></table></div>
+    </div>
+
+    <div class="panel">
+      <h2>2 · Embarque — Proyectos Comex: Pagos y Aperturas</h2>
+      <div class="desc">Una vez llegamos a Embarque ya hablamos de Proyectos Comex — esto sí permite gestión real: saber cuántos quedan por cerrar en plata y cuántos siguen abiertos operativamente.</div>
+      <div class="mini-kpis" id="v11_e2_proyectos_resumen"></div>
+    </div>
+    <div class="panel">
+      <h2>2 · Embarque — Distribución por Incoterm</h2>
+      <div class="desc">La responsabilidad del tiempo de embarque cambia según el Incoterm. Participación de cada uno y su tiempo promedio ponderado por Ton — se mueve con el filtro de mes de abajo.</div>
+      <div style="display:flex;gap:20px;flex-wrap:wrap;align-items:center;">
+        <div style="flex:1;min-width:220px;height:260px;"><canvas id="c_v11_e2_incoterm_dona"></canvas></div>
+        <div style="flex:2;min-width:280px;"><table id="tbl_v11_e2_incoterm"></table></div>
+      </div>
     </div>
 
     <div class="panel">
@@ -737,6 +762,7 @@
     <div class="panel">
       <h2>2 · Embarque — Abiertos ahora mismo</h2>
       <div class="desc">Pedidos/proyectos que todavía están EN ESTA ETAPA (no ha cerrado todavía) — para actuar antes de que se conviertan en un incumplimiento ya consumado.</div>
+      <div class="filters"><label style="font-size:12px;color:var(--ink-soft);">Familia:</label> <select id="f11_e2_abiertos_familia"><option value="">Todas las familias</option></select></div>
       <div class="mini-kpis" id="v11_e2_abiertos_resumen"></div>
       <div class="scroll"><table id="tbl_v11_e2_abiertos"></table></div>
     </div>
@@ -760,8 +786,14 @@
       </div>
     </div>
     <div class="panel">
+      <h2>3 · Navegación — Lead Time por País de Origen</h2>
+      <div class="desc">Días de zarpe a arribo, ponderado por Ton, por cada país de origen. Se mueve con el filtro de mes de arriba.</div>
+      <div style="height:300px;"><canvas id="c_v11_e3_pais"></canvas></div>
+    </div>
+    <div class="panel">
       <h2>3 · Navegación — Abiertos ahora mismo</h2>
       <div class="desc">Pedidos/proyectos que todavía están EN ESTA ETAPA (no ha cerrado todavía) — para actuar antes de que se conviertan en un incumplimiento ya consumado.</div>
+      <div class="filters"><label style="font-size:12px;color:var(--ink-soft);">Familia:</label> <select id="f11_e3_abiertos_familia"><option value="">Todas las familias</option></select></div>
       <div class="mini-kpis" id="v11_e3_abiertos_resumen"></div>
       <div class="scroll"><table id="tbl_v11_e3_abiertos"></table></div>
     </div>
@@ -787,6 +819,7 @@
     <div class="panel">
       <h2>4 · Nacionalización — Abiertos ahora mismo</h2>
       <div class="desc">Pedidos/proyectos que todavía están EN ESTA ETAPA (no ha cerrado todavía) — para actuar antes de que se conviertan en un incumplimiento ya consumado.</div>
+      <div class="filters"><label style="font-size:12px;color:var(--ink-soft);">Familia:</label> <select id="f11_e4_abiertos_familia"><option value="">Todas las familias</option></select></div>
       <div class="mini-kpis" id="v11_e4_abiertos_resumen"></div>
       <div class="scroll"><table id="tbl_v11_e4_abiertos"></table></div>
     </div>
@@ -1208,7 +1241,8 @@ function normPedidoDet(r){
     paisOrigen: get(r,'País de Origen'),
     fechaEstimadaZarpe: dt(get(r,'Fecha estimada de zarpe (D/M/A)')),
     fechaRealZarpe: dt(get(r,'Fecha real de Zarpe (D/M/A)')),
-    familia: get(r,'FAMILIA')
+    familia: get(r,'FAMILIA'),
+    clasificacionObservaciones: get(r,'Clasificación Observaciones')
   };
 }
 function normImportacion(r){
@@ -1232,7 +1266,20 @@ function normImportacion(r){
 // SUMA(Cantidades finales de producción) del grupo. Los grupos que no calzan de forma perfecta
 // (una fila posterior mayor a una anterior) se listan aparte como advertencia de datos, no se ocultan.
 function buildToneladasModel(pedDetRaw, impRaw, prof, spAll){
-  const rows = pedDetRaw.map(normPedidoDet).filter(r=>r.proforma);
+  // 26-sep, a pedido de Sebastián — filtro GLOBAL (afecta TODO lo que depende de este modelo: Vista 2, 9, 10,
+  // 11...): se excluyen las filas de Cuadro Pedidos que:
+  //  1) tienen "Pedido Cancelado" en Clasificación Observaciones (match exacto normalizado) — no son un pedido
+  //     vigente, no deben contar en ningún indicador de cumplimiento, inventario ni proyección.
+  //  2) su Producto es herramienta/estantería/maquinaria, no acero — no participan del ciclo de abastecimiento
+  //     de mercancía que mide el resto del Tablero. Lista confirmada con datos reales; si aparecen productos
+  //     nuevos de este tipo, agregar aquí.
+  const PRODUCTOS_NO_ESTANDAR = new Set(['HERRAMIENTAS PARA DOBLEZ', 'ESTANTERIA PARA LAMINAS Y DESPALETIZADOR', 'MAQUINAS DE SIERRA Y CINTAS DE CORTE']);
+  const rows = pedDetRaw.map(normPedidoDet).filter(r=>{
+    if(!r.proforma) return false;
+    if(normKey(r.clasificacionObservaciones||'')==='PEDIDO CANCELADO') return false;
+    if(PRODUCTOS_NO_ESTANDAR.has(normKey(r.producto||''))) return false;
+    return true;
+  });
 
   const porGrupo = {};
   rows.forEach(r=>{
@@ -1257,7 +1304,18 @@ function buildToneladasModel(pedDetRaw, impRaw, prof, spAll){
     const ultima = ordenadas[ordenadas.length-1];
     const cerradoAutomatico = !!(ultima && ultima.cantidadEntregadaKg && ultima.cantidadEntregadaKg>0);
     const saldoKg = Math.max(0, g.cantidadPedidaKg - g.cantidadEntregadaKg);
-    return {...g, saldoKg, cerradoAutomatico, diferenciaKg: g.cantidadEntregadaKg - g.cantidadPedidaKg};
+    // 27-sep, a pedido de Sebastián: si un saldo pendiente lleva 3+ meses (90 días) sin que se cree una línea
+    // NUEVA para él en Cuadro Pedidos, se considera cerrado por inactividad — son los "saldos de 7 Ton que ya
+    // no van a entregar". Aclaración del propio Sebastián (27-sep): este cierre NO debe sacar el caso de las
+    // estadísticas de cumplimiento — al contrario, debe contar como INCUMPLIMIENTO (en días y en Kg), porque
+    // es justamente eso: un pedido que nunca se completó. Se guarda fechaCierrePorInactividad (el día exacto
+    // en que se cumplieron los 90 días) para usarla como "fecha real" en el cálculo de cumplimiento cuando la
+    // última fila nunca llegó a tener su propia fecha real de producción.
+    const ultimoMovimiento = [ultima?.fechaRealProduccion, ultima?.fechaSeguimientoCantFinal, ultima?.fechaRealZarpe, ultima?.fechaProforma].filter(Boolean).sort((a,b)=>b-a)[0] || null;
+    const diasSinMovimiento = ultimoMovimiento ? daysBetween(ultimoMovimiento, new Date()) : null;
+    const cerradoPorInactividad = !cerradoAutomatico && saldoKg>0 && diasSinMovimiento!==null && diasSinMovimiento>=90;
+    const fechaCierrePorInactividad = cerradoPorInactividad ? addDays(ultimoMovimiento, 90) : null;
+    return {...g, saldoKg, cerradoAutomatico, cerradoPorInactividad, fechaCierrePorInactividad, diasSinMovimiento, diferenciaKg: g.cantidadEntregadaKg - g.cantidadPedidaKg};
   });
 
   // Advertencia: grupos donde una fila posterior supera a una anterior (posible pedido adicional no capturado)
@@ -1296,12 +1354,18 @@ function buildToneladasModel(pedDetRaw, impRaw, prof, spAll){
   grupos.forEach(g=>{
     const pedido = proformaToPedido[g.proforma];
     if(!pedido){ proformasSinPedido.add(g.proforma); return; }
-    if(!tonPorPedido[pedido]) tonPorPedido[pedido] = {pedido, pedidoKg:0, entregadoKg:0, gruposCerrados:0, gruposTotal:0, diferenciaKg:0};
+    if(!tonPorPedido[pedido]) tonPorPedido[pedido] = {pedido, pedidoKg:0, entregadoKg:0, gruposCerrados:0, gruposTotal:0, diferenciaKg:0, gruposInactivos:0};
     tonPorPedido[pedido].pedidoKg += g.cantidadPedidaKg;
-    tonPorPedido[pedido].entregadoKg += g.cantidadEntregadaKg;
+    // Para el motor de compras hacia ADELANTE (Grupo A/B, punto de reorden): un saldo cerrado por inactividad
+    // ya no se espera que llegue, así que se trata como si ya se hubiera completado — de lo contrario el
+    // motor seguiría "esperando" un pedido que en la práctica nunca va a aparecer. Esto es INDEPENDIENTE de
+    // cómo se cuenta en las métricas de CUMPLIMIENTO (Vista 11), donde sí debe verse como incumplimiento —
+    // son dos preguntas distintas: "¿cuánto falta comprar?" vs. "¿qué tan bien cumplió el proveedor?".
+    tonPorPedido[pedido].entregadoKg += g.cerradoPorInactividad ? g.cantidadPedidaKg : g.cantidadEntregadaKg;
     tonPorPedido[pedido].diferenciaKg += g.diferenciaKg;
     tonPorPedido[pedido].gruposTotal += 1;
     if(g.cerradoAutomatico) tonPorPedido[pedido].gruposCerrados += 1;
+    if(g.cerradoPorInactividad) tonPorPedido[pedido].gruposInactivos += 1;
   });
   const pedidoCerradoAutomatico = {};
   Object.values(tonPorPedido).forEach(t=>{ pedidoCerradoAutomatico[t.pedido] = t.gruposTotal>0 && t.gruposCerrados===t.gruposTotal; });
@@ -1335,6 +1399,7 @@ function buildToneladasModel(pedDetRaw, impRaw, prof, spAll){
     }
     if(r.fechaRealArribo && (!g.fechaRealArribo || r.fechaRealArribo>g.fechaRealArribo)) g.fechaRealArribo = r.fechaRealArribo;
     if(r.fechaLevanteDIM && (!g.fechaLevanteDIM || r.fechaLevanteDIM>g.fechaLevanteDIM)) g.fechaLevanteDIM = r.fechaLevanteDIM;
+    if(r.incoterm && !g.incoterm) g.incoterm = r.incoterm;
   });
   Object.values(porProyectoImport).forEach(g=>{
     g.nContenedores = g.contenedores.size;
@@ -2400,7 +2465,7 @@ async function init(){
     setStatus('ok', `Última actualización: ${new Date().toLocaleString('es-CO')} · ${MODEL.pedidos.length} pedidos, ${MODEL.spAll.length} proyectos parciales, ${MODEL.pg.length} pagos, ${MODEL.gf.length} giros financieros.`);
     document.getElementById('loadOverlay').style.display='none';
     intentarGuardarBitacoraMensual(MODEL); // silencioso — no bloquea nada si falla
-    cargarBitacoraHistorica().then(hist=>{ BITACORA_HIST = hist; if(hist.sugeridos.length||hist.llegadas.length){ renderComparacionSugeridosVsReal(); renderComparacionLlegadasVsReal(); } });
+    cargarBitacoraHistorica().then(hist=>{ BITACORA_HIST = hist; if(hist.sugeridos.length||hist.llegadas.length){ renderComparacionSugeridosVsReal(); renderComparacionLlegadasVsReal(); renderView12(); } });
   } catch(err){
     setStatus('error', 'Error: ' + err.message);
     document.getElementById('loadMsg').innerHTML = `⚠ ${err.message}<br><br><button id="retryBtn">Reintentar</button>`;
@@ -2431,20 +2496,44 @@ function intentarGuardarBitacoraMensual(M){
     const fechaCorte = HOY.getFullYear()+'-'+String(HOY.getMonth()+1).padStart(2,'0')+'-'+String(HOY.getDate()).padStart(2,'0');
 
     // 1) Pedidos Sugeridos: de Grupo A (sin parcial) + Grupo B (parcial incompleto), agregados por
-    // mes de necesidad + proveedor (misma fuente que Vista 10 / la proyección de llegadas).
+    // mes de necesidad + familia + proveedor. Se reparte por Familia con la MISMA composición usada en
+    // Llegadas por Familia (Vista 9): Grupo A reparte según el pedido completo, Grupo B según el saldo
+    // restante — así ambos indicadores de la bitácora quedan filtrables por Familia de forma consistente.
+    function composicionFamiliaPedidoBitacora(pedidoCod, modo){
+      const grupos = M.ton.grupos.filter(g=>M.ton.proformaToPedido[g.proforma]===pedidoCod);
+      const porFamilia = {}; let total = 0;
+      grupos.forEach(g=>{
+        const valor = modo==='saldo' ? (g.saldoKg||0) : (g.cantidadPedidaKg||0);
+        if(valor<=0) return;
+        porFamilia[g.familia] = (porFamilia[g.familia]||0) + valor;
+        total += valor;
+      });
+      if(total<=0) return null;
+      const pct = {}; Object.keys(porFamilia).forEach(f=> pct[f] = porFamilia[f]/total);
+      return pct;
+    }
     const filasSugeridos = [];
     const acumSug = {};
-    [...M.grupoA, ...M.grupoB].forEach(p=>{
+    function acumularSugerido(p, modo){
+      const pct = composicionFamiliaPedidoBitacora(p.pedido, modo);
       (p.parciales||[]).forEach(par=>{
         const mesNecesidad = monthKey(par.fechaZarpeEstimada || par.fechaPagoEstimada);
         if(!mesNecesidad) return;
-        // Nota: el desglose fino por Familia ya vive en vivo en Vista 9/10 — la bitácora congela el TOTAL
-        // sugerido por mes+proveedor, que es suficiente para medir "cuánto se sugirió vs. cuánto se pidió".
-        const k = mesNecesidad+'|'+p.proveedor;
-        acumSug[k] = acumSug[k] || {mesNecesidad, familia:'Total', proveedor:p.proveedor, tonSugeridas:0};
-        acumSug[k].tonSugeridas += (par.kgEstimado||0)/1000;
+        if(!pct){ // sin composición conocida (raro): se guarda como 'Sin Clasificar' en vez de perder el dato
+          const k = mesNecesidad+'|Sin Clasificar|'+p.proveedor;
+          acumSug[k] = acumSug[k] || {mesNecesidad, familia:'Sin Clasificar', proveedor:p.proveedor, tonSugeridas:0};
+          acumSug[k].tonSugeridas += (par.kgEstimado||0)/1000;
+          return;
+        }
+        Object.entries(pct).forEach(([fam,frac])=>{
+          const k = mesNecesidad+'|'+fam+'|'+p.proveedor;
+          acumSug[k] = acumSug[k] || {mesNecesidad, familia:fam, proveedor:p.proveedor, tonSugeridas:0};
+          acumSug[k].tonSugeridas += (par.kgEstimado||0)/1000*frac;
+        });
       });
-    });
+    }
+    M.grupoA.forEach(p=>acumularSugerido(p, 'total'));
+    M.grupoB.forEach(p=>acumularSugerido(p, 'saldo'));
     Object.values(acumSug).forEach(f=>filasSugeridos.push(f));
 
     // 2) Llegadas Proyectadas: de Vista 9 (M._llegadasCache), consolidadas por mes disponible + familia
@@ -2526,6 +2615,7 @@ function render(){
   renderView9();
   renderView10();
   renderView11();
+  renderView12();
   renderTableroMando();
   renderBandejaAlertas();
   renderDiag();
@@ -2756,20 +2846,59 @@ function renderEtapaCumplimiento(prefix, datosCompletos, abiertos){
   if(!Object.keys(porFamilia).length) htmlFam += '<tr><td colspan="5" class="txt" style="color:var(--ink-soft);">Sin suficientes observaciones para este mes.</td></tr>';
   document.getElementById(`tbl_v11_${prefix}_familia`).innerHTML = htmlFam;
 
+  // Gráfico de Lead Time por País de Origen — solo Navegación (e3), respeta el filtro de mes de arriba
+  if(prefix==='e3'){
+    const porPais = {};
+    datos.forEach(o=>{ if(!o.pais) return; porPais[o.pais] = porPais[o.pais]||[]; porPais[o.pais].push(o); });
+    const paises = Object.entries(porPais).map(([pais,arr])=>({pais, real:promedioPonderadoGenerico(arr,'realDias','peso'), meta:promedioPonderadoGenerico(arr,'metaDias','peso'), n:arr.length}))
+      .filter(f=>f.n>=2).sort((a,b)=>b.real-a.real);
+    const colores = paises.map(p=>{ const s = semaforoCumplimiento(p.real,p.meta); return s==='ok'?COLORS.green:(s==='warn'?COLORS.amber:(s==='bad'?COLORS.red:COLORS.slate)); });
+    barChart('c_v11_e3_pais', paises.map(p=>p.pais), [
+      {label:'Lead Time Real (días)', data:paises.map(p=>Math.round(p.real)), backgroundColor:colores},
+    ], {}, true, v=>Math.round(v)+'d');
+  }
+
+  // Distribución por Incoterm — solo Embarque (e2), respeta el filtro de mes de arriba
+  if(prefix==='e2'){
+    const porIncoterm = {};
+    datos.forEach(o=>{ const inc = o.incoterm||'Sin dato'; porIncoterm[inc] = porIncoterm[inc]||[]; porIncoterm[inc].push(o); });
+    const incoterms = Object.entries(porIncoterm).map(([inc,arr])=>({incoterm:inc, ton:arr.reduce((a,o)=>a+o.peso,0)/1000, real:promedioPonderadoGenerico(arr,'realDias','peso'), n:arr.length})).sort((a,b)=>b.ton-a.ton);
+    const totalTon = incoterms.reduce((a,i)=>a+i.ton,0);
+    const elDona = document.getElementById('c_v11_e2_incoterm_dona');
+    if(elDona){
+      if(elDona._chart) elDona._chart.destroy();
+      elDona._chart = new Chart(elDona, { type:'doughnut', data:{ labels:incoterms.map(i=>i.incoterm), datasets:[{data:incoterms.map(i=>i.ton), backgroundColor:CHART_PALETTE}] },
+        options:{ responsive:true, maintainAspectRatio:false, plugins:{ legend:{position:'bottom'}, datalabels:{display:false},
+          tooltip:{ callbacks:{ label: ctx=> `${ctx.label}: ${fmtTonDirecto(ctx.parsed)} (${totalTon>0?Math.round(ctx.parsed/totalTon*100):0}%)` } } } } });
+    }
+    let htmlInc = '<tr><th>Incoterm</th><th>% Participación</th><th>Ton</th><th>Tiempo Prom. Pond.</th><th># Obs.</th></tr>';
+    incoterms.forEach(i=> htmlInc += `<tr><td class="txt">${i.incoterm}</td><td>${totalTon>0?Math.round(i.ton/totalTon*100):0}%</td><td>${fmtTonDirecto(i.ton)}</td><td>${i.real!==null?Math.round(i.real)+' d':'—'}</td><td>${i.n}</td></tr>`);
+    const tblInc = document.getElementById('tbl_v11_e2_incoterm');
+    if(tblInc) tblInc.innerHTML = htmlInc;
+  }
+
   // Abiertos ahora mismo: en progreso, sin cerrar todavía — con 3 contadores arriba (total / en riesgo / incumpliendo)
-  const totalAbiertos = (abiertos||[]).length;
-  const enRiesgo = (abiertos||[]).filter(o=>o.metaDias>0 && o.transcurridos>=o.metaDias*0.8 && o.transcurridos<=o.metaDias);
-  const incumpliendo = (abiertos||[]).filter(o=>o.metaDias>0 && o.transcurridos>o.metaDias);
+  const selFamAbiertos = document.getElementById(`f11_${prefix}_abiertos_familia`);
+  if(!selFamAbiertos.dataset.poblado){
+    selFamAbiertos.innerHTML = '<option value="">Todas las familias</option>' + FAMILIAS_ORDEN.map(f=>`<option value="${f}">${f}</option>`).join('');
+    selFamAbiertos.dataset.poblado = '1';
+    selFamAbiertos.onchange = ()=>renderView11();
+  }
+  const fFamAbiertos = selFamAbiertos.value;
+  const abiertosFiltrados = fFamAbiertos ? (abiertos||[]).filter(o=>o.familia===fFamAbiertos) : (abiertos||[]);
+  const totalAbiertos = abiertosFiltrados.length;
+  const enRiesgo = abiertosFiltrados.filter(o=>o.metaDias>0 && o.transcurridos>=o.metaDias*0.8 && o.transcurridos<=o.metaDias);
+  const incumpliendo = abiertosFiltrados.filter(o=>o.metaDias>0 && o.transcurridos>o.metaDias);
   document.getElementById(`v11_${prefix}_abiertos_resumen`).innerHTML = `
     <div class="mini-kpi neutral"><span># Pedidos Abiertos</span><b>${totalAbiertos}</b></div>
     <div class="mini-kpi warn"><span># En Riesgo de No Cumplir</span><b>${enRiesgo.length}</b></div>
     <div class="mini-kpi bad"><span># Incumpliendo (ya pasados)</span><b>${incumpliendo.length}</b></div>
   `;
   const abiertosRiesgo = [...incumpliendo, ...enRiesgo].sort((a,b)=>(b.transcurridos/b.metaDias)-(a.transcurridos/a.metaDias));
-  let htmlAb = '<tr><th>Referencia</th><th>Proveedor</th><th>Familia</th><th>Días Transcurridos</th><th>Meta</th><th>Estado</th></tr>';
+  let htmlAb = `<tr><th>Referencia</th><th>${prefix==='e3'?'País de Origen':'Proveedor'}</th><th>Familia</th><th>Días Transcurridos</th><th>Meta</th><th>Estado</th></tr>`;
   abiertosRiesgo.forEach(o=>{
     const yaSePaso = o.transcurridos > o.metaDias;
-    htmlAb += `<tr class="${yaSePaso?'row-bad':''}"><td class="txt">${o.referencia||'—'}</td><td class="txt">${o.proveedor||'—'}</td><td class="txt">${o.familia||'—'}</td>
+    htmlAb += `<tr class="${yaSePaso?'row-bad':''}"><td class="txt">${o.referencia||'—'}</td><td class="txt">${(prefix==='e3'?o.pais:o.proveedor)||'—'}</td><td class="txt">${o.familia||'—'}</td>
       <td>${Math.round(o.transcurridos)} d</td><td>${Math.round(o.metaDias)} d</td>
       <td><span class="pill ${yaSePaso?'bad':'warn'}">${yaSePaso?'Ya se pasó':'A punto de pasarse'}</span></td></tr>`;
   });
@@ -2786,9 +2915,57 @@ function lineChart(canvasId, labels, datasets){
     options:{responsive:true, maintainAspectRatio:false, plugins:{datalabels:{display:false}}, scales:{y:{title:{display:true,text:'días'}}}} });
 }
 
+function renderView12(){
+  const selFam = document.getElementById('f12_familia');
+  if(!selFam.dataset.poblado){
+    selFam.innerHTML = '<option value="">Todas las familias</option>' + FAMILIAS_ORDEN.map(f=>`<option value="${f}">${f}</option>`).join('');
+    selFam.dataset.poblado = '1';
+    selFam.onchange = renderView12;
+  }
+  const fFam = selFam.value;
+
+  const filasSug = BITACORA_HIST.sugeridos.length ? calcularComparacionSugeridos(fFam||null) : [];
+  const totSug = filasSug.reduce((a,r)=>a+r.tonSugeridas,0), totRealSug = filasSug.reduce((a,r)=>a+r.realTon,0);
+  const pctSug = totSug>0 ? Math.round(totRealSug/totSug*100) : null;
+  const semSug = pctSug===null?'neutral':(pctSug>=95?'ok':(pctSug>=80?'warn':'bad'));
+  document.getElementById('v12_kpi_sugeridos').innerHTML = `
+    <div class="mini-kpi"><span>Sugerido (acumulado)</span><b>${fmtTonDirecto(totSug)}</b></div>
+    <div class="mini-kpi"><span>Realmente Pedido</span><b>${fmtTonDirecto(totRealSug)}</b></div>
+    <div class="mini-kpi ${semSug}"><span>% Cumplimiento</span><b>${pctSug!==null?pctSug+'%':'—'}</b></div>
+    <div class="mini-kpi"><span># Meses Comparados</span><b>${[...new Set(filasSug.map(r=>r.mesNecesidad))].length}</b></div>
+  `;
+  renderComparacionSugeridosVsReal('tbl_v12_sugeridos', fFam||null);
+
+  const filasLleg = BITACORA_HIST.llegadas.length ? calcularComparacionLlegadas(fFam||null) : [];
+  const totLleg = filasLleg.reduce((a,r)=>a+r.metaTon,0), totRealLleg = filasLleg.reduce((a,r)=>a+r.realTon,0);
+  const pctLleg = totLleg>0 ? Math.round(totRealLleg/totLleg*100) : null;
+  const semLleg = pctLleg===null?'neutral':(pctLleg>=95?'ok':(pctLleg>=80?'warn':'bad'));
+  document.getElementById('v12_kpi_llegadas').innerHTML = `
+    <div class="mini-kpi"><span>Proyectado (acumulado)</span><b>${fmtTonDirecto(totLleg)}</b></div>
+    <div class="mini-kpi"><span>Realmente Arribado</span><b>${fmtTonDirecto(totRealLleg)}</b></div>
+    <div class="mini-kpi ${semLleg}"><span>% Cumplimiento</span><b>${pctLleg!==null?pctLleg+'%':'—'}</b></div>
+    <div class="mini-kpi"><span># Meses Comparados</span><b>${[...new Set(filasLleg.map(r=>r.mesDisponible))].length}</b></div>
+  `;
+  renderComparacionLlegadasVsReal('tbl_v12_llegadas', fFam||null);
+}
+
 function renderView11(){
   const M = MODEL;
   const C = M._cascadaCache || (M._cascadaCache = buildCascadaCumplimiento(M));
+
+  const pa = C.produccionAbierta;
+  document.getElementById('v11_produccion_abierta').innerHTML = `
+    <div class="mini-kpi warn"><span>Parcial Pendiente (Ton)</span><b>${fmtTonDirecto(pa.tonParcialPendiente)}</b><span style="font-size:10px;color:var(--ink-soft);">${pa.nParcialPendiente} pedido(s)</span></div>
+    <div class="mini-kpi bad"><span>Cero Entregas (Ton)</span><b>${fmtTonDirecto(pa.tonCeroEntregas)}</b><span style="font-size:10px;color:var(--ink-soft);">${pa.nCeroEntregas} pedido(s)</span></div>
+    <div class="mini-kpi neutral"><span>Cerrado por Inactividad (3+ meses sin movimiento)</span><b>${fmtTonDirecto(pa.tonCerradaPorInactividad)}</b><span style="font-size:10px;color:var(--ink-soft);">${pa.nCerradosPorInactividad} caso(s) — cuentan como incumplimiento arriba</span></div>
+  `;
+
+  const proyPendientesPago = MODEL.spUnico.filter(s=>s.estadoCalculado==='PENDIENTE POR PAGAR');
+  const proyAbiertosOp = MODEL.spUnico.filter(s=>s.estatusProyecto!=='ARRIBADO');
+  document.getElementById('v11_e2_proyectos_resumen').innerHTML = `
+    <div class="mini-kpi bad"><span># Proyectos Pendientes por Pagar</span><b>${proyPendientesPago.length}</b><span style="font-size:10px;color:var(--ink-soft);">${fmt(proyPendientesPago.reduce((a,s)=>a+s.saldoCalculado,0))}</span></div>
+    <div class="mini-kpi warn"><span># Proyectos Abiertos (aún no arriban)</span><b>${proyAbiertosOp.length}</b><span style="font-size:10px;color:var(--ink-soft);">${fmtTon(proyAbiertosOp.reduce((a,s)=>a+(s.entregadoKg||0),0))}</span></div>
+  `;
 
   const r1 = renderEtapaCumplimiento('e1', C.etapa1, C.abierto1);
   const r2 = renderEtapaCumplimiento('e2', C.etapa2, C.abierto2);
@@ -2852,75 +3029,92 @@ function tablaSinHistorial(tblId, colspan, mensaje){
   document.getElementById(tblId).innerHTML = `<tr><td class="txt" style="color:var(--ink-soft);padding:14px;">${mensaje}</td></tr>`;
 }
 
-function renderComparacionLlegadasVsReal(){
-  const tbl = document.getElementById('tbl_v9_comparacion_llegadas');
-  if(!tbl) return;
-  if(!BITACORA_HIST.llegadas.length){
-    tablaSinHistorial('tbl_v9_comparacion_llegadas', 1, 'Todavía no hay historial en la Bitácora — en cuanto pase el día 5 de un mes con el Apps Script conectado, empieza a acumularse automáticamente. Vuelve a revisar el mes que viene.');
-    return;
-  }
+function calcularComparacionLlegadas(fFamilia){
   const M = MODEL;
   const HOY = new Date();
   const mesActualStr = monthKey(HOY);
-  // Para cada mes+familia, se usa la ÚLTIMA foto tomada ANTES de que ese mes empezara (la más refinada
-  // disponible en su momento, sin usar información que en su momento todavía no existía).
   const porMesFamilia = {};
   BITACORA_HIST.llegadas.forEach(r=>{
-    if(!r.mesDisponible || r.mesDisponible>=mesActualStr) return; // solo meses ya vencidos, se puede comparar contra la realidad
-    if(r.fechaCorte.slice(0,7) >= r.mesDisponible) return; // la foto se tomó en o después del mes que proyecta: no cuenta como "anticipada"
+    if(!r.mesDisponible || r.mesDisponible>=mesActualStr) return;
+    if(r.fechaCorte.slice(0,7) >= r.mesDisponible) return;
+    if(fFamilia && r.familia!==fFamilia) return;
     const k = r.mesDisponible+'|'+r.familia;
     if(!porMesFamilia[k] || r.fechaCorte>porMesFamilia[k].fechaCorte) porMesFamilia[k] = r;
   });
-  if(!Object.keys(porMesFamilia).length){
-    tablaSinHistorial('tbl_v9_comparacion_llegadas', 1, 'Hay fotos en la Bitácora, pero ninguna todavía corresponde a un mes ya vencido — vuelve a revisar cuando pase al menos 1 mes completo desde la primera foto.');
-    return;
-  }
-  // Real: toneladas que efectivamente arribaron ese mes (Peso Bruto real, Control de Importaciones)
   const llegadas = M._llegadasCache || buildLlegadasPorFamilia(M);
-  let html = '<tr><th>Mes</th><th>Familia</th><th>Meta (proyectada)</th><th>Real (arribado)</th><th>Diferencia (Ton)</th><th>% Cumplimiento</th></tr>';
-  Object.values(porMesFamilia).sort((a,b)=>a.mesDisponible.localeCompare(b.mesDisponible)).forEach(r=>{
+  return Object.values(porMesFamilia).map(r=>{
     const metaTon = r.tonCierto + r.tonEstimado;
     const realTon = llegadas.confirmadoReal.filter(it=>it.familia===r.familia && mesDisponibilidad(it.fechaArribo,20)===r.mesDisponible).reduce((a,it)=>a+it.kg,0)/1000;
     const dif = realTon - metaTon;
     const pct = metaTon>0 ? Math.round(realTon/metaTon*100) : null;
-    const sem = pct===null?'neutral':(pct>=95?'ok':(pct>=80?'warn':'bad'));
-    html += `<tr><td class="txt">${fmtMesLabel(r.mesDisponible)}</td><td class="txt">${r.familia}</td><td>${fmtTonDirecto(metaTon)}</td><td>${fmtTonDirecto(realTon)}</td>
-      <td style="color:${dif>=0?'var(--green)':'var(--red)'};">${dif>=0?'+':''}${fmtTonDirecto(dif)}</td><td><span class="pill ${sem}">${pct!==null?pct+'%':'—'}</span></td></tr>`;
-  });
-  document.getElementById('tbl_v9_comparacion_llegadas').innerHTML = html;
+    return {...r, metaTon, realTon, dif, pct};
+  }).sort((a,b)=>a.mesDisponible.localeCompare(b.mesDisponible));
 }
-
-function renderComparacionSugeridosVsReal(){
-  const tbl = document.getElementById('tbl_v10_comparacion_sugeridos');
+function renderComparacionLlegadasVsReal(tblId, fFamilia){
+  tblId = tblId || 'tbl_v9_comparacion_llegadas';
+  const tbl = document.getElementById(tblId);
   if(!tbl) return;
-  if(!BITACORA_HIST.sugeridos.length){
-    tablaSinHistorial('tbl_v10_comparacion_sugeridos', 1, 'Todavía no hay historial en la Bitácora — en cuanto pase el día 5 de un mes con el Apps Script conectado, empieza a acumularse automáticamente. Vuelve a revisar el mes que viene.');
+  if(!BITACORA_HIST.llegadas.length){
+    tablaSinHistorial(tblId, 1, 'Todavía no hay historial en la Bitácora — en cuanto pase el día 5 de un mes con el Apps Script conectado, empieza a acumularse automáticamente. Vuelve a revisar el mes que viene.');
     return;
   }
+  const filas = calcularComparacionLlegadas(fFamilia);
+  if(!filas.length){
+    tablaSinHistorial(tblId, 1, 'Hay fotos en la Bitácora, pero ninguna todavía corresponde a un mes ya vencido (o no hay datos para esta familia) — vuelve a revisar cuando pase al menos 1 mes completo desde la primera foto.');
+    return;
+  }
+  let html = '<tr><th>Mes</th><th>Familia</th><th>Meta (proyectada)</th><th>Real (arribado)</th><th>Diferencia (Ton)</th><th>% Cumplimiento</th></tr>';
+  filas.forEach(r=>{
+    const sem = r.pct===null?'neutral':(r.pct>=95?'ok':(r.pct>=80?'warn':'bad'));
+    html += `<tr><td class="txt">${fmtMesLabel(r.mesDisponible)}</td><td class="txt">${r.familia}</td><td>${fmtTonDirecto(r.metaTon)}</td><td>${fmtTonDirecto(r.realTon)}</td>
+      <td style="color:${r.dif>=0?'var(--green)':'var(--red)'};">${r.dif>=0?'+':''}${fmtTonDirecto(r.dif)}</td><td><span class="pill ${sem}">${r.pct!==null?r.pct+'%':'—'}</span></td></tr>`;
+  });
+  document.getElementById(tblId).innerHTML = html;
+}
+
+function calcularComparacionSugeridos(fFamilia){
   const M = MODEL;
   const HOY = new Date();
   const mesActualStr = monthKey(HOY);
-  const porMesProveedor = {};
+  const porMesFamiliaProveedor = {};
   BITACORA_HIST.sugeridos.forEach(r=>{
     if(!r.mesNecesidad || r.mesNecesidad>=mesActualStr) return;
     if(r.fechaCorte.slice(0,7) >= r.mesNecesidad) return;
-    const k = r.mesNecesidad+'|'+r.proveedor;
-    if(!porMesProveedor[k] || r.fechaCorte>porMesProveedor[k].fechaCorte) porMesProveedor[k] = r;
+    if(fFamilia && r.familia!==fFamilia) return;
+    const k = r.mesNecesidad+'|'+r.familia+'|'+r.proveedor;
+    if(!porMesFamiliaProveedor[k] || r.fechaCorte>porMesFamiliaProveedor[k].fechaCorte) porMesFamiliaProveedor[k] = r;
   });
-  if(!Object.keys(porMesProveedor).length){
-    tablaSinHistorial('tbl_v10_comparacion_sugeridos', 1, 'Hay fotos en la Bitácora, pero ninguna todavía corresponde a un mes ya vencido — vuelve a revisar cuando pase al menos 1 mes completo desde la primera foto.');
-    return;
-  }
-  let html = '<tr><th>Mes</th><th>Proveedor</th><th>Sugerido</th><th>Realmente Pedido</th><th>Diferencia (Ton)</th><th>% Cumplimiento</th></tr>';
-  Object.values(porMesProveedor).sort((a,b)=>a.mesNecesidad.localeCompare(b.mesNecesidad)).forEach(r=>{
+  return Object.values(porMesFamiliaProveedor).map(r=>{
     const realTon = M.pedidos.filter(p=>p.proveedor===r.proveedor && p.mesPedido===r.mesNecesidad).reduce((a,p)=>a+(p.pedidoKg||0),0)/1000;
+    // Nota: el "realmente pedido" aquí es del PROVEEDOR completo ese mes (no se puede filtrar el pedido real
+    // por familia con precisión, porque un mismo pedido puede traer varios productos) — comparar contra el
+    // sugerido YA filtrado por familia da una lectura razonable, pero ligeramente optimista/pesimista si ese
+    // proveedor mezcla familias en el mismo mes.
     const dif = realTon - r.tonSugeridas;
     const pct = r.tonSugeridas>0 ? Math.round(realTon/r.tonSugeridas*100) : null;
-    const sem = pct===null?'neutral':(pct>=95?'ok':(pct>=80?'warn':'bad'));
-    html += `<tr><td class="txt">${fmtMesLabel(r.mesNecesidad)}</td><td class="txt">${r.proveedor}</td><td>${fmtTonDirecto(r.tonSugeridas)}</td><td>${fmtTonDirecto(realTon)}</td>
-      <td style="color:${dif>=0?'var(--green)':'var(--red)'};">${dif>=0?'+':''}${fmtTonDirecto(dif)}</td><td><span class="pill ${sem}">${pct!==null?pct+'%':'—'}</span></td></tr>`;
+    return {...r, realTon, dif, pct};
+  }).sort((a,b)=>a.mesNecesidad.localeCompare(b.mesNecesidad));
+}
+function renderComparacionSugeridosVsReal(tblId, fFamilia){
+  tblId = tblId || 'tbl_v10_comparacion_sugeridos';
+  const tbl = document.getElementById(tblId);
+  if(!tbl) return;
+  if(!BITACORA_HIST.sugeridos.length){
+    tablaSinHistorial(tblId, 1, 'Todavía no hay historial en la Bitácora — en cuanto pase el día 5 de un mes con el Apps Script conectado, empieza a acumularse automáticamente. Vuelve a revisar el mes que viene.');
+    return;
+  }
+  const filas = calcularComparacionSugeridos(fFamilia);
+  if(!filas.length){
+    tablaSinHistorial(tblId, 1, 'Hay fotos en la Bitácora, pero ninguna todavía corresponde a un mes ya vencido (o no hay datos para esta familia) — vuelve a revisar cuando pase al menos 1 mes completo desde la primera foto.');
+    return;
+  }
+  let html = '<tr><th>Mes</th><th>Familia</th><th>Proveedor</th><th>Sugerido</th><th>Realmente Pedido</th><th>Diferencia (Ton)</th><th>% Cumplimiento</th></tr>';
+  filas.forEach(r=>{
+    const sem = r.pct===null?'neutral':(r.pct>=95?'ok':(r.pct>=80?'warn':'bad'));
+    html += `<tr><td class="txt">${fmtMesLabel(r.mesNecesidad)}</td><td class="txt">${r.familia}</td><td class="txt">${r.proveedor}</td><td>${fmtTonDirecto(r.tonSugeridas)}</td><td>${fmtTonDirecto(r.realTon)}</td>
+      <td style="color:${r.dif>=0?'var(--green)':'var(--red)'};">${r.dif>=0?'+':''}${fmtTonDirecto(r.dif)}</td><td><span class="pill ${sem}">${r.pct!==null?r.pct+'%':'—'}</span></td></tr>`;
   });
-  document.getElementById('tbl_v10_comparacion_sugeridos').innerHTML = html;
+  document.getElementById(tblId).innerHTML = html;
 }
 
 function renderView9(){
@@ -3620,13 +3814,24 @@ function buildCascadaCumplimiento(M){
       return fa - fb;
     });
     const primera = ordenadas[0], ultima = ordenadas[ordenadas.length-1];
-    if(!primera.fechaProforma || !(primera.diasEstimadosProduccion>0) || !ultima.fechaRealProduccion) return;
-    const realDias = daysBetween(primera.fechaProforma, ultima.fechaRealProduccion);
+    if(!primera.fechaProforma || !(primera.diasEstimadosProduccion>0)) return;
+    // 27-sep, a pedido de Sebastián: un saldo cerrado por inactividad (3+ meses sin línea nueva) SÍ debe
+    // contar en cumplimiento — es un incumplimiento real, no un caso a esconder. Si la última fila nunca tuvo
+    // su propia fecha real de producción, se usa la fecha de cierre por inactividad como "fecha real" (así el
+    // caso entra a las estadísticas en vez de desaparecer silenciosamente). Si sí llegó a tener fecha real de
+    // producción (solo quedó un saldo menor sin avanzar), esa sigue siendo la fecha real, como antes.
+    const fechaRealEfectiva = ultima.fechaRealProduccion || (g.cerradoPorInactividad ? g.fechaCierrePorInactividad : null);
+    if(!fechaRealEfectiva) return; // sigue genuinamente abierto, todavía no hay nada que evaluar
+    const realDias = daysBetween(primera.fechaProforma, fechaRealEfectiva);
     if(realDias===null || realDias<0) return;
     const pedidoCod = M.ton.proformaToPedido[g.proforma];
     const pedido = pedidoCod ? pedidoPorCodigo[pedidoCod] : null;
-    etapa1.push({realDias, metaDias:primera.diasEstimadosProduccion, peso:g.cantidadPedidaKg||0, fecha:ultima.fechaRealProduccion,
-      proveedor: pedido?pedido.proveedor:null, familia:g.familia, pedido:pedidoCod});
+    // % de cumplimiento en Kg (entregado vs. pedido) — para los cerrados por inactividad, casi siempre <100%,
+    // que es justo la evidencia del incumplimiento en cantidad, no solo en tiempo.
+    const pctCumpleKg = g.cantidadPedidaKg>0 ? Math.min(100, Math.round(g.cantidadEntregadaKg/g.cantidadPedidaKg*100)) : null;
+    etapa1.push({realDias, metaDias:primera.diasEstimadosProduccion, peso:g.cantidadPedidaKg||0, fecha:fechaRealEfectiva,
+      proveedor: pedido?pedido.proveedor:null, familia:g.familia, pedido:pedidoCod,
+      cerradoPorInactividad: !!g.cerradoPorInactividad, pctCumpleKg, saldoKgNoEntregado: g.cerradoPorInactividad?g.saldoKg:0});
   });
 
   // ETAPA 2 — Embarque: por cada fila/parcial con Producción real Y Zarpe real (ambas fechas ya vienen en la
@@ -3638,8 +3843,9 @@ function buildCascadaCumplimiento(M){
     if(realDias===null || realDias<0) return;
     const pedidoCod = M.ton.proformaToPedido[r.proforma];
     const pedido = pedidoCod ? pedidoPorCodigo[pedidoCod] : null;
+    const impE2 = M.ton.porProyectoImport[r.nombreProyecto];
     etapa2.push({realDias, metaDias:15, peso:r.cantidadEntregadaKg||0, fecha:r.fechaRealZarpe,
-      proveedor: pedido?pedido.proveedor:null, familia:familiaDeProducto(r.producto), pedido:pedidoCod});
+      proveedor: pedido?pedido.proveedor:null, familia:familiaDeProducto(r.producto), pedido:pedidoCod, incoterm: impE2?impE2.incoterm:null});
   });
 
   // ETAPA 3 — Navegación: por proyecto comex (una vez cada uno), Zarpe real→Arribo real, meta P80 histórico
@@ -3719,7 +3925,7 @@ function buildCascadaCumplimiento(M){
     if(transcurridos===null) return;
     const pedidoCod = M.ton.proformaToPedido[r.proforma];
     const pedido = pedidoCod ? pedidoPorCodigo[pedidoCod] : null;
-    abierto3.push({transcurridos, metaDias:M.nav.diasNavegacion(r.paisOrigen), peso:r.cantidadEntregadaKg||0, proveedor:pedido?pedido.proveedor:null, familia:familiaDeProducto(r.producto), pedido:pedidoCod, referencia:r.nombreProyecto});
+    abierto3.push({transcurridos, metaDias:M.nav.diasNavegacion(r.paisOrigen), peso:r.cantidadEntregadaKg||0, proveedor:pedido?pedido.proveedor:null, pais:r.paisOrigen, familia:familiaDeProducto(r.producto), pedido:pedidoCod, referencia:r.nombreProyecto});
   });
   const abierto4 = []; // Nacionalización abierta: arribó pero sin Fecha Levante DIM todavía
   Object.values(M.ton.porProyectoImport||{}).forEach(imp=>{
@@ -3732,7 +3938,17 @@ function buildCascadaCumplimiento(M){
     abierto4.push({transcurridos, metaDias:metaNacGlobalP80, peso:imp.pesoBrutoKg||0, proveedor:pedido?pedido.proveedor:null, familia:filaRef?familiaDeProducto(filaRef.producto):null, pedido:pedidoCod, referencia:imp.proyecto});
   });
 
-  return { etapa1, etapa2, etapa3, etapa4, metaNacGlobalP80, abierto1, abierto2, abierto3, abierto4 };
+  const gruposAbiertosProduccion = M.ton.grupos.filter(g=>!g.cerradoAutomatico && !g.cerradoPorInactividad && g.saldoKg>0);
+  const produccionAbierta = {
+    tonParcialPendiente: gruposAbiertosProduccion.filter(g=>g.cantidadEntregadaKg>0).reduce((a,g)=>a+g.saldoKg,0),
+    nParcialPendiente: gruposAbiertosProduccion.filter(g=>g.cantidadEntregadaKg>0).length,
+    tonCeroEntregas: gruposAbiertosProduccion.filter(g=>g.cantidadEntregadaKg<=0).reduce((a,g)=>a+g.saldoKg,0),
+    nCeroEntregas: gruposAbiertosProduccion.filter(g=>g.cantidadEntregadaKg<=0).length,
+    nCerradosPorInactividad: M.ton.grupos.filter(g=>g.cerradoPorInactividad).length,
+    tonCerradaPorInactividad: M.ton.grupos.filter(g=>g.cerradoPorInactividad).reduce((a,g)=>a+g.saldoKg,0),
+  };
+
+  return { etapa1, etapa2, etapa3, etapa4, metaNacGlobalP80, abierto1, abierto2, abierto3, abierto4, produccionAbierta };
 }
 
 function buildLlegadasPorFamilia(M){
