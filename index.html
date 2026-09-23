@@ -543,6 +543,17 @@
     <div class="panel">
       <h2>S&OP · Planeación de Ventas y Operaciones — Compras, Inventario y Llegadas</h2>
       <div class="desc">De lo más resumido a lo más operativo: primero cómo va el inventario y cuánta caja se necesita, luego si Compras está ejecutando lo que el modelo recomienda, y al final el detalle línea por línea de cada pedido nuevo y cada llegada proyectada.</div>
+      <div class="filters" style="margin-top:12px;">
+        <label style="font-size:12px;color:var(--ink-soft);">Horizonte de proyección:
+          <select id="v10_horizonte">
+            <option value="6">Próximos 6 meses</option>
+            <option value="12" selected>Próximos 12 meses</option>
+            <option value="18">Próximos 18 meses</option>
+            <option value="24">Próximos 24 meses</option>
+          </select>
+        </label>
+      </div>
+      <div id="v10_narrativa" style="margin-top:8px;font-size:12.5px;color:var(--ink-soft);line-height:1.6;"></div>
     </div>
     <div class="panel" id="v10_alertasPanel" style="display:none;">
       <h2>⚠ Pedidos que ya deberían haberse colocado</h2>
@@ -3251,7 +3262,8 @@ function renderView9(){
 const fmtTonDirecto = t => t===null||t===undefined ? '—' : t.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2}) + ' Ton'; // 't' YA está en toneladas (PPTO, gaps) — no dividir de nuevo por 1000 como hace fmtTon() con los kg del resto del Tablero
 function renderView10(){
   const M = MODEL;
-  const horizonte = parseInt(document.getElementById('v10_horizonte').value||'12',10);
+  const horizonteEl = document.getElementById('v10_horizonte');
+  const horizonte = parseInt(horizonteEl?.value||'12',10);
   const arancel = (parseFloat(document.getElementById('v4_arancel').value)||6)/100;
   const iva = (parseFloat(document.getElementById('v4_iva').value)||19)/100;
   const diaGabela = parseInt(document.getElementById('v9_gabela').value||'20',10);
@@ -3540,7 +3552,7 @@ function renderView10(){
   }
   document.getElementById('f10_familia').onchange = pintarDetalle;
   document.getElementById('f10_proveedor').onchange = pintarDetalle;
-  document.getElementById('v10_horizonte').onchange = renderView10;
+  if(horizonteEl) horizonteEl.onchange = renderView10;
   ['meta_rev_laminas','meta_rev_tubos','meta_rev_perfiles','meta_rev_otros'].forEach(id=>{
     const el = document.getElementById(id);
     if(el) el.oninput = renderView10;
@@ -3558,10 +3570,13 @@ function renderView10(){
 
   // ---- Narrativa ----
   const familiasConGap = [...new Set(pedidosNuevos.map(p=>p.familia))];
-  document.getElementById('v10_narrativa').innerHTML = pedidosNuevos.length
-    ? `En los próximos ${horizonte} meses se proyectan <b>${pedidosNuevos.length}</b> pedidos nuevos (${familiasConGap.join(', ')||'—'}) por un total de <b>${fmtTon(pedidosNuevos.reduce((a,p)=>a+p.kg,0))}</b> y ${fmt(pedidosNuevos.reduce((a,p)=>a+p.valorUsd,0))} USD.` +
-      (alertasRetraso.length ? ` <b style="color:var(--red);">${alertasRetraso.length} de ellos ya deberían haberse colocado hoy</b> — ver panel de alertas arriba.` : ' Ninguno está retrasado con el lead time actual.')
-    : `Con el PPTO y el horizonte actual, lo ya pedido (Vista 9) alcanza a cubrir la venta presupuestada — no se proyecta ningún pedido nuevo.`;
+  const narrativaEl = document.getElementById('v10_narrativa');
+  if(narrativaEl){
+    narrativaEl.innerHTML = pedidosNuevos.length
+      ? `En los próximos ${horizonte} meses se proyectan <b>${pedidosNuevos.length}</b> pedidos nuevos (${familiasConGap.join(', ')||'—'}) por un total de <b>${fmtTon(pedidosNuevos.reduce((a,p)=>a+p.kg,0))}</b> y ${fmt(pedidosNuevos.reduce((a,p)=>a+p.valorUsd,0))} USD.` +
+        (alertasRetraso.length ? ` <b style="color:var(--red);">${alertasRetraso.length} de ellos ya deberían haberse colocado hoy</b> — ver panel de alertas arriba.` : ' Ninguno está retrasado con el lead time actual.')
+      : `Con el PPTO y el horizonte actual, lo ya pedido (Vista 9) alcanza a cubrir la venta presupuestada — no se proyecta ningún pedido nuevo.`;
+  }
 
   // ---- Descargar a Excel ----
   document.getElementById('v10_descargar').onclick = function(){
