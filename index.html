@@ -152,6 +152,7 @@
     <button data-view="v6">3 · Seguimiento Contable por Pedido</button>
     <button data-view="v3">4 · Proyectos Comex</button>
     <button data-view="v9">9 · Llegadas por Familia</button>
+    <button data-view="v11">11 · Cumplimiento de Tiempos</button>
   </div>
   <div class="nav-grupo"><span class="nav-grupo-label">Finanzas</span>
     <button data-view="v4">5 · Pendientes por Pagar</button>
@@ -667,6 +668,104 @@
     </div>
   </div>
 
+  <div class="view" id="v11">
+    <div class="panel">
+      <h2>11 · Cumplimiento de Tiempos de Importación</h2>
+      <div class="desc">Gestión del ciclo completo Pedido → Levante, dividido en sus 4 etapas físicas — cada una con su Real (medido), su Meta (objetivo) y su % de cumplimiento, ponderado por toneladas. El objetivo: saber exactamente en cuál etapa se está perdiendo tiempo, no solo "que el ciclo es largo".</div>
+      <div class="mini-kpis" id="v11_resumenGlobal"></div>
+    </div>
+    <div class="panel">
+      <h2>Cascada — dónde se pierde el tiempo (Real vs. Meta, por etapa)</h2>
+      <div class="desc">Cada barra es una etapa del ciclo; el segmento oscuro es el Real, el segmento claro superpuesto es la Meta — así se ve de un vistazo cuál etapa se pasa más de su objetivo.</div>
+      <div style="height:340px;"><canvas id="c_v11_cascada"></canvas></div>
+    </div>
+
+    <div class="panel">
+      <h2>1 · Producción</h2>
+      <div class="desc">Pedido (Fecha Proforma) → última Fecha Real de Producción. Meta = compromiso ORIGINAL del proveedor (días estimados de producción de la primera línea de esa proforma+producto).</div>
+      <div class="mini-kpis" id="v11_e1_resumen"></div>
+    </div>
+    <div class="panel">
+      <h2>1 · Producción — Tendencia mensual (Real vs. Meta, ponderado por Ton)</h2>
+      <div class="desc">¿Estamos mejorando o empeorando con el tiempo? Cada punto es el promedio ponderado por toneladas de ese mes.</div>
+      <div style="height:300px;"><canvas id="c_v11_e1_tendencia"></canvas></div>
+    </div>
+    <div class="grid2">
+      <div class="panel">
+        <h2>1 · Producción — Ranking por Proveedor</h2>
+        <div class="scroll"><table id="tbl_v11_e1_proveedor"></table></div>
+      </div>
+      <div class="panel">
+        <h2>1 · Producción — Por Familia</h2>
+        <div class="scroll"><table id="tbl_v11_e1_familia"></table></div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h2>2 · Embarque</h2>
+      <div class="desc">Producción real → Zarpe real. Meta fija: 15 días para todos los proveedores.</div>
+      <div class="mini-kpis" id="v11_e2_resumen"></div>
+    </div>
+    <div class="panel">
+      <h2>2 · Embarque — Tendencia mensual (Real vs. Meta, ponderado por Ton)</h2>
+      <div class="desc">¿Estamos mejorando o empeorando con el tiempo? Cada punto es el promedio ponderado por toneladas de ese mes.</div>
+      <div style="height:300px;"><canvas id="c_v11_e2_tendencia"></canvas></div>
+    </div>
+    <div class="grid2">
+      <div class="panel">
+        <h2>2 · Embarque — Ranking por Proveedor</h2>
+        <div class="scroll"><table id="tbl_v11_e2_proveedor"></table></div>
+      </div>
+      <div class="panel">
+        <h2>2 · Embarque — Por Familia</h2>
+        <div class="scroll"><table id="tbl_v11_e2_familia"></table></div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h2>3 · Navegación</h2>
+      <div class="desc">Zarpe real → Arribo real. Meta = P80 histórico por país de origen (mismo criterio ya usado en el resto del Tablero).</div>
+      <div class="mini-kpis" id="v11_e3_resumen"></div>
+    </div>
+    <div class="panel">
+      <h2>3 · Navegación — Tendencia mensual (Real vs. Meta, ponderado por Ton)</h2>
+      <div class="desc">¿Estamos mejorando o empeorando con el tiempo? Cada punto es el promedio ponderado por toneladas de ese mes.</div>
+      <div style="height:300px;"><canvas id="c_v11_e3_tendencia"></canvas></div>
+    </div>
+    <div class="grid2">
+      <div class="panel">
+        <h2>3 · Navegación — Ranking por Proveedor</h2>
+        <div class="scroll"><table id="tbl_v11_e3_proveedor"></table></div>
+      </div>
+      <div class="panel">
+        <h2>3 · Navegación — Por Familia</h2>
+        <div class="scroll"><table id="tbl_v11_e3_familia"></table></div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h2>4 · Nacionalización</h2>
+      <div class="desc">Arribo real → Fecha Levante DIM. Meta = P80 histórico global (provisional, hasta definir meta oficial).</div>
+      <div class="mini-kpis" id="v11_e4_resumen"></div>
+    </div>
+    <div class="panel">
+      <h2>4 · Nacionalización — Tendencia mensual (Real vs. Meta, ponderado por Ton)</h2>
+      <div class="desc">¿Estamos mejorando o empeorando con el tiempo? Cada punto es el promedio ponderado por toneladas de ese mes.</div>
+      <div style="height:300px;"><canvas id="c_v11_e4_tendencia"></canvas></div>
+    </div>
+    <div class="grid2">
+      <div class="panel">
+        <h2>4 · Nacionalización — Ranking por Proveedor</h2>
+        <div class="scroll"><table id="tbl_v11_e4_proveedor"></table></div>
+      </div>
+      <div class="panel">
+        <h2>4 · Nacionalización — Por Familia</h2>
+        <div class="scroll"><table id="tbl_v11_e4_familia"></table></div>
+      </div>
+    </div>
+
+  </div>
+
 </main>
 
 <footer>Tablero conectado en vivo a Google Sheets · Sheet ID: 1QDs19b...DTLX30 · cálculo 100% en el navegador, sin servidor intermedio.</footer>
@@ -1046,6 +1145,7 @@ function normPedidoDet(r){
   return {
     proforma: get(r,'# PROFORMA'),
     fechaProforma: dt(get(r,'Fecha Proforma (DD/MM/AA)')),
+    diasEstimadosProduccion: num(get(r,'Días estimados de producción')),
     producto: get(r,'Producto'),
     cantidadPedidaKg: num(get(r,'Cantidad PI (Peso Neto Kg)')),
     fechaEstimadaProduccion: dt(get(r,'Fecha Estimada de produccion (DD/MM/AA)')),
@@ -1066,6 +1166,7 @@ function normImportacion(r){
     nombreProyecto: get(r,'Nombre Proyecto'),
     fechaEstimadaArribo: dt(get(r,'Fecha Estimada de Arribo')),
     fechaRealArribo: dt(get(r,'Fecha Real de Arribo')),
+    fechaLevanteDIM: dt(get(r,'Fecha Levante DIM')),
     producto: get(r,'Producto'),
     incoterm: get(r,'Término Incoterm'),
     pesoBrutoKg: num(get(r,'Peso Bruto (Kgs)')),
@@ -1173,7 +1274,7 @@ function buildToneladasModel(pedDetRaw, impRaw, prof, spAll){
   const porProyectoImport = {};
   imp.forEach(r=>{
     const k = r.nombreProyecto;
-    if(!porProyectoImport[k]) porProyectoImport[k] = {proyecto:k, pesoBrutoKg:0, fechaRealArribo:null, contenedores:new Map(), pesosVistos:{}};
+    if(!porProyectoImport[k]) porProyectoImport[k] = {proyecto:k, pesoBrutoKg:0, fechaRealArribo:null, fechaLevanteDIM:null, contenedores:new Map(), pesosVistos:{}};
     const g = porProyectoImport[k];
     const cId = r.idContenedor || ('SIN_ID_'+g.contenedores.size);
     if(!g.contenedores.has(cId)){
@@ -1183,6 +1284,7 @@ function buildToneladasModel(pedDetRaw, impRaw, prof, spAll){
       g.pesosVistos[key] = (g.pesosVistos[key]||0)+1;
     }
     if(r.fechaRealArribo && (!g.fechaRealArribo || r.fechaRealArribo>g.fechaRealArribo)) g.fechaRealArribo = r.fechaRealArribo;
+    if(r.fechaLevanteDIM && (!g.fechaLevanteDIM || r.fechaLevanteDIM>g.fechaLevanteDIM)) g.fechaLevanteDIM = r.fechaLevanteDIM;
   });
   Object.values(porProyectoImport).forEach(g=>{
     g.nContenedores = g.contenedores.size;
@@ -2316,6 +2418,7 @@ function render(){
   renderView8();
   renderView9();
   renderView10();
+  renderView11();
   renderTableroMando();
   renderBandejaAlertas();
   renderDiag();
@@ -2453,6 +2556,113 @@ function tablaMesFamilia(items, familias){
   });
   html += `<tr style="background:var(--paper);font-weight:700;"><td class="txt">TOTAL</td>` + familias.map(f=>`<td>${fmtTon(totalesFamilia[f])}</td>`).join('') + `<td>${fmtTon(totalGeneral)}</td></tr>`;
   return {html, meses, totalesFamilia, totalGeneral};
+}
+
+// ================= VISTA 11 · CASCADA DE CUMPLIMIENTO DE TIEMPOS =================
+function promedioPonderadoGenerico(arr, campo, pesoCampo){
+  const validos = arr.filter(o=>o[campo]!==null && o[campo]!==undefined && o[pesoCampo]>0);
+  const sumPeso = validos.reduce((a,o)=>a+o[pesoCampo],0);
+  if(!sumPeso) return null;
+  return validos.reduce((a,o)=>a+o[campo]*o[pesoCampo],0)/sumPeso;
+}
+function semaforoCumplimiento(real, meta){
+  if(real===null || meta===null) return 'neutral';
+  if(real<=meta) return 'ok';
+  if(real<=meta*1.10) return 'warn';
+  return 'bad';
+}
+function renderEtapaCumplimiento(prefix, datos){
+  const realProm = promedioPonderadoGenerico(datos, 'realDias', 'peso');
+  const metaProm = promedioPonderadoGenerico(datos, 'metaDias', 'peso');
+  const pctCumpl = (realProm && metaProm) ? (metaProm/realProm*100) : null;
+  const sem = semaforoCumplimiento(realProm, metaProm);
+  document.getElementById(`v11_${prefix}_resumen`).innerHTML = `
+    <div class="mini-kpi ${sem}"><span>Real Prom. Ponderado</span><b>${realProm!==null?Math.round(realProm)+' d':'—'}</b></div>
+    <div class="mini-kpi"><span>Meta</span><b>${metaProm!==null?Math.round(metaProm)+' d':'—'}</b></div>
+    <div class="mini-kpi ${sem}"><span>% Cumplimiento</span><b>${pctCumpl!==null?Math.round(pctCumpl)+'%':'—'}</b></div>
+    <div class="mini-kpi"><span># Observaciones</span><b>${datos.length}</b></div>
+  `;
+
+  // Tendencia mensual: ¿mejora o empeora con el tiempo?
+  const porMes = {};
+  datos.forEach(o=>{ if(!o.fecha) return; const m = monthKey(o.fecha); porMes[m] = porMes[m]||[]; porMes[m].push(o); });
+  const meses = Object.keys(porMes).sort();
+  const realPorMes = meses.map(m=>promedioPonderadoGenerico(porMes[m],'realDias','peso'));
+  const metaPorMes = meses.map(m=>promedioPonderadoGenerico(porMes[m],'metaDias','peso'));
+  lineChart(`c_v11_${prefix}_tendencia`, meses.map(fmtMesLabel), [
+    {label:'Real (ponderado por Ton)', data:realPorMes, borderColor:COLORS.navy, backgroundColor:COLORS.navy},
+    {label:'Meta', data:metaPorMes, borderColor:COLORS.gold, backgroundColor:COLORS.gold, borderDash:[6,4]},
+  ]);
+
+  // Ranking por proveedor
+  const porProveedor = {};
+  datos.forEach(o=>{ if(!o.proveedor) return; porProveedor[o.proveedor] = porProveedor[o.proveedor]||[]; porProveedor[o.proveedor].push(o); });
+  const filasProv = Object.entries(porProveedor).map(([prov,arr])=>({
+    proveedor:prov, real:promedioPonderadoGenerico(arr,'realDias','peso'), meta:promedioPonderadoGenerico(arr,'metaDias','peso'), n:arr.length, peso:arr.reduce((a,o)=>a+o.peso,0)
+  })).filter(f=>f.n>=2).sort((a,b)=>b.peso-a.peso);
+  let htmlProv = '<tr><th>Proveedor</th><th>Real Prom.</th><th>Meta</th><th>% Cumpl.</th><th># Obs.</th></tr>';
+  filasProv.forEach(f=>{
+    const s = semaforoCumplimiento(f.real, f.meta);
+    const pct = (f.real&&f.meta) ? Math.round(f.meta/f.real*100) : null;
+    htmlProv += `<tr><td class="txt">${f.proveedor}</td><td>${f.real!==null?Math.round(f.real)+' d':'—'}</td><td>${f.meta!==null?Math.round(f.meta)+' d':'—'}</td><td><span class="pill ${s}">${pct!==null?pct+'%':'—'}</span></td><td>${f.n}</td></tr>`;
+  });
+  document.getElementById(`tbl_v11_${prefix}_proveedor`).innerHTML = htmlProv;
+
+  // Por familia
+  const porFamilia = {};
+  datos.forEach(o=>{ if(!o.familia) return; porFamilia[o.familia] = porFamilia[o.familia]||[]; porFamilia[o.familia].push(o); });
+  let htmlFam = '<tr><th>Familia</th><th>Real Prom.</th><th>Meta</th><th>% Cumpl.</th><th># Obs.</th></tr>';
+  FAMILIAS_ORDEN.forEach(fam=>{
+    const arr = porFamilia[fam]; if(!arr || !arr.length) return;
+    const real = promedioPonderadoGenerico(arr,'realDias','peso'), meta = promedioPonderadoGenerico(arr,'metaDias','peso');
+    const s = semaforoCumplimiento(real, meta);
+    const pct = (real&&meta) ? Math.round(meta/real*100) : null;
+    htmlFam += `<tr><td class="txt">${fam}</td><td>${real!==null?Math.round(real)+' d':'—'}</td><td>${meta!==null?Math.round(meta)+' d':'—'}</td><td><span class="pill ${s}">${pct!==null?pct+'%':'—'}</span></td><td>${arr.length}</td></tr>`;
+  });
+  document.getElementById(`tbl_v11_${prefix}_familia`).innerHTML = htmlFam;
+
+  return {realProm, metaProm};
+}
+
+function lineChart(canvasId, labels, datasets){
+  const el = document.getElementById(canvasId);
+  if(el._chart) el._chart.destroy();
+  el._chart = new Chart(el, { type:'line', data:{labels, datasets: datasets.map(d=>({...d, fill:false, tension:0.25}))},
+    options:{responsive:true, maintainAspectRatio:false, plugins:{datalabels:{display:false}}, scales:{y:{title:{display:true,text:'días'}}}} });
+}
+
+function renderView11(){
+  const M = MODEL;
+  const C = M._cascadaCache || (M._cascadaCache = buildCascadaCumplimiento(M));
+
+  const r1 = renderEtapaCumplimiento('e1', C.etapa1);
+  const r2 = renderEtapaCumplimiento('e2', C.etapa2);
+  const r3 = renderEtapaCumplimiento('e3', C.etapa3);
+  const r4 = renderEtapaCumplimiento('e4', C.etapa4);
+
+  // Resumen global: promedio ponderado por Ton de las 4 etapas juntas (Pedido -> Levante)
+  const todas = [...C.etapa1, ...C.etapa2, ...C.etapa3, ...C.etapa4];
+  const realGlobal = promedioPonderadoGenerico(todas, 'realDias', 'peso');
+  const metaGlobal = promedioPonderadoGenerico(todas, 'metaDias', 'peso');
+  const pctGlobal = (realGlobal && metaGlobal) ? Math.round(metaGlobal/realGlobal*100) : null;
+  const semGlobal = semaforoCumplimiento(realGlobal, metaGlobal);
+  const etapas = [{n:'Producción', r:r1}, {n:'Embarque', r:r2}, {n:'Navegación', r:r3}, {n:'Nacionalización', r:r4}];
+  const cuello = etapas.filter(e=>e.r.realProm!==null && e.r.metaProm!==null).sort((a,b)=>(b.r.realProm-b.r.metaProm)-(a.r.realProm-a.r.metaProm))[0];
+  document.getElementById('v11_resumenGlobal').innerHTML = `
+    <div class="mini-kpi ${semGlobal}"><span>% Cumplimiento del Proceso (Pedido→Levante)</span><b>${pctGlobal!==null?pctGlobal+'%':'—'}</b></div>
+    <div class="mini-kpi"><span>Días Reales Totales (suma de las 4 etapas)</span><b>${Math.round((r1.realProm||0)+(r2.realProm||0)+(r3.realProm||0)+(r4.realProm||0))} d</b></div>
+    <div class="mini-kpi"><span>Meta Total</span><b>${Math.round((r1.metaProm||0)+(r2.metaProm||0)+(r3.metaProm||0)+(r4.metaProm||0))} d</b></div>
+    <div class="mini-kpi bad"><span>Cuello de botella</span><b>${cuello?cuello.n:'—'}</b></div>
+  `;
+
+  // Cascada / waterfall: Real vs Meta por etapa
+  const etapasNombres = ['Producción','Embarque','Navegación','Nacionalización'];
+  const realesArr = [r1.realProm, r2.realProm, r3.realProm, r4.realProm].map(v=>v||0);
+  const metasArr = [r1.metaProm, r2.metaProm, r3.metaProm, r4.metaProm].map(v=>v||0);
+  barChart('c_v11_cascada', etapasNombres, [
+    {label:'Real', data:realesArr, backgroundColor:COLORS.navy},
+    {label:'Meta', data:metasArr, backgroundColor:COLORS.gold},
+  ], {}, true, v=>Math.round(v)+'d');
 }
 
 function renderView9(){
@@ -3126,6 +3336,90 @@ function mesDisponibilidad(fecha, diaGabela){
   let mes = fecha.getMonth(), anio = fecha.getFullYear();
   if(fecha.getDate() > diaGabela){ mes += 1; if(mes>11){ mes = 0; anio += 1; } }
   return anio+'-'+String(mes+1).padStart(2,'0');
+}
+
+// ================= CASCADA DE CUMPLIMIENTO DE TIEMPOS (Vista 11) =================
+// 4 etapas del ciclo de importación, cada una con su Real (medido) y su Meta (objetivo), para poder hacer
+// gestión: Producción (Pedido→última Fecha Real de Producción, vs. el compromiso ORIGINAL del proveedor,
+// tomado de la primera fila de esa proforma+producto — no de filas posteriores, que son ajustes propios del
+// proveedor), Embarque (Producción real→Zarpe real, meta fija 15 días), Navegación (Zarpe→Arribo, meta P80
+// histórico por país, ya validado en el resto del Tablero), Nacionalización (Arribo→Fecha Levante DIM, meta
+// P80 histórico global — Sebastián confirmó usar P80 histórico por ahora, hasta definir una meta oficial).
+function buildCascadaCumplimiento(M){
+  const pedidoPorCodigo = {}; M.pedidos.forEach(p=>{ pedidoPorCodigo[p.pedido] = p; });
+
+  // ETAPA 1 — Producción: por grupo Proforma+Producto. La MISMA proforma+producto puede repetirse en varias
+  // filas (una por saldo tras cada entrega parcial) — la meta es la del compromiso ORIGINAL (primera fila
+  // cronológica), el real es hasta que TERMINA de producirse todo el pedido (última fila cronológica).
+  const etapa1 = [];
+  M.ton.grupos.forEach(g=>{
+    if(!g.filas || !g.filas.length) return;
+    const ordenadas = g.filas.slice().sort((a,b)=>{
+      const fa = a.fechaRealZarpe || a.fechaSeguimientoCantFinal || a.fechaProforma || 0;
+      const fb = b.fechaRealZarpe || b.fechaSeguimientoCantFinal || b.fechaProforma || 0;
+      return fa - fb;
+    });
+    const primera = ordenadas[0], ultima = ordenadas[ordenadas.length-1];
+    if(!primera.fechaProforma || !(primera.diasEstimadosProduccion>0) || !ultima.fechaRealProduccion) return;
+    const realDias = daysBetween(primera.fechaProforma, ultima.fechaRealProduccion);
+    if(realDias===null || realDias<0) return;
+    const pedidoCod = M.ton.proformaToPedido[g.proforma];
+    const pedido = pedidoCod ? pedidoPorCodigo[pedidoCod] : null;
+    etapa1.push({realDias, metaDias:primera.diasEstimadosProduccion, peso:g.cantidadPedidaKg||0, fecha:ultima.fechaRealProduccion,
+      proveedor: pedido?pedido.proveedor:null, familia:g.familia, pedido:pedidoCod});
+  });
+
+  // ETAPA 2 — Embarque: por cada fila/parcial con Producción real Y Zarpe real (ambas fechas ya vienen en la
+  // MISMA fila de Cuadro Pedidos). Meta fija: 15 días para todos, sin importar proveedor.
+  const etapa2 = [];
+  (M.ton.rows||[]).forEach(r=>{
+    if(!r.fechaRealProduccion || !r.fechaRealZarpe) return;
+    const realDias = daysBetween(r.fechaRealProduccion, r.fechaRealZarpe);
+    if(realDias===null || realDias<0) return;
+    const pedidoCod = M.ton.proformaToPedido[r.proforma];
+    const pedido = pedidoCod ? pedidoPorCodigo[pedidoCod] : null;
+    etapa2.push({realDias, metaDias:15, peso:r.cantidadEntregadaKg||0, fecha:r.fechaRealZarpe,
+      proveedor: pedido?pedido.proveedor:null, familia:familiaDeProducto(r.producto), pedido:pedidoCod});
+  });
+
+  // ETAPA 3 — Navegación: por proyecto comex (una vez cada uno), Zarpe real→Arribo real, meta P80 histórico
+  // por país de origen (M.nav, ya validado en el resto del Tablero).
+  const etapa3 = [];
+  const vistoProyNav = new Set();
+  (M.ton.rows||[]).forEach(r=>{
+    if(!r.nombreProyecto || !r.fechaRealZarpe || vistoProyNav.has(r.nombreProyecto)) return;
+    const imp = M.ton.porProyectoImport[r.nombreProyecto];
+    if(!imp || !imp.fechaRealArribo) return;
+    vistoProyNav.add(r.nombreProyecto);
+    const realDias = daysBetween(r.fechaRealZarpe, imp.fechaRealArribo);
+    if(realDias===null || realDias<0 || realDias>200) return;
+    const metaDias = M.nav.diasNavegacion(r.paisOrigen);
+    const pedidoCod = M.ton.proformaToPedido[r.proforma];
+    const pedido = pedidoCod ? pedidoPorCodigo[pedidoCod] : null;
+    etapa3.push({realDias, metaDias, peso: imp.pesoBrutoKg||r.cantidadEntregadaKg||0, fecha:imp.fechaRealArribo,
+      proveedor: pedido?pedido.proveedor:null, familia:familiaDeProducto(r.producto), pais:r.paisOrigen, pedido:pedidoCod});
+  });
+
+  // ETAPA 4 — Nacionalización: por proyecto comex, Arribo real→Fecha Levante DIM. Meta = P80 histórico GLOBAL
+  // (ponderado por recencia, mismo criterio que el resto del modelo) — Sebastián confirmó usar esto por ahora.
+  const observacionesNac = [];
+  Object.values(M.ton.porProyectoImport||{}).forEach(imp=>{
+    if(!imp.fechaRealArribo || !imp.fechaLevanteDIM) return;
+    const d = daysBetween(imp.fechaRealArribo, imp.fechaLevanteDIM);
+    if(d===null || d<0 || d>200) return;
+    observacionesNac.push({dias:d, fecha:imp.fechaLevanteDIM, peso:imp.pesoBrutoKg||0, proyecto:imp.proyecto});
+  });
+  const metaNacGlobal = observacionesNac.length ? weightedMean(observacionesNac.map(o=>({valor:o.dias, fecha:o.fecha}))) : null;
+  const metaNacGlobalP80 = observacionesNac.length ? percentile(observacionesNac.map(o=>o.dias), 0.8) : null;
+  const etapa4 = observacionesNac.map(o=>{
+    const filaRef = (M.ton.rows||[]).find(r=>r.nombreProyecto===o.proyecto);
+    const pedidoCod = filaRef ? M.ton.proformaToPedido[filaRef.proforma] : null;
+    const pedido = pedidoCod ? pedidoPorCodigo[pedidoCod] : null;
+    return {realDias:o.dias, metaDias: metaNacGlobalP80, peso:o.peso, fecha:o.fecha,
+      proveedor: pedido?pedido.proveedor:null, familia: filaRef?familiaDeProducto(filaRef.producto):null, pedido:pedidoCod};
+  });
+
+  return { etapa1, etapa2, etapa3, etapa4, metaNacGlobalP80 };
 }
 
 function buildLlegadasPorFamilia(M){
