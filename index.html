@@ -3284,8 +3284,17 @@ function buildPedidosNuevosProyectados(M, opts={}){
   const llegadasPorMes = consolidarLlegadasPorMes(llegadas, diaGabela);
   const llegadasIdx = {}; llegadasPorMes.forEach(l=> llegadasIdx[l.mes]=l);
 
+  // 25-sep, Tanda 27 (a pedido de Sebastián: Láminas quedaba bajo mínimo cerca del final del horizonte
+  // elegido). Causa real: el chequeo "A meses adelante" se recorta al último mes del horizonte cuando el
+  // mes evaluado está a menos de A meses del final — comparando contra un mes MÁS CERCANO del que le
+  // corresponde, subestimando el déficit real de los últimos meses visibles. Se agrega un colchón interno
+  // de meses adicionales (nunca se muestran ni generan pedidos ahí — solo dan margen de lookahead) para que
+  // NINGÚN mes del horizonte que sí se muestra se quede con un chequeo recortado.
+  const BUFFER_MESES_LOOKAHEAD = 8;
+  const mesesHorizonteVisible = [];
+  for(let i=0;i<horizonteMeses;i++){ const d=new Date(HOY.getFullYear(), HOY.getMonth()+i, 1); mesesHorizonteVisible.push(monthKey(d)); }
   const mesesHorizonte = [];
-  for(let i=0;i<horizonteMeses;i++){ const d=new Date(HOY.getFullYear(), HOY.getMonth()+i, 1); mesesHorizonte.push(monthKey(d)); }
+  for(let i=0;i<horizonteMeses+BUFFER_MESES_LOOKAHEAD;i++){ const d=new Date(HOY.getFullYear(), HOY.getMonth()+i, 1); mesesHorizonte.push(monthKey(d)); }
 
   const pedidosNuevos = [];   // una fila por (mes de necesidad, familia, proveedor)
   const mesesSinPpto = [];    // meses del horizonte sin fila de PPTO publicada todavía
@@ -3471,7 +3480,7 @@ function buildPedidosNuevosProyectados(M, opts={}){
     return isFinite(techo) ? techo : null; // null: ningún proveedor del mix tiene historial propio ni de respaldo GLOBAL (no debería pasar con datos reales)
   }
 
-  mesesHorizonte.forEach(mesNecesidad=>{
+  mesesHorizonteVisible.forEach(mesNecesidad=>{
     const ppto = M.pptoPorMes[mesNecesidad];
     if(!ppto){ mesesSinPpto.push(mesNecesidad); return; }
     const cubierto = llegadasIdx[mesNecesidad];
@@ -3673,7 +3682,7 @@ function buildPedidosNuevosProyectados(M, opts={}){
     });
   });
 
-  return { pedidosNuevos, alertasRetraso, mesesSinPpto, mesesHorizonte, inventarioPorMes, ventaRealDeducidaPorMes,
+  return { pedidosNuevos, alertasRetraso, mesesSinPpto, mesesHorizonte: mesesHorizonteVisible, inventarioPorMes, ventaRealDeducidaPorMes,
            llegadasIdx, // expuesto para que renderView10 (tabla 10.1, gráfico 10.2b, export a Excel) reutilice
                         // exactamente el mismo índice de llegadas ya calculado aquí, en vez de recalcularlo o
                         // (el bug real del 16-sep) referenciarlo como si fuera una variable del scope de afuera.
