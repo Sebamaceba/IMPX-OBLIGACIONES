@@ -676,21 +676,17 @@
     </div>
     <div class="panel">
       <h2>Cascada — dónde se pierde el tiempo (Real vs. Meta, por etapa)</h2>
-      <div class="desc">Cada barra es una etapa del ciclo; el segmento oscuro es el Real, el segmento claro superpuesto es la Meta — así se ve de un vistazo cuál etapa se pasa más de su objetivo.</div>
+      <div class="desc">Una sola barra por etapa: el Real, coloreado por semáforo (verde=dentro de meta, ámbar=hasta 10% sobre meta, rojo=más de 10%). La franja gris-azul superpuesta marca la Meta.</div>
       <div style="height:340px;"><canvas id="c_v11_cascada"></canvas></div>
     </div>
 
     <div class="panel">
-      <h2>1 · Producción</h2>
-      <div class="desc">Pedido (Fecha Proforma) → última Fecha Real de Producción. Meta = compromiso ORIGINAL del proveedor (días estimados de producción de la primera línea de esa proforma+producto).</div>
-      <div class="filters"><select id="f11_e1_mes"><option value="">Todos los meses</option></select></div>
-      <div class="mini-kpis" id="v11_e1_resumen"></div>
-      <div style="margin-top:14px;background:var(--paper);border:1px solid var(--amber);border-radius:8px;padding:12px 14px;"><h3 style="font-size:12.5px;color:var(--navy);margin:0 0 8px;">⚠ Abiertos ahora mismo (en riesgo o ya pasados de meta)</h3><div class="scroll"><table id="tbl_v11_e1_abiertos"></table></div></div>
-    </div>
-    <div class="panel">
       <h2>1 · Producción — Tendencia mensual (Real vs. Meta, ponderado por Ton)</h2>
-      <div class="desc">¿Estamos mejorando o empeorando con el tiempo? Cada punto es el promedio ponderado por toneladas de ese mes.</div>
+      <div class="desc">Pedido (Fecha Proforma) → última Fecha Real de Producción. Meta = compromiso ORIGINAL del proveedor (días estimados de producción de la primera línea de esa proforma+producto).<br>¿Estamos mejorando o empeorando con el tiempo? Cada punto es el promedio ponderado por toneladas de ese mes — <span style="color:var(--green);font-weight:600;">verde</span> si cumple la meta, <span style="color:var(--amber);font-weight:600;">ámbar</span> si se pasa hasta 10%, <span style="color:var(--red);font-weight:600;">rojo</span> si se pasa más de 10%.</div>
+      <div class="filters"><label style="font-size:12px;color:var(--ink-soft);">Ver:</label> <select id="f11_e1_familia_tendencia"><option value="">Todas las familias</option></select></div>
       <div style="height:300px;"><canvas id="c_v11_e1_tendencia"></canvas></div>
+      <div class="filters" style="margin-top:16px;border-top:1px solid var(--line);padding-top:14px;"><label style="font-size:12px;color:var(--ink-soft);">Filtrar tablas de abajo por mes:</label> <select id="f11_e1_mes"><option value="">Todos los meses</option></select></div>
+      <div class="mini-kpis" id="v11_e1_resumen"></div>
     </div>
     <div class="grid2">
       <div class="panel">
@@ -702,18 +698,20 @@
         <div class="scroll"><table id="tbl_v11_e1_familia"></table></div>
       </div>
     </div>
+    <div class="panel">
+      <h2>1 · Producción — Abiertos ahora mismo</h2>
+      <div class="desc">Pedidos/proyectos que todavía están EN ESTA ETAPA (no ha cerrado todavía) — para actuar antes de que se conviertan en un incumplimiento ya consumado.</div>
+      <div class="mini-kpis" id="v11_e1_abiertos_resumen"></div>
+      <div class="scroll"><table id="tbl_v11_e1_abiertos"></table></div>
+    </div>
 
     <div class="panel">
-      <h2>2 · Embarque</h2>
-      <div class="desc">Producción real → Zarpe real. Meta fija: 15 días para todos los proveedores.</div>
-      <div class="filters"><select id="f11_e2_mes"><option value="">Todos los meses</option></select></div>
-      <div class="mini-kpis" id="v11_e2_resumen"></div>
-      <div style="margin-top:14px;background:var(--paper);border:1px solid var(--amber);border-radius:8px;padding:12px 14px;"><h3 style="font-size:12.5px;color:var(--navy);margin:0 0 8px;">⚠ Abiertos ahora mismo (en riesgo o ya pasados de meta)</h3><div class="scroll"><table id="tbl_v11_e2_abiertos"></table></div></div>
-    </div>
-    <div class="panel">
       <h2>2 · Embarque — Tendencia mensual (Real vs. Meta, ponderado por Ton)</h2>
-      <div class="desc">¿Estamos mejorando o empeorando con el tiempo? Cada punto es el promedio ponderado por toneladas de ese mes.</div>
+      <div class="desc">Producción real → Zarpe real. Meta fija: 15 días para todos los proveedores.<br>¿Estamos mejorando o empeorando con el tiempo? Cada punto es el promedio ponderado por toneladas de ese mes — <span style="color:var(--green);font-weight:600;">verde</span> si cumple la meta, <span style="color:var(--amber);font-weight:600;">ámbar</span> si se pasa hasta 10%, <span style="color:var(--red);font-weight:600;">rojo</span> si se pasa más de 10%.</div>
+      <div class="filters"><label style="font-size:12px;color:var(--ink-soft);">Ver:</label> <select id="f11_e2_familia_tendencia"><option value="">Todas las familias</option></select></div>
       <div style="height:300px;"><canvas id="c_v11_e2_tendencia"></canvas></div>
+      <div class="filters" style="margin-top:16px;border-top:1px solid var(--line);padding-top:14px;"><label style="font-size:12px;color:var(--ink-soft);">Filtrar tablas de abajo por mes:</label> <select id="f11_e2_mes"><option value="">Todos los meses</option></select></div>
+      <div class="mini-kpis" id="v11_e2_resumen"></div>
     </div>
     <div class="grid2">
       <div class="panel">
@@ -725,18 +723,20 @@
         <div class="scroll"><table id="tbl_v11_e2_familia"></table></div>
       </div>
     </div>
+    <div class="panel">
+      <h2>2 · Embarque — Abiertos ahora mismo</h2>
+      <div class="desc">Pedidos/proyectos que todavía están EN ESTA ETAPA (no ha cerrado todavía) — para actuar antes de que se conviertan en un incumplimiento ya consumado.</div>
+      <div class="mini-kpis" id="v11_e2_abiertos_resumen"></div>
+      <div class="scroll"><table id="tbl_v11_e2_abiertos"></table></div>
+    </div>
 
     <div class="panel">
-      <h2>3 · Navegación</h2>
-      <div class="desc">Zarpe real → Arribo real. Meta = P80 histórico por país de origen (mismo criterio ya usado en el resto del Tablero).</div>
-      <div class="filters"><select id="f11_e3_mes"><option value="">Todos los meses</option></select></div>
-      <div class="mini-kpis" id="v11_e3_resumen"></div>
-      <div style="margin-top:14px;background:var(--paper);border:1px solid var(--amber);border-radius:8px;padding:12px 14px;"><h3 style="font-size:12.5px;color:var(--navy);margin:0 0 8px;">⚠ Abiertos ahora mismo (en riesgo o ya pasados de meta)</h3><div class="scroll"><table id="tbl_v11_e3_abiertos"></table></div></div>
-    </div>
-    <div class="panel">
       <h2>3 · Navegación — Tendencia mensual (Real vs. Meta, ponderado por Ton)</h2>
-      <div class="desc">¿Estamos mejorando o empeorando con el tiempo? Cada punto es el promedio ponderado por toneladas de ese mes.</div>
+      <div class="desc">Zarpe real → Arribo real. Meta = P80 histórico por país de origen (mismo criterio ya usado en el resto del Tablero).<br>¿Estamos mejorando o empeorando con el tiempo? Cada punto es el promedio ponderado por toneladas de ese mes — <span style="color:var(--green);font-weight:600;">verde</span> si cumple la meta, <span style="color:var(--amber);font-weight:600;">ámbar</span> si se pasa hasta 10%, <span style="color:var(--red);font-weight:600;">rojo</span> si se pasa más de 10%.</div>
+      <div class="filters"><label style="font-size:12px;color:var(--ink-soft);">Ver:</label> <select id="f11_e3_familia_tendencia"><option value="">Todas las familias</option></select></div>
       <div style="height:300px;"><canvas id="c_v11_e3_tendencia"></canvas></div>
+      <div class="filters" style="margin-top:16px;border-top:1px solid var(--line);padding-top:14px;"><label style="font-size:12px;color:var(--ink-soft);">Filtrar tablas de abajo por mes:</label> <select id="f11_e3_mes"><option value="">Todos los meses</option></select></div>
+      <div class="mini-kpis" id="v11_e3_resumen"></div>
     </div>
     <div class="grid2">
       <div class="panel">
@@ -748,18 +748,20 @@
         <div class="scroll"><table id="tbl_v11_e3_familia"></table></div>
       </div>
     </div>
+    <div class="panel">
+      <h2>3 · Navegación — Abiertos ahora mismo</h2>
+      <div class="desc">Pedidos/proyectos que todavía están EN ESTA ETAPA (no ha cerrado todavía) — para actuar antes de que se conviertan en un incumplimiento ya consumado.</div>
+      <div class="mini-kpis" id="v11_e3_abiertos_resumen"></div>
+      <div class="scroll"><table id="tbl_v11_e3_abiertos"></table></div>
+    </div>
 
     <div class="panel">
-      <h2>4 · Nacionalización</h2>
-      <div class="desc">Arribo real → Fecha Levante DIM. Meta = P80 histórico global (provisional, hasta definir meta oficial).</div>
-      <div class="filters"><select id="f11_e4_mes"><option value="">Todos los meses</option></select></div>
-      <div class="mini-kpis" id="v11_e4_resumen"></div>
-      <div style="margin-top:14px;background:var(--paper);border:1px solid var(--amber);border-radius:8px;padding:12px 14px;"><h3 style="font-size:12.5px;color:var(--navy);margin:0 0 8px;">⚠ Abiertos ahora mismo (en riesgo o ya pasados de meta)</h3><div class="scroll"><table id="tbl_v11_e4_abiertos"></table></div></div>
-    </div>
-    <div class="panel">
       <h2>4 · Nacionalización — Tendencia mensual (Real vs. Meta, ponderado por Ton)</h2>
-      <div class="desc">¿Estamos mejorando o empeorando con el tiempo? Cada punto es el promedio ponderado por toneladas de ese mes.</div>
+      <div class="desc">Arribo real → Fecha Levante DIM. Meta = P80 histórico global (provisional, hasta definir meta oficial).<br>¿Estamos mejorando o empeorando con el tiempo? Cada punto es el promedio ponderado por toneladas de ese mes — <span style="color:var(--green);font-weight:600;">verde</span> si cumple la meta, <span style="color:var(--amber);font-weight:600;">ámbar</span> si se pasa hasta 10%, <span style="color:var(--red);font-weight:600;">rojo</span> si se pasa más de 10%.</div>
+      <div class="filters"><label style="font-size:12px;color:var(--ink-soft);">Ver:</label> <select id="f11_e4_familia_tendencia"><option value="">Todas las familias</option></select></div>
       <div style="height:300px;"><canvas id="c_v11_e4_tendencia"></canvas></div>
+      <div class="filters" style="margin-top:16px;border-top:1px solid var(--line);padding-top:14px;"><label style="font-size:12px;color:var(--ink-soft);">Filtrar tablas de abajo por mes:</label> <select id="f11_e4_mes"><option value="">Todos los meses</option></select></div>
+      <div class="mini-kpis" id="v11_e4_resumen"></div>
     </div>
     <div class="grid2">
       <div class="panel">
@@ -771,9 +773,14 @@
         <div class="scroll"><table id="tbl_v11_e4_familia"></table></div>
       </div>
     </div>
+    <div class="panel">
+      <h2>4 · Nacionalización — Abiertos ahora mismo</h2>
+      <div class="desc">Pedidos/proyectos que todavía están EN ESTA ETAPA (no ha cerrado todavía) — para actuar antes de que se conviertan en un incumplimiento ya consumado.</div>
+      <div class="mini-kpis" id="v11_e4_abiertos_resumen"></div>
+      <div class="scroll"><table id="tbl_v11_e4_abiertos"></table></div>
+    </div>
 
   </div>
-
 </main>
 
 <footer>Tablero conectado en vivo a Google Sheets · Sheet ID: 1QDs19b...DTLX30 · cálculo 100% en el navegador, sin servidor intermedio.</footer>
@@ -2580,6 +2587,17 @@ function semaforoCumplimiento(real, meta){
   return 'bad';
 }
 function renderEtapaCumplimiento(prefix, datosCompletos, abiertos){
+  // --- Filtro de familia, SOLO para la gráfica de tendencia ---
+  const selFamTend = document.getElementById(`f11_${prefix}_familia_tendencia`);
+  if(!selFamTend.dataset.poblado){
+    selFamTend.innerHTML = '<option value="">Todas las familias</option>' + FAMILIAS_ORDEN.map(f=>`<option value="${f}">${f}</option>`).join('');
+    selFamTend.dataset.poblado = '1';
+    selFamTend.onchange = ()=>renderView11();
+  }
+  const fFamTend = selFamTend.value;
+  const datosParaTendencia = fFamTend ? datosCompletos.filter(o=>o.familia===fFamTend) : datosCompletos;
+
+  // --- Filtro de mes, para las tablas de proveedor/familia y el resumen ---
   const selMes = document.getElementById(`f11_${prefix}_mes`);
   if(!selMes.dataset.poblado){
     const mesesDisp = [...new Set(datosCompletos.map(o=>o.fecha?monthKey(o.fecha):null).filter(Boolean))].sort();
@@ -2601,16 +2619,20 @@ function renderEtapaCumplimiento(prefix, datosCompletos, abiertos){
     <div class="mini-kpi"><span># Observaciones (cerradas)</span><b>${datos.length}</b></div>
   `;
 
-  // Tendencia mensual: ¿mejora o empeora con el tiempo? (usa siempre TODOS los meses, no el filtrado — para
-  // poder ver la tendencia completa aunque el resto de la sección esté mirando un mes puntual)
+  // Tendencia mensual: un punto por mes, coloreado por semáforo (verde/ámbar/rojo) — sigue el filtro de
+  // familia de arriba (independiente del filtro de mes de las tablas de abajo).
   const porMes = {};
-  datosCompletos.forEach(o=>{ if(!o.fecha) return; const m = monthKey(o.fecha); porMes[m] = porMes[m]||[]; porMes[m].push(o); });
+  datosParaTendencia.forEach(o=>{ if(!o.fecha) return; const m = monthKey(o.fecha); porMes[m] = porMes[m]||[]; porMes[m].push(o); });
   const meses = Object.keys(porMes).sort();
   const realPorMes = meses.map(m=>promedioPonderadoGenerico(porMes[m],'realDias','peso'));
   const metaPorMes = meses.map(m=>promedioPonderadoGenerico(porMes[m],'metaDias','peso'));
+  const coloresPuntos = realPorMes.map((v,i)=>{
+    const s = semaforoCumplimiento(v, metaPorMes[i]);
+    return s==='ok'?COLORS.green:(s==='warn'?COLORS.amber:(s==='bad'?COLORS.red:COLORS.slate));
+  });
   lineChart(`c_v11_${prefix}_tendencia`, meses.map(fmtMesLabel), [
-    {label:'Real (ponderado por Ton)', data:realPorMes, borderColor:COLORS.navy, backgroundColor:COLORS.navy},
-    {label:'Meta', data:metaPorMes, borderColor:COLORS.slate, backgroundColor:COLORS.slate, borderDash:[6,4]},
+    {label:'Real (ponderado por Ton)', data:realPorMes, borderColor:COLORS.navy, pointBackgroundColor:coloresPuntos, pointBorderColor:coloresPuntos, pointRadius:6, pointHoverRadius:8},
+    {label:'Meta', data:metaPorMes, borderColor:COLORS.slate, backgroundColor:COLORS.slate, borderDash:[6,4], pointRadius:0},
   ]);
 
   // Ranking por proveedor
@@ -2642,9 +2664,16 @@ function renderEtapaCumplimiento(prefix, datosCompletos, abiertos){
   if(!Object.keys(porFamilia).length) htmlFam += '<tr><td colspan="5" class="txt" style="color:var(--ink-soft);">Sin suficientes observaciones para este mes.</td></tr>';
   document.getElementById(`tbl_v11_${prefix}_familia`).innerHTML = htmlFam;
 
-  // Abiertos ahora mismo: en progreso, sin cerrar todavía — ¿a punto de pasarse de la meta, o ya se pasaron?
-  const abiertosRiesgo = (abiertos||[]).filter(o=>o.metaDias>0 && o.transcurridos >= o.metaDias*0.8)
-    .sort((a,b)=>(b.transcurridos/b.metaDias)-(a.transcurridos/a.metaDias));
+  // Abiertos ahora mismo: en progreso, sin cerrar todavía — con 3 contadores arriba (total / en riesgo / incumpliendo)
+  const totalAbiertos = (abiertos||[]).length;
+  const enRiesgo = (abiertos||[]).filter(o=>o.metaDias>0 && o.transcurridos>=o.metaDias*0.8 && o.transcurridos<=o.metaDias);
+  const incumpliendo = (abiertos||[]).filter(o=>o.metaDias>0 && o.transcurridos>o.metaDias);
+  document.getElementById(`v11_${prefix}_abiertos_resumen`).innerHTML = `
+    <div class="mini-kpi neutral"><span># Pedidos Abiertos</span><b>${totalAbiertos}</b></div>
+    <div class="mini-kpi warn"><span># En Riesgo de No Cumplir</span><b>${enRiesgo.length}</b></div>
+    <div class="mini-kpi bad"><span># Incumpliendo (ya pasados)</span><b>${incumpliendo.length}</b></div>
+  `;
+  const abiertosRiesgo = [...incumpliendo, ...enRiesgo].sort((a,b)=>(b.transcurridos/b.metaDias)-(a.transcurridos/a.metaDias));
   let htmlAb = '<tr><th>Referencia</th><th>Proveedor</th><th>Familia</th><th>Días Transcurridos</th><th>Meta</th><th>Estado</th></tr>';
   abiertosRiesgo.forEach(o=>{
     const yaSePaso = o.transcurridos > o.metaDias;
@@ -2713,7 +2742,7 @@ function renderView11(){
       {label:'Real', data:realesArr, backgroundColor:coloresReal, barPercentage:0.5, categoryPercentage:0.85, order:1},
     ]},
     options:{ responsive:true, maintainAspectRatio:false,
-      scales:{ x:{ stacked:false, grid:{display:false} }, y:{ stacked:false, title:{display:true,text:'días'} } },
+      scales:{ x:{ stacked:false, grouped:false, grid:{display:false} }, y:{ stacked:false, title:{display:true,text:'días'} } },
       plugins:{ legend:{display:true, labels:{generateLabels: c=>[
         {text:'Real: dentro de meta', fillStyle:COLORS.green, strokeStyle:COLORS.green},
         {text:'Real: hasta 10% sobre meta', fillStyle:COLORS.amber, strokeStyle:COLORS.amber},
