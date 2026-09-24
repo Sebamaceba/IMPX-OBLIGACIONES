@@ -619,6 +619,12 @@
       </div>
       <div style="height:340px;"><canvas id="c_v10_inventario"></canvas></div>
       <div id="v10_inventarioNota" style="margin-top:10px;font-size:11.5px;color:var(--ink-soft);"></div>
+      <details style="margin-top:16px;border-top:1px solid var(--line);padding-top:12px;">
+        <summary style="cursor:pointer;font-weight:600;color:var(--navy);font-size:13px;">Ver detalle mes a mes (PPTO vs. inventario vs. faltante) — 10.1</summary>
+        <div class="desc" style="margin-top:10px;">PPTO de ventas (Ton) vs. lo que ya va a llegar (cierto + estimado, Vista 9) vs. inventario inicial (real o proyectado) vs. el faltante a cubrir con pedidos nuevos — la evidencia detrás de por qué la gráfica de arriba dispara (o no) un pedido en un mes puntual.</div>
+        <div class="filters"><select id="f101_familia"><option value="">Todas las familias</option></select></div>
+        <div class="scroll"><table id="tbl_v10_necesidad"></table></div>
+      </details>
     </div>
     <div class="panel">
       <h2>10.2c · Pedidos colocados por mes y su llegada proyectada</h2>
@@ -643,12 +649,6 @@
       <div class="scroll"><table id="tbl_v10_comparacion_sugeridos"></table></div>
     </div>
     <div class="panel"><h2 style="color:var(--slate);">Detalle operativo — para quien necesite bajar al día a día</h2><div class="desc">Lo de arriba ya resume la decisión; esto de aquí es la trazabilidad línea por línea, para auditar de dónde sale cada número.</div></div>
-    <div class="panel">
-      <h2>10.1 · Necesidad de compra por mes y Familia — parte gerencial</h2>
-      <div class="desc">PPTO de ventas (Ton) vs. lo que ya va a llegar (cierto + estimado, Vista 9) vs. inventario inicial (real o proyectado) vs. el faltante a cubrir con pedidos nuevos.</div>
-      <div class="filters"><select id="f101_familia"><option value="">Todas las familias</option></select></div>
-      <div class="scroll"><table id="tbl_v10_necesidad"></table></div>
-    </div>
     <div class="panel">
       <h2>10.3 · Detalle de pedidos nuevos proyectados</h2>
       <div class="filters">
@@ -758,7 +758,7 @@
 
     <div class="panel section-anchor" id="gestion_produccion">
       <h2>1 · Producción — Tendencia mensual (Real vs. Meta, ponderado por Ton)</h2>
-      <div class="desc">Pedido (Fecha Proforma) → cierre de producción. La meta es el compromiso original del proveedor. La regla de 90 días de inactividad se evalúa únicamente cuando existe un saldo pendiente.</div>
+      <div class="desc">Pedido (Fecha Proforma) → cierre de producción. La meta es el compromiso original del proveedor. La regla de 90 días de inactividad se evalúa únicamente cuando existe un saldo pendiente. La tendencia mensual agrupa por MES DE PEDIDO (no por mes de cierre), para cruzar directo con Trazabilidad de Pedidos.</div>
       <div class="filters"><label style="font-size:12px;color:var(--ink-soft);">Ver:</label> <select id="f11_e1_familia_tendencia"><option value="">Todas las familias</option></select></div>
       <div style="height:300px;"><canvas id="c_v11_e1_tendencia"></canvas></div>
       <div class="filters" style="margin-top:16px;border-top:1px solid var(--line);padding-top:14px;"><label style="font-size:12px;color:var(--ink-soft);">Filtrar tablas de abajo por mes:</label> <select id="f11_e1_mes"><option value="">Todos los meses</option></select></div>
@@ -801,17 +801,19 @@
         <h2>2 · Embarque — Ranking por Proveedor</h2>
         <div class="scroll"><table id="tbl_v11_e2_proveedor"></table></div>
       </div>
-      <div class="panel">
-        <h2>2 · Embarque — Por Familia</h2>
-        <div class="scroll"><table id="tbl_v11_e2_familia"></table></div>
-      </div>
-    </div>
-    <div class="panel">
-      <h2>2 · Embarque — Distribución por Incoterm</h2>
-      <div class="desc">Participación de toneladas y tiempo promedio por Incoterm. Se actualiza con el filtro de mes de Embarque.</div>
-      <div style="display:flex;gap:20px;flex-wrap:wrap;align-items:center;">
-        <div style="flex:1;min-width:220px;height:260px;"><canvas id="c_v11_e2_incoterm_dona"></canvas></div>
-        <div style="flex:2;min-width:280px;"><table id="tbl_v11_e2_incoterm"></table></div>
+      <div style="display:flex;flex-direction:column;gap:16px;">
+        <div class="panel" style="margin:0;">
+          <h2>2 · Embarque — Por Familia</h2>
+          <div class="scroll"><table id="tbl_v11_e2_familia"></table></div>
+        </div>
+        <div class="panel" style="margin:0;">
+          <h2>2 · Embarque — Distribución por Incoterm</h2>
+          <div class="desc">Participación de toneladas y tiempo promedio por Incoterm. Se actualiza con el filtro de mes de Embarque.</div>
+          <div style="display:flex;gap:14px;flex-wrap:wrap;align-items:center;">
+            <div style="flex:1;min-width:160px;height:200px;"><canvas id="c_v11_e2_incoterm_dona"></canvas></div>
+            <div style="flex:1;min-width:200px;"><table id="tbl_v11_e2_incoterm"></table></div>
+          </div>
+        </div>
       </div>
     </div>
     <div class="panel">
@@ -848,6 +850,7 @@
     <div class="panel">
       <h2>3 · Navegación — Abiertos ahora mismo</h2>
       <div class="desc">Pedidos/proyectos que todavía están EN ESTA ETAPA (no ha cerrado todavía) — para actuar antes de que se conviertan en un incumplimiento ya consumado.</div>
+      <div id="v11_e3_aviso_huecos"></div>
       <div class="filters"><label style="font-size:12px;color:var(--ink-soft);">Familia:</label> <select id="f11_e3_abiertos_familia"><option value="">Todas las familias</option></select></div>
       <div class="mini-kpis" id="v11_e3_abiertos_resumen"></div>
       <div class="scroll"><table id="tbl_v11_e3_abiertos"></table></div>
@@ -1358,7 +1361,11 @@ function buildToneladasModel(pedDetRaw, impRaw, prof, spAll){
     // La inactividad de 90 días solo se evalúa si el pedido conserva saldo pendiente.
     const ultimoMovimiento = [ultima?.fechaRealProduccion, ultima?.fechaSeguimientoCantFinal, ultima?.fechaRealZarpe, ultima?.fechaProforma].filter(Boolean).sort((a,b)=>b-a)[0] || null;
     const diasSinMovimiento = ultimoMovimiento ? daysBetween(ultimoMovimiento, new Date()) : null;
-    const cerradoPorInactividad = !cerradoAutomatico && saldoKg>0 && diasSinMovimiento!==null && diasSinMovimiento>=90;
+    // 28-sep, corrección de Sebastián: la regla de 90 días SOLO aplica cuando el saldo ya empezó a entregarse
+    // (cantidadEntregadaKg>0) y luego se estancó — ese es el patrón real de "ya no lo van a completar". Un
+    // pedido con CERO entregas todavía puede estar legítimamente en producción normal más de 90 días (lead
+    // times largos son el caso base de este negocio) — no es evidencia de abandono, solo de que aún no arranca.
+    const cerradoPorInactividad = !cerradoAutomatico && saldoKg>0 && g.cantidadEntregadaKg>0 && diasSinMovimiento!==null && diasSinMovimiento>=90;
     const fechaCierrePorInactividad = cerradoPorInactividad ? addDays(ultimoMovimiento, 90) : null;
     return {...g, saldoKg, cerradoAutomatico, cerradoPorInactividad, fechaCierrePorInactividad, diasSinMovimiento, diferenciaKg: g.cantidadEntregadaKg - g.cantidadPedidaKg};
   });
@@ -3059,6 +3066,8 @@ function renderView11(){
   const r1 = renderEtapaCumplimiento('e1', C.etapa1, C.abierto1);
   const r2 = renderEtapaCumplimiento('e2', C.etapa2, C.abierto2);
   const r3 = renderEtapaCumplimiento('e3', C.etapa3, C.abierto3);
+  const huecos = C.proyectosExcluidosPorHuecoDato||[];
+  document.getElementById('v11_e3_aviso_huecos').innerHTML = huecos.length ? `<div class="pill bad" style="margin-bottom:10px;display:inline-block;" title="${huecos.slice(0,15).map(h=>h.referencia+' ('+Math.round(h.transcurridos)+'d)').join(', ')}${huecos.length>15?'...':''}">⚠ ${huecos.length} proyecto(s) excluidos de "abiertos" por hueco de información en Control de Importaciones (zarparon hace más de 200 días sin registro de arribo — no se cuentan como navegación real)</div>` : '';
   const r4 = renderEtapaCumplimiento('e4', C.etapa4, C.abierto4);
 
   // Resumen global: promedio ponderado por Ton de las 4 etapas juntas (Pedido -> Levante)
@@ -3912,7 +3921,7 @@ function buildCascadaCumplimiento(M){
     // % de cumplimiento en Kg (entregado vs. pedido) — para los cerrados por inactividad, casi siempre <100%,
     // que es justo la evidencia del incumplimiento en cantidad, no solo en tiempo.
     const pctCumpleKg = g.cantidadPedidaKg>0 ? Math.min(100, Math.round(g.cantidadEntregadaKg/g.cantidadPedidaKg*100)) : null;
-    etapa1.push({realDias, metaDias:primera.diasEstimadosProduccion, peso:g.cantidadPedidaKg||0, fecha:fechaRealEfectiva, fechaInicio:primera.fechaProforma,
+    etapa1.push({realDias, metaDias:primera.diasEstimadosProduccion, peso:g.cantidadPedidaKg||0, fecha:primera.fechaProforma, fechaInicio:primera.fechaProforma, fechaFin:fechaRealEfectiva,
       proveedor: pedido?pedido.proveedor:null, familia:g.familia, pedido:pedidoCod,
       cerradoPorInactividad: !!g.cerradoPorInactividad, pctCumpleKg, pedidoKg:g.cantidadPedidaKg||0,
       entregadoKg:g.cantidadEntregadaKg||0, saldoKgNoEntregado:g.saldoKg||0});
@@ -4004,6 +4013,15 @@ function buildCascadaCumplimiento(M){
   });
   const abierto3 = []; // Navegación abierta: zarpó pero no ha arribado (estatus NAVEGANDO)
   const vistoProyNavAbierto = new Set();
+  // 28-sep, bug real encontrado por Sebastián: proyectos de más de un año atrás (ej. WUXI_HAOGUANG_1_25,
+  // zarpó ene-2025) aparecían como "abiertos" con 600+ días transcurridos — no es que sigan navegando, es que
+  // NUNCA se registraron en Control de Importaciones (huecos de información, sobre todo en data histórica
+  // antigua). Sin este tope, un dato faltante se leía como "sigue abierto para siempre". Se pone un techo
+  // generoso (bastante por encima de cualquier metaDias real observada en el modelo) — más allá de eso, es
+  // casi seguro un hueco de dato, no navegación real, y se excluye de "abiertos" (no se oculta el problema:
+  // ver el aviso más abajo).
+  const TECHO_DIAS_ABIERTO_NAVEGACION = 200;
+  const proyectosExcluidosPorHuecoDato = [];
   (M.ton.rows||[]).forEach(r=>{
     if(!r.nombreProyecto || !r.fechaRealZarpe || vistoProyNavAbierto.has(r.nombreProyecto)) return;
     const imp = M.ton.porProyectoImport[r.nombreProyecto];
@@ -4011,6 +4029,10 @@ function buildCascadaCumplimiento(M){
     vistoProyNavAbierto.add(r.nombreProyecto);
     const transcurridos = daysBetween(r.fechaRealZarpe, HOY_ABIERTOS);
     if(transcurridos===null) return;
+    if(transcurridos > TECHO_DIAS_ABIERTO_NAVEGACION){
+      proyectosExcluidosPorHuecoDato.push({referencia:r.nombreProyecto, transcurridos});
+      return;
+    }
     const pedidoCod = M.ton.proformaToPedido[r.proforma];
     const pedido = pedidoCod ? pedidoPorCodigo[pedidoCod] : null;
     abierto3.push({transcurridos, metaDias:M.nav.diasNavegacion(r.paisOrigen), peso:r.cantidadEntregadaKg||0, fechaInicio:r.fechaRealZarpe,
@@ -4038,7 +4060,7 @@ function buildCascadaCumplimiento(M){
     tonCerradaPorInactividad: M.ton.grupos.filter(g=>g.cerradoPorInactividad).reduce((a,g)=>a+g.saldoKg,0),
   };
 
-  return { etapa1, etapa2, etapa3, etapa4, metaNacGlobalP80, abierto1, abierto2, abierto3, abierto4, produccionAbierta };
+  return { etapa1, etapa2, etapa3, etapa4, metaNacGlobalP80, abierto1, abierto2, abierto3, abierto4, produccionAbierta, proyectosExcluidosPorHuecoDato };
 }
 
 function buildLlegadasPorFamilia(M){
