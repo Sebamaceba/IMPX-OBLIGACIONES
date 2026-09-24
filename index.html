@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
 <meta charset="UTF-8">
-<title>Tablero de Caja — Importaciones Acero Inoxidable (Live)</title>
+<title>Gestión Integral de Abastecimiento y Caja (Live)</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/chartjs-plugin-datalabels/2.2.0/chartjs-plugin-datalabels.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
@@ -28,15 +28,15 @@
   .sub{font-size:10.5px;opacity:.8;}
   #statusMsg{font-size:10px;margin-top:3px;opacity:.85;}
   .kpi-filterbar{display:flex;align-items:center;gap:8px;padding:10px 36px 0;background:#fff;font-size:12px;color:var(--ink-soft);}
-  .kpis{display:grid;grid-template-columns:repeat(8,1fr);gap:7px;padding:9px 36px 10px;background:#fff;border-bottom:1px solid var(--line);}
-  .kpi{border-left:3px solid var(--navy);padding:4px 8px;min-height:50px;}
+  .kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:9px;padding:10px 36px 13px;background:#fff;border-bottom:1px solid var(--line);}
+  .kpi{background:var(--paper);border:1px solid var(--line);border-left:4px solid var(--navy);border-radius:8px;padding:9px 11px;min-height:72px;}
   .kpi.ok{border-left-color:var(--green);} .kpi.ok .val{color:var(--green);}
   .kpi.neutral{border-left-color:var(--slate);}
   .kpi.warn{border-left-color:var(--amber);} .kpi.warn .val{color:var(--amber);}
   .kpi.bad{border-left-color:var(--red);} .kpi.bad .val{color:var(--red);}
-  .kpi .lab{font-size:8.5px;color:var(--ink-soft);text-transform:uppercase;letter-spacing:.04em;font-weight:700;line-height:1.2;min-height:18px;display:flex;align-items:flex-start;}
-  .kpi .val{font-family:var(--mono);font-size:15px;font-weight:700;color:var(--navy);margin-top:2px;line-height:1;}
-  .kpi .sub{font-size:8.5px;color:var(--ink-soft);margin-top:3px;font-weight:500;line-height:1.25;}
+  .kpi .lab{font-size:9.5px;color:var(--ink-soft);text-transform:uppercase;letter-spacing:.04em;font-weight:700;line-height:1.2;min-height:18px;display:flex;align-items:flex-start;}
+  .kpi .val{font-family:var(--mono);font-size:18px;font-weight:700;color:var(--navy);margin-top:3px;line-height:1;}
+  .kpi .sub{font-size:9.5px;color:var(--ink-soft);margin-top:5px;font-weight:500;line-height:1.25;}
   .kpi .sub b.ton{color:var(--gold);font-weight:700;}
   .tablero-mando{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px;padding:9px 36px;background:linear-gradient(180deg,#fff,var(--paper));border-bottom:1px solid var(--line);}
   .tablero-card{background:#fff;border-radius:8px;padding:9px 11px;box-shadow:0 1px 3px rgba(14,53,82,0.08);border:1px solid var(--line);}
@@ -67,7 +67,7 @@
   .dp-col.dp-anticipo{border-top-color:var(--gold);}
   .dp-col.dp-reclasificacion{border-top-color:var(--steel);}
   .dp-col.dp-saldo{border-top-color:var(--navy);}
-  .dp-col.dp-giro{border-top-color:var(--red);}
+  .dp-col.dp-giro{border-top-color:var(--gold);}
   .dp-titulo{font-size:10.5px;font-weight:700;color:var(--navy);text-transform:uppercase;letter-spacing:.03em;margin-bottom:8px;}
   .dp-titulo .dp-sub{display:block;font-size:9px;font-weight:500;color:var(--ink-soft);text-transform:none;letter-spacing:0;margin-top:1px;}
   .dp-item{font-size:11px;color:var(--ink);padding:5px 0;border-bottom:1px dashed var(--line);}
@@ -97,10 +97,35 @@
   .note{background:#FCEFDD;border:1px solid #F0D4A8;color:#8A5A12;font-size:12px;padding:8px 12px;border-radius:6px;margin-bottom:14px;}
   .note.info{background:#E7F0F7;border-color:#BBD6E8;color:var(--navy);}
   .mini-kpis{display:flex;gap:10px;margin-bottom:14px;flex-wrap:wrap;}
-  .mini-kpi{background:var(--paper);border:1px solid var(--line);border-radius:8px;padding:8px 14px;font-size:12px;}
-  .mini-kpi b{font-family:var(--mono);font-size:14px;display:block;color:var(--navy);}
+  .mini-kpi{background:#fff;border:1px solid var(--line);border-radius:10px;padding:11px 14px;font-size:11px;min-width:150px;box-shadow:0 2px 8px rgba(14,53,82,.06);border-top:3px solid var(--steel);}
+  .mini-kpi span:first-child{display:block;color:var(--ink-soft);font-weight:700;line-height:1.25;min-height:27px;}
+  .mini-kpi b{font-family:var(--mono);font-size:18px;display:block;color:var(--navy);margin:3px 0;line-height:1.15;}
+  .mini-kpi.neutral{border-top-color:var(--slate);}
+  .mini-kpi.ok{border-top-color:var(--green);}
+  .mini-kpi.warn{border-top-color:var(--amber);}
+  .mini-kpi.bad{border-top-color:var(--red);}
   .mini-kpi.ok b{color:var(--green);}
   .mini-kpi.bad b{color:var(--red);}
+  .metric-cluster{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:12px;margin:14px 0;}
+  .metric-group{background:var(--paper);border:1px solid var(--line);border-radius:10px;padding:12px 14px;}
+  .metric-group-title{font-size:9.5px;font-weight:800;color:var(--steel);text-transform:uppercase;letter-spacing:.07em;margin-bottom:8px;}
+  .metric-group .mini-kpis{margin-bottom:0;}
+  .metric-group .mini-kpi{flex:1;min-width:130px;}
+  .process-chain{display:grid;grid-template-columns:repeat(6,minmax(120px,1fr));gap:8px;margin:16px 0 4px;}
+  .process-step{position:relative;display:flex;flex-direction:column;gap:3px;text-decoration:none;background:#fff;border:1px solid var(--line);border-radius:10px;padding:11px 12px;color:var(--navy);font-family:var(--sans);cursor:pointer;text-align:left;box-shadow:0 2px 8px rgba(14,53,82,.05);}
+  .process-step:not(:last-child)::after{content:'›';position:absolute;right:-8px;top:50%;transform:translateY(-50%);z-index:2;color:var(--gold);font-size:20px;font-weight:800;}
+  .process-step strong{font-size:11.5px;}
+  .process-step span{font-size:9.5px;color:var(--ink-soft);line-height:1.25;}
+  .process-step:hover{border-color:var(--gold);transform:translateY(-1px);}
+  .section-anchor{scroll-margin-top:20px;}
+  .executive-grid{display:grid;grid-template-columns:1.2fr 1fr;gap:14px;}
+  .executive-block{background:linear-gradient(145deg,#fff,var(--paper));border:1px solid var(--line);border-radius:10px;padding:14px 16px;}
+  .executive-block h3{margin:0 0 8px;color:var(--navy);font-size:12px;}
+  .action-list{display:grid;gap:7px;}
+  .action-link{display:flex;width:100%;justify-content:space-between;gap:10px;align-items:center;text-decoration:none;color:var(--ink);font-family:var(--sans);font-size:11.5px;background:#fff;border:1px solid var(--line);border-left:4px solid var(--steel);border-radius:7px;padding:8px 10px;cursor:pointer;text-align:left;}
+  .action-link.warn{border-left-color:var(--amber);}.action-link.bad{border-left-color:var(--red);}
+  .action-link b{color:var(--navy);white-space:nowrap;}
+  @media(max-width:900px){.process-chain{grid-template-columns:repeat(2,1fr)}.process-step::after{display:none}.executive-grid{grid-template-columns:1fr}.kpis{grid-template-columns:repeat(2,1fr)}.grid2{grid-template-columns:1fr}}
   canvas{max-height:320px;}
   footer{padding:18px 36px;font-size:11px;color:var(--ink-soft);text-align:center;}
   #loadOverlay{position:fixed;inset:0;background:rgba(8,42,64,.92);color:#fff;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:14px;z-index:999;font-family:var(--sans);}
@@ -129,8 +154,8 @@
 
 <header>
   <div class="eyebrow"><span class="dot loading" id="statusDot"></span> Live · conectado a Google Sheets · <span id="ultimaActualizacion" style="font-weight:600;">cargando…</span></div>
-  <h1>Tablero de Obligaciones y Caja</h1>
-  <div class="sub">Se actualiza cada vez que abres o refrescas esta página, leyendo directo de tu Google Sheets.</div>
+  <h1>Gestión Integral de Abastecimiento y Caja</h1>
+  <div class="sub">Seguimiento gerencial y operativo desde la orden de compra hasta la llegada, nacionalización y uso de caja.</div>
   <div id="statusMsg"></div>
 </header>
 
@@ -145,11 +170,10 @@
 
 <nav id="tabBar">
   <div class="nav-grupo"><span class="nav-grupo-label">Resumen</span>
-    <button data-view="v1" class="active">1 · Pedidos y Caja por Mes</button>
+    <button data-view="v1" class="active">Resumen Gerencial</button>
   </div>
   <div class="nav-grupo"><span class="nav-grupo-label">Gestión</span>
-    <button data-view="v12">Tablero de Indicadores</button>
-    <button data-view="v11">Cumplimiento de Tiempos</button>
+    <button data-view="v11">Gestión del Ciclo de Abastecimiento</button>
   </div>
   <div class="nav-grupo"><span class="nav-grupo-label">S&OP</span>
     <button data-view="v_sop">Llegadas y Pronóstico de Compras</button>
@@ -172,6 +196,20 @@
 <main>
 
   <div class="view active" id="v1">
+    <div class="panel">
+      <h2>Resumen gerencial del abastecimiento</h2>
+      <div class="desc">Prioriza tres preguntas: ¿está llegando el material necesario?, ¿en qué etapa se está atrasando el ciclo? y ¿qué caja debe asegurarse para sostenerlo?</div>
+      <div class="executive-grid">
+        <div class="executive-block">
+          <h3>Lectura ejecutiva</h3>
+          <div id="v1_exec_resumen"></div>
+        </div>
+        <div class="executive-block">
+          <h3>Prioridades para revisión</h3>
+          <div class="action-list" id="v1_exec_alertas"></div>
+        </div>
+      </div>
+    </div>
     <div class="panel">
       <div class="filters">
         <label style="font-size:12.5px;color:var(--ink-soft);align-self:center;">Rango de meses:</label>
@@ -674,51 +712,54 @@
     </div>
   </div>
 
-  <div class="view" id="v12">
+  <div class="view" id="v11">
     <div class="panel">
-      <h2>12 · Tablero de Indicadores — Gestión por Metas de Abastecimiento</h2>
-      <div class="desc">Gestión con semáforo, no solo información: cada indicador compara lo que el modelo proyectaba (congelado antes del mes, en la Bitácora) contra lo que realmente pasó. Filtra por Familia para ver el detalle de un rubro puntual.</div>
+      <h2>Gestión del ciclo de abastecimiento</h2>
+      <div class="desc">El flujo conecta planeación, compra, producción, embarque, navegación, nacionalización y caja. Selecciona una etapa para ir directamente a sus indicadores y alertas.</div>
+      <div class="process-chain">
+        <a class="process-step" href="#gestion_plan"><strong>1. Plan y compra</strong><span>Necesidad vs. pedidos realizados</span></a>
+        <a class="process-step" href="#gestion_produccion"><strong>2. Producción</strong><span>Entrega del proveedor</span></a>
+        <a class="process-step" href="#gestion_embarque"><strong>3. Embarque</strong><span>Producción a zarpe</span></a>
+        <a class="process-step" href="#gestion_navegacion"><strong>4. Navegación</strong><span>Zarpe a arribo</span></a>
+        <a class="process-step" href="#gestion_nacionalizacion"><strong>5. Nacionalización</strong><span>Arribo a levante</span></a>
+        <button class="process-step" type="button" data-view-target="v4"><strong>6. Caja</strong><span>Obligaciones y pagos</span></button>
+      </div>
       <div class="filters"><label style="font-size:12px;color:var(--ink-soft);">Familia:</label> <select id="f12_familia"><option value="">Todas las familias</option></select></div>
     </div>
-    <div class="panel">
-      <h2>Indicador 1 · Pedidos Necesarios Proyectados vs. Realizados</h2>
+    <div class="panel section-anchor" id="gestion_plan">
+      <h2>1 · Plan y compra — pedidos necesarios vs. realizados</h2>
       <div class="desc">¿Compras está colocando lo que el modelo recomienda, familia por familia? Ponderado por Ton.</div>
       <div class="mini-kpis" id="v12_kpi_sugeridos"></div>
       <div class="scroll"><table id="tbl_v12_sugeridos"></table></div>
     </div>
     <div class="panel">
-      <h2>Indicador 2 · Toneladas Arribadas Necesarias vs. Reales</h2>
+      <h2>Resultado del abastecimiento — toneladas proyectadas vs. arribadas</h2>
       <div class="desc">¿Está llegando lo que se proyectó, familia por familia? Ponderado por Ton.</div>
       <div class="mini-kpis" id="v12_kpi_llegadas"></div>
       <div class="scroll"><table id="tbl_v12_llegadas"></table></div>
     </div>
-  </div>
-
-  <div class="view" id="v11">
+    <section id="gestion_tiempos">
     <div class="panel">
-      <h2>11 · Cumplimiento de Tiempos de Importación</h2>
+      <h2>Cumplimiento integral de tiempos de importación</h2>
       <div class="desc">Gestión del ciclo completo Pedido → Levante, dividido en sus 4 etapas físicas — cada una con su Real (medido), su Meta (objetivo) y su % de cumplimiento, ponderado por toneladas. El objetivo: saber exactamente en cuál etapa se está perdiendo tiempo, no solo "que el ciclo es largo".</div>
       <div class="mini-kpis" id="v11_resumenGlobal"></div>
     </div>
     <div class="panel">
       <h2>Cascada — dónde se pierde el tiempo (Real vs. Meta, por etapa)</h2>
-      <div class="desc">Una sola barra por etapa: el Real, coloreado por semáforo (verde=dentro de meta, ámbar=hasta 10% sobre meta, rojo=más de 10%). La franja gris-azul superpuesta marca la Meta.</div>
+      <div class="desc">Las columnas muestran el resultado real de cada etapa. La línea azul de meta queda superpuesta sobre las columnas para identificar inmediatamente dónde se supera el objetivo.</div>
       <div style="height:340px;"><canvas id="c_v11_cascada"></canvas></div>
     </div>
 
-    <div class="panel">
-      <h2>1 · Producción — Pedidos Abiertos Incompletos (Toneladas)</h2>
-      <div class="desc">De todo lo que sigue pendiente de producir/entregar: cuánto ya entregó algo y le falta completar ("parcial pendiente") vs. cuánto no ha entregado absolutamente nada todavía ("cero entregas"). Los saldos con 3+ meses sin ningún movimiento se cierran por inactividad — pero SÍ cuentan como incumplimiento en las estadísticas de arriba, no se excluyen.</div>
-      <div class="mini-kpis" id="v11_produccion_abierta"></div>
-    </div>
-
-    <div class="panel">
+    <div class="panel section-anchor" id="gestion_produccion">
       <h2>1 · Producción — Tendencia mensual (Real vs. Meta, ponderado por Ton)</h2>
-      <div class="desc">Pedido (Fecha Proforma) → última Fecha Real de Producción. Meta = compromiso ORIGINAL del proveedor (días estimados de producción de la primera línea de esa proforma+producto).<br>¿Estamos mejorando o empeorando con el tiempo? Cada punto es el promedio ponderado por toneladas de ese mes — <span style="color:var(--green);font-weight:600;">verde</span> si cumple la meta, <span style="color:var(--amber);font-weight:600;">ámbar</span> si se pasa hasta 10%, <span style="color:var(--red);font-weight:600;">rojo</span> si se pasa más de 10%.</div>
+      <div class="desc">Pedido (Fecha Proforma) → cierre de producción. La meta es el compromiso original del proveedor. Los saldos parciales solo se cierran por inactividad después de 90 días sin movimiento; los pedidos sin ninguna entrega permanecen abiertos salvo que estén marcados como “Pedido Cancelado”.</div>
       <div class="filters"><label style="font-size:12px;color:var(--ink-soft);">Ver:</label> <select id="f11_e1_familia_tendencia"><option value="">Todas las familias</option></select></div>
       <div style="height:300px;"><canvas id="c_v11_e1_tendencia"></canvas></div>
       <div class="filters" style="margin-top:16px;border-top:1px solid var(--line);padding-top:14px;"><label style="font-size:12px;color:var(--ink-soft);">Filtrar tablas de abajo por mes:</label> <select id="f11_e1_mes"><option value="">Todos los meses</option></select></div>
-      <div class="mini-kpis" id="v11_e1_resumen"></div>
+      <div class="metric-cluster">
+        <div class="metric-group"><div class="metric-group-title">Cumplimiento de lead time</div><div class="mini-kpis" id="v11_e1_resumen"></div></div>
+        <div class="metric-group"><div class="metric-group-title">Cumplimiento de cantidades</div><div class="mini-kpis" id="v11_produccion_abierta"></div></div>
+      </div>
     </div>
     <div class="grid2">
       <div class="panel">
@@ -738,27 +779,16 @@
       <div class="scroll"><table id="tbl_v11_e1_abiertos"></table></div>
     </div>
 
-    <div class="panel">
-      <h2>2 · Embarque — Proyectos Comex: Pagos y Aperturas</h2>
-      <div class="desc">Una vez llegamos a Embarque ya hablamos de Proyectos Comex — esto sí permite gestión real: saber cuántos quedan por cerrar en plata y cuántos siguen abiertos operativamente.</div>
-      <div class="mini-kpis" id="v11_e2_proyectos_resumen"></div>
-    </div>
-    <div class="panel">
-      <h2>2 · Embarque — Distribución por Incoterm</h2>
-      <div class="desc">La responsabilidad del tiempo de embarque cambia según el Incoterm. Participación de cada uno y su tiempo promedio ponderado por Ton — se mueve con el filtro de mes de abajo.</div>
-      <div style="display:flex;gap:20px;flex-wrap:wrap;align-items:center;">
-        <div style="flex:1;min-width:220px;height:260px;"><canvas id="c_v11_e2_incoterm_dona"></canvas></div>
-        <div style="flex:2;min-width:280px;"><table id="tbl_v11_e2_incoterm"></table></div>
-      </div>
-    </div>
-
-    <div class="panel">
+    <div class="panel section-anchor" id="gestion_embarque">
       <h2>2 · Embarque — Tendencia mensual (Real vs. Meta, ponderado por Ton)</h2>
       <div class="desc">Producción real → Zarpe real. Meta fija: 15 días para todos los proveedores.<br>¿Estamos mejorando o empeorando con el tiempo? Cada punto es el promedio ponderado por toneladas de ese mes — <span style="color:var(--green);font-weight:600;">verde</span> si cumple la meta, <span style="color:var(--amber);font-weight:600;">ámbar</span> si se pasa hasta 10%, <span style="color:var(--red);font-weight:600;">rojo</span> si se pasa más de 10%.</div>
       <div class="filters"><label style="font-size:12px;color:var(--ink-soft);">Ver:</label> <select id="f11_e2_familia_tendencia"><option value="">Todas las familias</option></select></div>
       <div style="height:300px;"><canvas id="c_v11_e2_tendencia"></canvas></div>
       <div class="filters" style="margin-top:16px;border-top:1px solid var(--line);padding-top:14px;"><label style="font-size:12px;color:var(--ink-soft);">Filtrar tablas de abajo por mes:</label> <select id="f11_e2_mes"><option value="">Todos los meses</option></select></div>
-      <div class="mini-kpis" id="v11_e2_resumen"></div>
+      <div class="metric-cluster">
+        <div class="metric-group"><div class="metric-group-title">Cumplimiento de lead time</div><div class="mini-kpis" id="v11_e2_resumen"></div></div>
+        <div class="metric-group"><div class="metric-group-title">Volumen y compromisos abiertos</div><div class="mini-kpis" id="v11_e2_proyectos_resumen"></div></div>
+      </div>
     </div>
     <div class="grid2">
       <div class="panel">
@@ -771,6 +801,14 @@
       </div>
     </div>
     <div class="panel">
+      <h2>2 · Embarque — Distribución por Incoterm</h2>
+      <div class="desc">Participación de toneladas y tiempo promedio por Incoterm. Se actualiza con el filtro de mes de Embarque.</div>
+      <div style="display:flex;gap:20px;flex-wrap:wrap;align-items:center;">
+        <div style="flex:1;min-width:220px;height:260px;"><canvas id="c_v11_e2_incoterm_dona"></canvas></div>
+        <div style="flex:2;min-width:280px;"><table id="tbl_v11_e2_incoterm"></table></div>
+      </div>
+    </div>
+    <div class="panel">
       <h2>2 · Embarque — Abiertos ahora mismo</h2>
       <div class="desc">Pedidos/proyectos que todavía están EN ESTA ETAPA (no ha cerrado todavía) — para actuar antes de que se conviertan en un incumplimiento ya consumado.</div>
       <div class="filters"><label style="font-size:12px;color:var(--ink-soft);">Familia:</label> <select id="f11_e2_abiertos_familia"><option value="">Todas las familias</option></select></div>
@@ -778,7 +816,7 @@
       <div class="scroll"><table id="tbl_v11_e2_abiertos"></table></div>
     </div>
 
-    <div class="panel">
+    <div class="panel section-anchor" id="gestion_navegacion">
       <h2>3 · Navegación — Tendencia mensual (Real vs. Meta, ponderado por Ton)</h2>
       <div class="desc">Zarpe real → Arribo real. Meta = P80 histórico por país de origen (mismo criterio ya usado en el resto del Tablero).<br>¿Estamos mejorando o empeorando con el tiempo? Cada punto es el promedio ponderado por toneladas de ese mes — <span style="color:var(--green);font-weight:600;">verde</span> si cumple la meta, <span style="color:var(--amber);font-weight:600;">ámbar</span> si se pasa hasta 10%, <span style="color:var(--red);font-weight:600;">rojo</span> si se pasa más de 10%.</div>
       <div class="filters"><label style="font-size:12px;color:var(--ink-soft);">Ver:</label> <select id="f11_e3_familia_tendencia"><option value="">Todas las familias</option></select></div>
@@ -798,7 +836,7 @@
     </div>
     <div class="panel">
       <h2>3 · Navegación — Lead Time por País de Origen</h2>
-      <div class="desc">Días de zarpe a arribo, ponderado por Ton, por cada país de origen. Se mueve con el filtro de mes de arriba.</div>
+      <div class="desc">Días de zarpe a arribo, ponderados por toneladas. Las columnas muestran el resultado real y la línea superpuesta muestra la meta P80 de cada país. Se actualiza con el filtro de mes de Navegación.</div>
       <div style="height:300px;"><canvas id="c_v11_e3_pais"></canvas></div>
     </div>
     <div class="panel">
@@ -809,7 +847,7 @@
       <div class="scroll"><table id="tbl_v11_e3_abiertos"></table></div>
     </div>
 
-    <div class="panel">
+    <div class="panel section-anchor" id="gestion_nacionalizacion">
       <h2>4 · Nacionalización — Tendencia mensual (Real vs. Meta, ponderado por Ton)</h2>
       <div class="desc">Arribo real → Fecha Levante DIM. Meta = P80 histórico global (provisional, hasta definir meta oficial).<br>¿Estamos mejorando o empeorando con el tiempo? Cada punto es el promedio ponderado por toneladas de ese mes — <span style="color:var(--green);font-weight:600;">verde</span> si cumple la meta, <span style="color:var(--amber);font-weight:600;">ámbar</span> si se pasa hasta 10%, <span style="color:var(--red);font-weight:600;">rojo</span> si se pasa más de 10%.</div>
       <div class="filters"><label style="font-size:12px;color:var(--ink-soft);">Ver:</label> <select id="f11_e4_familia_tendencia"><option value="">Todas las familias</option></select></div>
@@ -835,6 +873,7 @@
       <div class="scroll"><table id="tbl_v11_e4_abiertos"></table></div>
     </div>
 
+    </section>
   </div>
 </main>
 
@@ -1169,7 +1208,7 @@ function normProf(r){
     fecha: dt(get(r,'FECHA DE PROFORMA')),
     condicion: parseCondicion(get(r,'CONDICIÓN')),
     fechaEstimadaProvision: dt(get(r,'FECHA ESTIMADA DE PROVISIÓN'))
-    // Cierre manual quitado: la detección automática (última fila con producción confirmada sin continuación) reemplaza esto.
+    // El cierre operativo se determina en el modelo de toneladas: entrega completa o saldo parcial sin actividad por 90 días.
   };
 }
 function normSP(r){
@@ -1302,29 +1341,22 @@ function buildToneladasModel(pedDetRaw, impRaw, prof, spAll){
     g.filas.push(r);
   });
   const grupos = Object.values(porGrupo).map(g=>{
-    // Cierre automático: se ordenan las filas del grupo cronológicamente (zarpe real > seguimiento cantidad final >
-    // proforma, lo que exista) y se mira la ÚLTIMA. Si esa última fila YA tiene Kg Finales de producción confirmados
-    // (cantidadEntregadaKg), significa que el proveedor terminó su ciclo de producción para esa línea y NO agregó
-    // una fila nueva con el saldo pendiente para un próximo embarque — es decir, se considera CERRADO aunque
-    // cantidadEntregadaKg < cantidadPedidaKg (evidencia de que entregó de más o de menos, no que falte por llegar).
+    // Cierre automático: solo cuando la cantidad acumulada entregada cubre la cantidad pedida. Una entrega parcial
+    // no cierra el grupo por sí sola; permanece abierta hasta completar el saldo o cumplir la regla de inactividad.
     const ordenadas = g.filas.slice().sort((a,b)=>{
       const fa = a.fechaRealZarpe || a.fechaSeguimientoCantFinal || a.fechaProforma || 0;
       const fb = b.fechaRealZarpe || b.fechaSeguimientoCantFinal || b.fechaProforma || 0;
       return fa - fb;
     });
     const ultima = ordenadas[ordenadas.length-1];
-    const cerradoAutomatico = !!(ultima && ultima.cantidadEntregadaKg && ultima.cantidadEntregadaKg>0);
     const saldoKg = Math.max(0, g.cantidadPedidaKg - g.cantidadEntregadaKg);
-    // 27-sep, a pedido de Sebastián: si un saldo pendiente lleva 3+ meses (90 días) sin que se cree una línea
-    // NUEVA para él en Cuadro Pedidos, se considera cerrado por inactividad — son los "saldos de 7 Ton que ya
-    // no van a entregar". Aclaración del propio Sebastián (27-sep): este cierre NO debe sacar el caso de las
-    // estadísticas de cumplimiento — al contrario, debe contar como INCUMPLIMIENTO (en días y en Kg), porque
-    // es justamente eso: un pedido que nunca se completó. Se guarda fechaCierrePorInactividad (el día exacto
-    // en que se cumplieron los 90 días) para usarla como "fecha real" en el cálculo de cumplimiento cuando la
-    // última fila nunca llegó a tener su propia fecha real de producción.
+    const cerradoAutomatico = g.cantidadPedidaKg>0 && saldoKg<=0;
+    // La regla de 90 días aplica únicamente a pedidos con entrega parcial y saldo pendiente. Los pedidos sin
+    // ninguna entrega no se cierran por tiempo: solo salen del modelo cuando la fuente los marca como
+    // "Pedido Cancelado" (filtro global aplicado antes de agrupar).
     const ultimoMovimiento = [ultima?.fechaRealProduccion, ultima?.fechaSeguimientoCantFinal, ultima?.fechaRealZarpe, ultima?.fechaProforma].filter(Boolean).sort((a,b)=>b-a)[0] || null;
     const diasSinMovimiento = ultimoMovimiento ? daysBetween(ultimoMovimiento, new Date()) : null;
-    const cerradoPorInactividad = !cerradoAutomatico && saldoKg>0 && diasSinMovimiento!==null && diasSinMovimiento>=90;
+    const cerradoPorInactividad = !cerradoAutomatico && g.cantidadEntregadaKg>0 && saldoKg>0 && diasSinMovimiento!==null && diasSinMovimiento>=90;
     const fechaCierrePorInactividad = cerradoPorInactividad ? addDays(ultimoMovimiento, 90) : null;
     return {...g, saldoKg, cerradoAutomatico, cerradoPorInactividad, fechaCierrePorInactividad, diasSinMovimiento, diferenciaKg: g.cantidadEntregadaKg - g.cantidadPedidaKg};
   });
@@ -2448,6 +2480,13 @@ function irAVista(viewId){
   const btn = [...document.querySelectorAll('#tabBar button')].find(b=>b.dataset.view===viewId);
   if(btn) btn.click();
 }
+function irAVistaYSeccion(viewId, sectionId){
+  irAVista(viewId);
+  requestAnimationFrame(()=>{
+    const section=document.getElementById(sectionId);
+    if(section) section.scrollIntoView({behavior:'smooth',block:'start'});
+  });
+}
 document.querySelectorAll('#tabBar button').forEach(btn=>{
   btn.onclick = () => {
     document.querySelectorAll('#tabBar button').forEach(b=>b.classList.remove('active'));
@@ -2455,6 +2494,9 @@ document.querySelectorAll('#tabBar button').forEach(btn=>{
     btn.classList.add('active');
     document.getElementById(btn.dataset.view).classList.add('active');
   };
+});
+document.querySelectorAll('[data-view-target]').forEach(el=>{
+  el.onclick = ()=>irAVista(el.dataset.viewTarget);
 });
 document.getElementById('v10_2b_link_metodologia').onclick = (e)=>{ e.preventDefault(); irAVista('v7'); };
 
@@ -2793,24 +2835,61 @@ function renderEtapaCumplimiento(prefix, datosCompletos, abiertos){
   // --- Filtro de mes, para las tablas de proveedor/familia y el resumen ---
   const selMes = document.getElementById(`f11_${prefix}_mes`);
   if(!selMes.dataset.poblado){
-    const mesesDisp = [...new Set(datosCompletos.map(o=>o.fecha?monthKey(o.fecha):null).filter(Boolean))].sort();
+    const mesesDisp = [...new Set([
+      ...datosCompletos.map(o=>o.fecha?monthKey(o.fecha):null),
+      ...(abiertos||[]).map(o=>o.fechaInicio?monthKey(o.fechaInicio):null)
+    ].filter(Boolean))].sort();
     selMes.innerHTML = '<option value="">Todos los meses</option>' + mesesDisp.map(m=>`<option value="${m}">${fmtMesLabel(m)}</option>`).join('');
     selMes.dataset.poblado = '1';
     selMes.onchange = ()=>renderView11();
   }
   const fMes = selMes.value;
   const datos = fMes ? datosCompletos.filter(o=>o.fecha && monthKey(o.fecha)===fMes) : datosCompletos;
+  const abiertosMes = fMes ? (abiertos||[]).filter(o=>o.fechaInicio && monthKey(o.fechaInicio)===fMes) : (abiertos||[]);
 
   const realProm = promedioPonderadoGenerico(datos, 'realDias', 'peso');
   const metaProm = promedioPonderadoGenerico(datos, 'metaDias', 'peso');
   const pctCumpl = (realProm && metaProm) ? (metaProm/realProm*100) : null;
   const sem = semaforoCumplimiento(realProm, metaProm);
   document.getElementById(`v11_${prefix}_resumen`).innerHTML = `
-    <div class="mini-kpi ${sem}"><span>Real Prom. Ponderado</span><b>${realProm!==null?Math.round(realProm)+' d':'—'}</b></div>
-    <div class="mini-kpi"><span>Meta</span><b>${metaProm!==null?Math.round(metaProm)+' d':'—'}</b></div>
-    <div class="mini-kpi ${sem}"><span>% Cumplimiento</span><b>${pctCumpl!==null?Math.round(pctCumpl)+'%':'—'}</b></div>
-    <div class="mini-kpi"><span># Observaciones (cerradas)</span><b>${datos.length}</b></div>
+    <div class="mini-kpi ${sem}"><span>Lead time real ponderado</span><b>${realProm!==null?Math.round(realProm)+' d':'—'}</b><span>Cierres del período</span></div>
+    <div class="mini-kpi neutral"><span>Meta de lead time</span><b>${metaProm!==null?Math.round(metaProm)+' d':'—'}</b><span>Referencia comparable</span></div>
+    <div class="mini-kpi ${sem}"><span>Cumplimiento de lead time</span><b>${pctCumpl!==null?Math.round(pctCumpl)+'%':'—'}</b><span>${datos.length} observación(es)</span></div>
   `;
+
+  if(prefix==='e1'){
+    const sinEntrega = abiertosMes.filter(o=>(o.cantidadEntregadaKg||0)<=0);
+    const conSaldo = abiertosMes.filter(o=>(o.cantidadEntregadaKg||0)>0 && (o.saldoKg||0)>0);
+    const tonPedidasEnProduccion = sinEntrega.reduce((a,o)=>a+(o.cantidadPedidaKg||0),0)/1000;
+    const tonSaldoPendiente = conSaldo.reduce((a,o)=>a+(o.saldoKg||0),0)/1000;
+    const pedidasCerradas = datos.reduce((a,o)=>a+(o.pedidoKg||0),0)/1000;
+    const entregadasCerradas = datos.reduce((a,o)=>a+(o.entregadoKg||0),0)/1000;
+    const cerradosInactividad = datos.filter(o=>o.cerradoPorInactividad);
+    const tonNoEntregadasCierre = cerradosInactividad.reduce((a,o)=>a+(o.saldoKgNoEntregado||0),0)/1000;
+    const pctCantidad = pedidasCerradas>0 ? Math.round(entregadasCerradas/pedidasCerradas*100) : null;
+    const semCantidad = pctCantidad===null?'neutral':(pctCantidad>=98&&pctCantidad<=102?'ok':(pctCantidad>=95&&pctCantidad<=105?'warn':'bad'));
+    document.getElementById('v11_produccion_abierta').innerHTML = `
+      <div class="mini-kpi neutral"><span>Toneladas pedidas en producción</span><b>${fmtTonDirecto(tonPedidasEnProduccion)}</b><span>${sinEntrega.length} pedido(s) sin entrega</span></div>
+      <div class="mini-kpi warn"><span>Saldo pendiente por entregar</span><b>${fmtTonDirecto(tonSaldoPendiente)}</b><span>${conSaldo.length} pedido(s) con entrega parcial</span></div>
+      <div class="mini-kpi ${semCantidad}"><span>Cumplimiento de cantidad en cerrados</span><b>${pctCantidad!==null?pctCantidad+'%':'—'}</b><span>${fmtTonDirecto(entregadasCerradas)} de ${fmtTonDirecto(pedidasCerradas)}</span></div>
+      ${cerradosInactividad.length?`<div class="mini-kpi bad"><span>Saldo no entregado al cierre por inactividad</span><b>${fmtTonDirecto(tonNoEntregadasCierre)}</b><span>${cerradosInactividad.length} caso(s) con 90 días sin movimiento</span></div>`:''}
+    `;
+  }
+
+  if(prefix==='e2'){
+    const proyectosMes = fMes ? MODEL.spUnico.filter(s=>{
+      const fecha=s.fechaBL||s.fechaRealZarpe||s.fechaRealArribo;
+      return fecha && monthKey(fecha)===fMes;
+    }) : MODEL.spUnico;
+    const pendientesPago = proyectosMes.filter(s=>s.estadoCalculado==='PENDIENTE POR PAGAR');
+    const abiertosOperacion = proyectosMes.filter(s=>s.estatusProyecto!=='ARRIBADO');
+    const tonAbiertas = abiertosOperacion.reduce((a,s)=>a+(s.entregadoKg||0),0)/1000;
+    const saldoPendiente = pendientesPago.reduce((a,s)=>a+s.saldoCalculado,0);
+    document.getElementById('v11_e2_proyectos_resumen').innerHTML = `
+      <div class="mini-kpi neutral"><span>Toneladas en proyectos abiertos</span><b>${fmtTonDirecto(tonAbiertas)}</b><span>${abiertosOperacion.length} proyecto(s) aún sin arribo</span></div>
+      <div class="mini-kpi neutral"><span>Saldo pendiente de pago</span><b>${fmt(saldoPendiente)}</b><span>${pendientesPago.length} proyecto(s)</span></div>
+    `;
+  }
 
   // Tendencia mensual: un punto por mes, coloreado por semáforo (verde/ámbar/rojo) — sigue el filtro de
   // familia de arriba (independiente del filtro de mes de las tablas de abajo).
@@ -2832,15 +2911,24 @@ function renderEtapaCumplimiento(prefix, datosCompletos, abiertos){
   const porProveedor = {};
   datos.forEach(o=>{ if(!o.proveedor) return; porProveedor[o.proveedor] = porProveedor[o.proveedor]||[]; porProveedor[o.proveedor].push(o); });
   const filasProv = Object.entries(porProveedor).map(([prov,arr])=>({
-    proveedor:prov, real:promedioPonderadoGenerico(arr,'realDias','peso'), meta:promedioPonderadoGenerico(arr,'metaDias','peso'), n:arr.length, peso:arr.reduce((a,o)=>a+o.peso,0)
+    proveedor:prov, real:promedioPonderadoGenerico(arr,'realDias','peso'), meta:promedioPonderadoGenerico(arr,'metaDias','peso'), n:arr.length, peso:arr.reduce((a,o)=>a+o.peso,0),
+    pedidoKg:arr.reduce((a,o)=>a+(o.pedidoKg||0),0), entregadoKg:arr.reduce((a,o)=>a+(o.entregadoKg||0),0)
   })).filter(f=>f.n>=2).sort((a,b)=>b.peso-a.peso);
-  let htmlProv = '<tr><th>Proveedor</th><th>Real Prom.</th><th>Meta</th><th>% Cumpl.</th><th># Obs.</th></tr>';
+  let htmlProv = prefix==='e1'
+    ? '<tr><th>Proveedor</th><th>Lead time real</th><th>Meta</th><th>% Cumpl. tiempo</th><th>Ton pedidas cerradas</th><th>Ton entregadas</th><th>% Cumpl. cantidad</th><th># Obs.</th></tr>'
+    : '<tr><th>Proveedor</th><th>Real Prom.</th><th>Meta</th><th>% Cumpl.</th><th># Obs.</th></tr>';
   filasProv.forEach(f=>{
     const s = semaforoCumplimiento(f.real, f.meta);
     const pct = (f.real&&f.meta) ? Math.round(f.meta/f.real*100) : null;
-    htmlProv += `<tr><td class="txt">${f.proveedor}</td><td>${f.real!==null?Math.round(f.real)+' d':'—'}</td><td>${f.meta!==null?Math.round(f.meta)+' d':'—'}</td><td><span class="pill ${s}">${pct!==null?pct+'%':'—'}</span></td><td>${f.n}</td></tr>`;
+    if(prefix==='e1'){
+      const pctKg=f.pedidoKg>0?Math.round(f.entregadoKg/f.pedidoKg*100):null;
+      const semKg=pctKg===null?'neutral':(pctKg>=98&&pctKg<=102?'ok':(pctKg>=95&&pctKg<=105?'warn':'bad'));
+      htmlProv += `<tr><td class="txt">${f.proveedor}</td><td>${f.real!==null?Math.round(f.real)+' d':'—'}</td><td>${f.meta!==null?Math.round(f.meta)+' d':'—'}</td><td><span class="pill ${s}">${pct!==null?pct+'%':'—'}</span></td><td>${fmtTonDirecto(f.pedidoKg/1000)}</td><td>${fmtTonDirecto(f.entregadoKg/1000)}</td><td><span class="pill ${semKg}">${pctKg!==null?pctKg+'%':'—'}</span></td><td>${f.n}</td></tr>`;
+    } else {
+      htmlProv += `<tr><td class="txt">${f.proveedor}</td><td>${f.real!==null?Math.round(f.real)+' d':'—'}</td><td>${f.meta!==null?Math.round(f.meta)+' d':'—'}</td><td><span class="pill ${s}">${pct!==null?pct+'%':'—'}</span></td><td>${f.n}</td></tr>`;
+    }
   });
-  if(!filasProv.length) htmlProv += '<tr><td colspan="5" class="txt" style="color:var(--ink-soft);">Sin suficientes observaciones para este mes.</td></tr>';
+  if(!filasProv.length) htmlProv += `<tr><td colspan="${prefix==='e1'?8:5}" class="txt" style="color:var(--ink-soft);">Sin suficientes observaciones para este mes.</td></tr>`;
   document.getElementById(`tbl_v11_${prefix}_proveedor`).innerHTML = htmlProv;
 
   // Por familia
@@ -2865,7 +2953,8 @@ function renderEtapaCumplimiento(prefix, datosCompletos, abiertos){
       .filter(f=>f.n>=2).sort((a,b)=>b.real-a.real);
     const colores = paises.map(p=>{ const s = semaforoCumplimiento(p.real,p.meta); return s==='ok'?COLORS.green:(s==='warn'?COLORS.amber:(s==='bad'?COLORS.red:COLORS.slate)); });
     barChart('c_v11_e3_pais', paises.map(p=>p.pais), [
-      {label:'Lead Time Real (días)', data:paises.map(p=>Math.round(p.real)), backgroundColor:colores},
+      {label:'Lead Time Real (días)', data:paises.map(p=>Math.round(p.real)), backgroundColor:colores, order:2},
+      {type:'line', label:'Meta por país', data:paises.map(p=>Math.round(p.meta)), borderColor:COLORS.navy, backgroundColor:COLORS.navy, borderWidth:2, pointRadius:5, pointHoverRadius:7, tension:0, order:1},
     ], {}, true, v=>Math.round(v)+'d');
   }
 
@@ -2896,24 +2985,28 @@ function renderEtapaCumplimiento(prefix, datosCompletos, abiertos){
     selFamAbiertos.onchange = ()=>renderView11();
   }
   const fFamAbiertos = selFamAbiertos.value;
-  const abiertosFiltrados = fFamAbiertos ? (abiertos||[]).filter(o=>o.familia===fFamAbiertos) : (abiertos||[]);
+  const abiertosFiltradosFamilia = fFamAbiertos ? (abiertos||[]).filter(o=>o.familia===fFamAbiertos) : (abiertos||[]);
+  const abiertosFiltrados = fMes ? abiertosFiltradosFamilia.filter(o=>o.fechaInicio && monthKey(o.fechaInicio)===fMes) : abiertosFiltradosFamilia;
   const totalAbiertos = abiertosFiltrados.length;
   const enRiesgo = abiertosFiltrados.filter(o=>o.metaDias>0 && o.transcurridos>=o.metaDias*0.8 && o.transcurridos<=o.metaDias);
   const incumpliendo = abiertosFiltrados.filter(o=>o.metaDias>0 && o.transcurridos>o.metaDias);
+  const tonAbiertos = abiertosFiltrados.reduce((a,o)=>a+(o.peso||0),0)/1000;
+  const tonRiesgo = enRiesgo.reduce((a,o)=>a+(o.peso||0),0)/1000;
+  const tonIncumpliendo = incumpliendo.reduce((a,o)=>a+(o.peso||0),0)/1000;
   document.getElementById(`v11_${prefix}_abiertos_resumen`).innerHTML = `
-    <div class="mini-kpi neutral"><span># Pedidos Abiertos</span><b>${totalAbiertos}</b></div>
-    <div class="mini-kpi warn"><span># En Riesgo de No Cumplir</span><b>${enRiesgo.length}</b></div>
-    <div class="mini-kpi bad"><span># Incumpliendo (ya pasados)</span><b>${incumpliendo.length}</b></div>
+    <div class="mini-kpi neutral"><span>Toneladas abiertas</span><b>${fmtTonDirecto(tonAbiertos)}</b><span>${totalAbiertos} caso(s)</span></div>
+    <div class="mini-kpi warn"><span>Toneladas en riesgo de atraso</span><b>${fmtTonDirecto(tonRiesgo)}</b><span>${enRiesgo.length} caso(s), 80%–100% de la meta</span></div>
+    <div class="mini-kpi ${incumpliendo.length?'bad':'ok'}"><span>Toneladas ya atrasadas</span><b>${fmtTonDirecto(tonIncumpliendo)}</b><span>${incumpliendo.length} caso(s)</span></div>
   `;
   const abiertosRiesgo = [...incumpliendo, ...enRiesgo].sort((a,b)=>(b.transcurridos/b.metaDias)-(a.transcurridos/a.metaDias));
-  let htmlAb = `<tr><th>Referencia</th><th>${prefix==='e3'?'País de Origen':'Proveedor'}</th><th>Familia</th><th>Días Transcurridos</th><th>Meta</th><th>Estado</th></tr>`;
+  let htmlAb = `<tr><th>Referencia</th><th>${prefix==='e3'?'País de Origen':'Proveedor'}</th><th>Familia</th><th>Ton expuestas</th><th>Días Transcurridos</th><th>Meta</th><th>Estado</th></tr>`;
   abiertosRiesgo.forEach(o=>{
     const yaSePaso = o.transcurridos > o.metaDias;
-    htmlAb += `<tr class="${yaSePaso?'row-bad':''}"><td class="txt">${o.referencia||'—'}</td><td class="txt">${(prefix==='e3'?o.pais:o.proveedor)||'—'}</td><td class="txt">${o.familia||'—'}</td>
+    htmlAb += `<tr class="${yaSePaso?'row-bad':''}"><td class="txt">${o.referencia||'—'}</td><td class="txt">${(prefix==='e3'?o.pais:o.proveedor)||'—'}</td><td class="txt">${o.familia||'—'}</td><td>${fmtTonDirecto((o.peso||0)/1000)}</td>
       <td>${Math.round(o.transcurridos)} d</td><td>${Math.round(o.metaDias)} d</td>
       <td><span class="pill ${yaSePaso?'bad':'warn'}">${yaSePaso?'Ya se pasó':'A punto de pasarse'}</span></td></tr>`;
   });
-  if(!abiertosRiesgo.length) htmlAb += '<tr><td colspan="6" class="txt" style="color:var(--ink-soft);">Nada abierto en riesgo ahora mismo — todo lo que sigue en curso todavía tiene margen frente a su meta.</td></tr>';
+  if(!abiertosRiesgo.length) htmlAb += '<tr><td colspan="7" class="txt" style="color:var(--ink-soft);">Nada abierto en riesgo ahora mismo — todo lo que sigue en curso todavía tiene margen frente a su meta.</td></tr>';
   document.getElementById(`tbl_v11_${prefix}_abiertos`).innerHTML = htmlAb;
 
   return {realProm, metaProm, nAbiertosRiesgo: abiertosRiesgo.length};
@@ -2964,20 +3057,6 @@ function renderView11(){
   const M = MODEL;
   const C = M._cascadaCache || (M._cascadaCache = buildCascadaCumplimiento(M));
 
-  const pa = C.produccionAbierta;
-  document.getElementById('v11_produccion_abierta').innerHTML = `
-    <div class="mini-kpi warn"><span>Parcial Pendiente (Ton)</span><b>${fmtTonDirecto(pa.tonParcialPendiente)}</b><span style="font-size:10px;color:var(--ink-soft);">${pa.nParcialPendiente} pedido(s)</span></div>
-    <div class="mini-kpi bad"><span>Cero Entregas (Ton)</span><b>${fmtTonDirecto(pa.tonCeroEntregas)}</b><span style="font-size:10px;color:var(--ink-soft);">${pa.nCeroEntregas} pedido(s)</span></div>
-    <div class="mini-kpi neutral"><span>Cerrado por Inactividad (3+ meses sin movimiento)</span><b>${fmtTonDirecto(pa.tonCerradaPorInactividad)}</b><span style="font-size:10px;color:var(--ink-soft);">${pa.nCerradosPorInactividad} caso(s) — cuentan como incumplimiento arriba</span></div>
-  `;
-
-  const proyPendientesPago = MODEL.spUnico.filter(s=>s.estadoCalculado==='PENDIENTE POR PAGAR');
-  const proyAbiertosOp = MODEL.spUnico.filter(s=>s.estatusProyecto!=='ARRIBADO');
-  document.getElementById('v11_e2_proyectos_resumen').innerHTML = `
-    <div class="mini-kpi bad"><span># Proyectos Pendientes por Pagar</span><b>${proyPendientesPago.length}</b><span style="font-size:10px;color:var(--ink-soft);">${fmt(proyPendientesPago.reduce((a,s)=>a+s.saldoCalculado,0))}</span></div>
-    <div class="mini-kpi warn"><span># Proyectos Abiertos (aún no arriban)</span><b>${proyAbiertosOp.length}</b><span style="font-size:10px;color:var(--ink-soft);">${fmtTon(proyAbiertosOp.reduce((a,s)=>a+(s.entregadoKg||0),0))}</span></div>
-  `;
-
   const r1 = renderEtapaCumplimiento('e1', C.etapa1, C.abierto1);
   const r2 = renderEtapaCumplimiento('e2', C.etapa2, C.abierto2);
   const r3 = renderEtapaCumplimiento('e3', C.etapa3, C.abierto3);
@@ -2991,19 +3070,17 @@ function renderView11(){
   const semGlobal = semaforoCumplimiento(realGlobal, metaGlobal);
   const etapas = [{n:'Producción', r:r1}, {n:'Embarque', r:r2}, {n:'Navegación', r:r3}, {n:'Nacionalización', r:r4}];
   const cuello = etapas.filter(e=>e.r.realProm!==null && e.r.metaProm!==null).sort((a,b)=>(b.r.realProm-b.r.metaProm)-(a.r.realProm-a.r.metaProm))[0];
+  const semCuello = !cuello?'neutral':semaforoCumplimiento(cuello.r.realProm,cuello.r.metaProm);
   const totalAbiertosRiesgo = (r1.nAbiertosRiesgo||0)+(r2.nAbiertosRiesgo||0)+(r3.nAbiertosRiesgo||0)+(r4.nAbiertosRiesgo||0);
   document.getElementById('v11_resumenGlobal').innerHTML = `
     <div class="mini-kpi ${semGlobal}"><span>% Cumplimiento del Proceso (Pedido→Levante)</span><b>${pctGlobal!==null?pctGlobal+'%':'—'}</b></div>
     <div class="mini-kpi"><span>Días Reales Totales (suma de las 4 etapas)</span><b>${Math.round((r1.realProm||0)+(r2.realProm||0)+(r3.realProm||0)+(r4.realProm||0))} d</b></div>
     <div class="mini-kpi"><span>Meta Total</span><b>${Math.round((r1.metaProm||0)+(r2.metaProm||0)+(r3.metaProm||0)+(r4.metaProm||0))} d</b></div>
-    <div class="mini-kpi bad"><span>Cuello de botella</span><b>${cuello?cuello.n:'—'}</b></div>
+    <div class="mini-kpi ${semCuello}"><span>Etapa con mayor desviación</span><b>${cuello?cuello.n:'—'}</b><span>${cuello?Math.round(cuello.r.realProm-cuello.r.metaProm)+' d vs. meta':'Sin dato'}</span></div>
     <div class="mini-kpi ${totalAbiertosRiesgo>0?'warn':'ok'}"><span>Abiertos en riesgo (todas las etapas)</span><b>${totalAbiertosRiesgo}</b></div>
   `;
 
-  // Cascada: UNA barra por etapa (el Real, coloreado por semáforo: verde=dentro de meta, ámbar=hasta 10%
-  // sobre meta, rojo=más de 10%), con la Meta superpuesta como una marca angosta a esa altura — no dos barras
-  // lado a lado, para que se lea de un vistazo si el Real se pasó de la Meta o no, sin tener que comparar
-  // alturas de dos barras separadas.
+  // Cascada: resultado real en columnas y meta como línea superpuesta sobre cada etapa.
   const etapasNombres = ['Producción','Embarque','Navegación','Nacionalización'];
   const realesArr = [r1.realProm, r2.realProm, r3.realProm, r4.realProm].map(v=>v||0);
   const metasArr = [r1.metaProm, r2.metaProm, r3.metaProm, r4.metaProm].map(v=>v||0);
@@ -3016,20 +3093,15 @@ function renderView11(){
   elCascada._chart = new Chart(elCascada, {
     type:'bar',
     data:{ labels:etapasNombres, datasets:[
-      // Meta: barra ancha, angosta en altura (floating bar min/max), detrás — se ve como una marca de referencia
-      {label:'Meta', data:metasArr.map(v=>[Math.max(0,v-0.6), v+0.6]), backgroundColor:COLORS.slate, barPercentage:0.92, categoryPercentage:0.85, order:2},
-      // Real: barra normal desde 0, coloreada por semáforo, delante
-      {label:'Real', data:realesArr, backgroundColor:coloresReal, barPercentage:0.5, categoryPercentage:0.85, order:1},
+      {label:'Resultado real', data:realesArr, backgroundColor:coloresReal, borderRadius:6, barPercentage:0.56, categoryPercentage:0.78, order:2},
+      {type:'line', label:'Meta', data:metasArr, borderColor:COLORS.navy, backgroundColor:COLORS.navy,
+        borderWidth:3, pointRadius:6, pointHoverRadius:8, pointBackgroundColor:'#fff', pointBorderColor:COLORS.navy,
+        pointBorderWidth:3, tension:0, fill:false, order:1},
     ]},
     options:{ responsive:true, maintainAspectRatio:false,
-      scales:{ x:{ stacked:false, grouped:false, grid:{display:false} }, y:{ stacked:false, title:{display:true,text:'días'} } },
-      plugins:{ legend:{display:true, labels:{generateLabels: c=>[
-        {text:'Real: dentro de meta', fillStyle:COLORS.green, strokeStyle:COLORS.green},
-        {text:'Real: hasta 10% sobre meta', fillStyle:COLORS.amber, strokeStyle:COLORS.amber},
-        {text:'Real: más de 10% sobre meta', fillStyle:COLORS.red, strokeStyle:COLORS.red},
-        {text:'Meta', fillStyle:COLORS.slate, strokeStyle:COLORS.slate},
-      ]}},
-      tooltip:{ callbacks:{ label: ctx => ctx.dataset.label==='Meta' ? `Meta: ${Math.round(metasArr[ctx.dataIndex])} d` : `Real: ${Math.round(realesArr[ctx.dataIndex])} d` } },
+      scales:{ x:{grid:{display:false}}, y:{beginAtZero:true,title:{display:true,text:'días'}} },
+      plugins:{ legend:{display:true},
+      tooltip:{ callbacks:{ label: ctx => `${ctx.dataset.label}: ${Math.round(ctx.raw)} d` } },
       datalabels:{ display:false } }
     }
   });
@@ -3775,7 +3847,7 @@ function renderKPIs(){
   document.getElementById('kpiBar').innerHTML = `
     <div class="kpi neutral"><div class="lab">Pedidos del período</div><div class="val">${pedidosAnio.length}</div><div class="sub"><b class="ton">${fmtTon(tonPedidosAnio)}</b> · ${fmt(valorPedidosAnio)}</div></div>
     <div class="kpi neutral"><div class="lab">Entrado en ${anioArriboRef}</div><div class="val">${fmtTon(tonEntradoAnioCalendario)}</div><div class="sub">${fmt(valorEntradoAnioCalendario)} · todas las cohortes de pedido</div></div>
-    <div class="kpi warn"><div class="lab">En Producción</div><div class="val">${enProduccion.length}</div><div class="sub"><b class="ton">${fmtTon(tonEnProduccion)}</b> · ${fmt(valorEnProduccion)}</div></div>
+    <div class="kpi neutral"><div class="lab">En Producción</div><div class="val">${enProduccion.length}</div><div class="sub"><b class="ton">${fmtTon(tonEnProduccion)}</b> · ${fmt(valorEnProduccion)}</div></div>
     <div class="kpi warn"><div class="lab">Parcial Pendiente</div><div class="val">${conParcial.length}</div><div class="sub"><b class="ton">${fmtTon(tonPendienteParcial)}</b> · ${fmt(valorPendienteParcial)}</div></div>
     <div class="kpi ok"><div class="lab">Completados</div><div class="val">${completados.length}</div><div class="sub">de ${pedidosAnio.length} del período</div></div>
     <div class="kpi neutral"><div class="lab">Lead Time Ponderado</div><div class="val">${leadTimeProm?leadTimeProm+' d':'—'}</div><div class="sub">Pedido → Arribo</div></div>
@@ -3830,13 +3902,12 @@ function buildCascadaCumplimiento(M){
     });
     const primera = ordenadas[0], ultima = ordenadas[ordenadas.length-1];
     if(!primera.fechaProforma || !(primera.diasEstimadosProduccion>0)) return;
-    // 27-sep, a pedido de Sebastián: un saldo cerrado por inactividad (3+ meses sin línea nueva) SÍ debe
-    // contar en cumplimiento — es un incumplimiento real, no un caso a esconder. Si la última fila nunca tuvo
-    // su propia fecha real de producción, se usa la fecha de cierre por inactividad como "fecha real" (así el
-    // caso entra a las estadísticas en vez de desaparecer silenciosamente). Si sí llegó a tener fecha real de
-    // producción (solo quedó un saldo menor sin avanzar), esa sigue siendo la fecha real, como antes.
-    const fechaRealEfectiva = ultima.fechaRealProduccion || (g.cerradoPorInactividad ? g.fechaCierrePorInactividad : null);
-    if(!fechaRealEfectiva) return; // sigue genuinamente abierto, todavía no hay nada que evaluar
+    if(!g.cerradoAutomatico && !g.cerradoPorInactividad) return;
+    // Si cerró por inactividad, el tiempo real termina al cumplirse los 90 días sin movimiento. Así el atraso
+    // y el faltante de toneladas quedan visibles en las métricas de cumplimiento.
+    const fechasProduccion = ordenadas.map(f=>f.fechaRealProduccion).filter(Boolean);
+    const fechaRealEfectiva = g.cerradoPorInactividad ? g.fechaCierrePorInactividad : (fechasProduccion.sort((a,b)=>b-a)[0]||null);
+    if(!fechaRealEfectiva) return;
     const realDias = daysBetween(primera.fechaProforma, fechaRealEfectiva);
     if(realDias===null || realDias<0) return;
     const pedidoCod = M.ton.proformaToPedido[g.proforma];
@@ -3844,9 +3915,10 @@ function buildCascadaCumplimiento(M){
     // % de cumplimiento en Kg (entregado vs. pedido) — para los cerrados por inactividad, casi siempre <100%,
     // que es justo la evidencia del incumplimiento en cantidad, no solo en tiempo.
     const pctCumpleKg = g.cantidadPedidaKg>0 ? Math.min(100, Math.round(g.cantidadEntregadaKg/g.cantidadPedidaKg*100)) : null;
-    etapa1.push({realDias, metaDias:primera.diasEstimadosProduccion, peso:g.cantidadPedidaKg||0, fecha:fechaRealEfectiva,
+    etapa1.push({realDias, metaDias:primera.diasEstimadosProduccion, peso:g.cantidadPedidaKg||0, fecha:fechaRealEfectiva, fechaInicio:primera.fechaProforma,
       proveedor: pedido?pedido.proveedor:null, familia:g.familia, pedido:pedidoCod,
-      cerradoPorInactividad: !!g.cerradoPorInactividad, pctCumpleKg, saldoKgNoEntregado: g.cerradoPorInactividad?g.saldoKg:0});
+      cerradoPorInactividad: !!g.cerradoPorInactividad, pctCumpleKg, pedidoKg:g.cantidadPedidaKg||0,
+      entregadoKg:g.cantidadEntregadaKg||0, saldoKgNoEntregado:g.saldoKg||0});
   });
 
   // ETAPA 2 — Embarque: por cada fila/parcial con Producción real Y Zarpe real (ambas fechas ya vienen en la
@@ -3913,12 +3985,15 @@ function buildCascadaCumplimiento(M){
       return fa - fb;
     });
     const primera = ordenadas[0], ultima = ordenadas[ordenadas.length-1];
-    if(!primera.fechaProforma || !(primera.diasEstimadosProduccion>0) || ultima.fechaRealProduccion) return; // ya cerró, no es "abierto"
+    if(!primera.fechaProforma || !(primera.diasEstimadosProduccion>0) || g.cerradoAutomatico || g.cerradoPorInactividad) return;
     const transcurridos = daysBetween(primera.fechaProforma, HOY_ABIERTOS);
     if(transcurridos===null) return;
     const pedidoCod = M.ton.proformaToPedido[g.proforma];
     const pedido = pedidoCod ? pedidoPorCodigo[pedidoCod] : null;
-    abierto1.push({transcurridos, metaDias:primera.diasEstimadosProduccion, peso:g.cantidadPedidaKg||0, proveedor:pedido?pedido.proveedor:null, familia:g.familia, pedido:pedidoCod, referencia:g.proforma+' / '+(primera.producto||'')});
+    abierto1.push({transcurridos, metaDias:primera.diasEstimadosProduccion, peso:g.saldoKg||g.cantidadPedidaKg||0,
+      cantidadPedidaKg:g.cantidadPedidaKg||0, cantidadEntregadaKg:g.cantidadEntregadaKg||0, saldoKg:g.saldoKg||0,
+      fechaInicio:primera.fechaProforma, proveedor:pedido?pedido.proveedor:null, familia:g.familia, pedido:pedidoCod,
+      referencia:g.proforma+' / '+(primera.producto||'')});
   });
   const abierto2 = []; // Embarque abierto: producción real ya ocurrió, pero sin zarpe real todavía
   (M.ton.rows||[]).forEach(r=>{
@@ -3927,7 +4002,8 @@ function buildCascadaCumplimiento(M){
     if(transcurridos===null) return;
     const pedidoCod = M.ton.proformaToPedido[r.proforma];
     const pedido = pedidoCod ? pedidoPorCodigo[pedidoCod] : null;
-    abierto2.push({transcurridos, metaDias:15, peso:r.cantidadEntregadaKg||0, proveedor:pedido?pedido.proveedor:null, familia:familiaDeProducto(r.producto), pedido:pedidoCod, referencia:r.nombreProyecto||r.proforma});
+    abierto2.push({transcurridos, metaDias:15, peso:r.cantidadEntregadaKg||0, fechaInicio:r.fechaRealProduccion,
+      proveedor:pedido?pedido.proveedor:null, familia:familiaDeProducto(r.producto), pedido:pedidoCod, referencia:r.nombreProyecto||r.proforma});
   });
   const abierto3 = []; // Navegación abierta: zarpó pero no ha arribado (estatus NAVEGANDO)
   const vistoProyNavAbierto = new Set();
@@ -3940,7 +4016,8 @@ function buildCascadaCumplimiento(M){
     if(transcurridos===null) return;
     const pedidoCod = M.ton.proformaToPedido[r.proforma];
     const pedido = pedidoCod ? pedidoPorCodigo[pedidoCod] : null;
-    abierto3.push({transcurridos, metaDias:M.nav.diasNavegacion(r.paisOrigen), peso:r.cantidadEntregadaKg||0, proveedor:pedido?pedido.proveedor:null, pais:r.paisOrigen, familia:familiaDeProducto(r.producto), pedido:pedidoCod, referencia:r.nombreProyecto});
+    abierto3.push({transcurridos, metaDias:M.nav.diasNavegacion(r.paisOrigen), peso:r.cantidadEntregadaKg||0, fechaInicio:r.fechaRealZarpe,
+      proveedor:pedido?pedido.proveedor:null, pais:r.paisOrigen, familia:familiaDeProducto(r.producto), pedido:pedidoCod, referencia:r.nombreProyecto});
   });
   const abierto4 = []; // Nacionalización abierta: arribó pero sin Fecha Levante DIM todavía
   Object.values(M.ton.porProyectoImport||{}).forEach(imp=>{
@@ -3950,17 +4027,18 @@ function buildCascadaCumplimiento(M){
     const filaRef = (M.ton.rows||[]).find(r=>r.nombreProyecto===imp.proyecto);
     const pedidoCod = filaRef ? M.ton.proformaToPedido[filaRef.proforma] : null;
     const pedido = pedidoCod ? pedidoPorCodigo[pedidoCod] : null;
-    abierto4.push({transcurridos, metaDias:metaNacGlobalP80, peso:imp.pesoBrutoKg||0, proveedor:pedido?pedido.proveedor:null, familia:filaRef?familiaDeProducto(filaRef.producto):null, pedido:pedidoCod, referencia:imp.proyecto});
+    abierto4.push({transcurridos, metaDias:metaNacGlobalP80, peso:imp.pesoBrutoKg||0, fechaInicio:imp.fechaRealArribo,
+      proveedor:pedido?pedido.proveedor:null, familia:filaRef?familiaDeProducto(filaRef.producto):null, pedido:pedidoCod, referencia:imp.proyecto});
   });
 
   const gruposAbiertosProduccion = M.ton.grupos.filter(g=>!g.cerradoAutomatico && !g.cerradoPorInactividad && g.saldoKg>0);
   const produccionAbierta = {
-    tonParcialPendiente: gruposAbiertosProduccion.filter(g=>g.cantidadEntregadaKg>0).reduce((a,g)=>a+g.saldoKg,0),
+    tonParcialPendiente: gruposAbiertosProduccion.filter(g=>g.cantidadEntregadaKg>0).reduce((a,g)=>a+g.saldoKg,0)/1000,
     nParcialPendiente: gruposAbiertosProduccion.filter(g=>g.cantidadEntregadaKg>0).length,
-    tonCeroEntregas: gruposAbiertosProduccion.filter(g=>g.cantidadEntregadaKg<=0).reduce((a,g)=>a+g.saldoKg,0),
+    tonCeroEntregas: gruposAbiertosProduccion.filter(g=>g.cantidadEntregadaKg<=0).reduce((a,g)=>a+g.cantidadPedidaKg,0)/1000,
     nCeroEntregas: gruposAbiertosProduccion.filter(g=>g.cantidadEntregadaKg<=0).length,
     nCerradosPorInactividad: M.ton.grupos.filter(g=>g.cerradoPorInactividad).length,
-    tonCerradaPorInactividad: M.ton.grupos.filter(g=>g.cerradoPorInactividad).reduce((a,g)=>a+g.saldoKg,0),
+    tonCerradaPorInactividad: M.ton.grupos.filter(g=>g.cerradoPorInactividad).reduce((a,g)=>a+g.saldoKg,0)/1000,
   };
 
   return { etapa1, etapa2, etapa3, etapa4, metaNacGlobalP80, abierto1, abierto2, abierto3, abierto4, produccionAbierta };
@@ -4698,10 +4776,10 @@ function renderView1(){
     {label:'Saldo Financiado', data:meses.map(m=>paM(m).SALDO_FINANCIADO||0), backgroundColor:COLORS.slate},
   ], {}, true);
   barChart('c_gfAbiertosMes', meses, [{label:'GF abiertos (USD)', data:meses.map(m=>gM(m).valor), backgroundColor:COLORS.navy}], {}, true);
-  barChart('c_gfPagoMes', meses, [{label:'Pago a Giros Financieros', data:meses.map(m=>paM(m).GF_PAGO), backgroundColor:COLORS.red}], {}, true);
+  barChart('c_gfPagoMes', meses, [{label:'Pago a Giros Financieros', data:meses.map(m=>paM(m).GF_PAGO), backgroundColor:COLORS.gold}], {}, true);
   barChart('c_totalSalidas', meses, [
     {label:'Giro Directo', data:meses.map(m=>paM(m).GIRO_DIRECTO), backgroundColor:COLORS.steel, stack:'s'},
-    {label:'Pago a Giros Financieros', data:meses.map(m=>paM(m).GF_PAGO), backgroundColor:COLORS.red, stack:'s'},
+    {label:'Pago a Giros Financieros', data:meses.map(m=>paM(m).GF_PAGO), backgroundColor:COLORS.gold, stack:'s'},
   ], {scales:{x:{stacked:true}, y:{stacked:true}}}, true);
 
   // Flujo de caja de pendientes — próximos 12 meses (mismo cálculo de Vista 4, tarifas por defecto 6%/19%)
@@ -4725,12 +4803,12 @@ function renderView1(){
   // Supuesto a validar con el equipo: se marca así cuando el campo "ESTADO DEL PAGO" viene vacío o no dice explícitamente "CONCILIADO".
   const girosSinConciliar = M.gfAbiertos.filter(g => !g.estado || !String(g.estado).toUpperCase().includes('CONCILIA'));
   document.getElementById('v1_resumenPend').innerHTML = `
-    <div class="mini-kpi bad"><span>Saldo Proyectos Comex</span><b>${fmt(totalComexP)}</b></div>
-    <div class="mini-kpi bad"><span>Pedidos sin parcial (pronóstico)</span><b>${fmt(totalAP)}</b></div>
-    <div class="mini-kpi bad"><span>Parciales incompletos (pronóstico)</span><b>${fmt(totalBP)}</b></div>
-    <div class="mini-kpi bad"><span>Giros Financieros abiertos</span><b>${fmt(totalGFP)}</b></div>
-    <div class="mini-kpi bad"><span>Nacionalización estimada (5%/19%)</span><b>${fmt(nacEstP.total)}</b></div>
-    <div class="mini-kpi"><span>TOTAL GENERAL PENDIENTE</span><b>${fmt(totalComexP+totalAP+totalBP+totalGFP+nacEstP.total)}</b></div>
+    <div class="mini-kpi neutral"><span>Saldo Proyectos Comex</span><b>${fmt(totalComexP)}</b></div>
+    <div class="mini-kpi neutral"><span>Pedidos sin parcial (pronóstico)</span><b>${fmt(totalAP)}</b></div>
+    <div class="mini-kpi neutral"><span>Parciales incompletos (pronóstico)</span><b>${fmt(totalBP)}</b></div>
+    <div class="mini-kpi neutral"><span>Giros Financieros abiertos</span><b>${fmt(totalGFP)}</b></div>
+    <div class="mini-kpi neutral"><span>Nacionalización estimada (5%/19%)</span><b>${fmt(nacEstP.total)}</b></div>
+    <div class="mini-kpi neutral"><span>Total general pendiente</span><b>${fmt(totalComexP+totalAP+totalBP+totalGFP+nacEstP.total)}</b></div>
     <div class="mini-kpi warn"><span>Giros abiertos SIN conciliar</span><b>${girosSinConciliar.length} · ${fmt(girosSinConciliar.reduce((a,g)=>a+g.saldoReal,0))}</b></div>
   `;
 
@@ -4739,6 +4817,44 @@ function renderView1(){
   const totTonPed = meses.reduce((a,m)=>a+(tonPedidoPorMes[m]||0),0);
   const totTonArribo = meses.reduce((a,m)=>a+(tonArriboPorMes[m]||0),0);
   const totPagado = meses.reduce((a,m)=>a+paM(m).ANTICIPO+(paM(m).SALDO_DIRECTO||0)+(paM(m).SALDO_FINANCIADO||0),0);
+
+  // Lectura gerencial: combina abastecimiento, tiempos, riesgos operativos y caja sin reemplazar el detalle.
+  const C = M._cascadaCache || (M._cascadaCache = buildCascadaCumplimiento(M));
+  const etapasResumen = [
+    {nombre:'Producción', datos:C.etapa1}, {nombre:'Embarque', datos:C.etapa2},
+    {nombre:'Navegación', datos:C.etapa3}, {nombre:'Nacionalización', datos:C.etapa4}
+  ].map(e=>({
+    ...e,
+    real:promedioPonderadoGenerico(e.datos,'realDias','peso'),
+    meta:promedioPonderadoGenerico(e.datos,'metaDias','peso')
+  }));
+  const cuello = etapasResumen.filter(e=>e.real!==null&&e.meta!==null)
+    .sort((a,b)=>(b.real-b.meta)-(a.real-a.meta))[0];
+  const abiertosRiesgo = [...C.abierto1,...C.abierto2,...C.abierto3,...C.abierto4]
+    .filter(o=>o.metaDias>0&&o.transcurridos>=o.metaDias*.8);
+  const tonRiesgo = abiertosRiesgo.reduce((a,o)=>a+(o.peso||0),0)/1000;
+  const parcialesRetrasados = [...M.grupoA.flatMap(p=>p.parciales),...M.grupoB.flatMap(p=>p.parciales)].filter(p=>p.retrasado);
+  const tonRetrasada = parcialesRetrasados.reduce((a,p)=>a+(p.kgEstimado||0),0)/1000;
+  const giros7 = M.gfAbiertos.filter(g=>g.fechaVencimiento&&daysBetween(new Date(),g.fechaVencimiento)>=0&&daysBetween(new Date(),g.fechaVencimiento)<=7);
+  const flujo30 = computeFlujoCaja(M,1);
+  const leadTotal = etapasResumen.reduce((a,e)=>a+(e.real||0),0);
+  const metaTotal = etapasResumen.reduce((a,e)=>a+(e.meta||0),0);
+  const semLead = semaforoCumplimiento(leadTotal,metaTotal);
+  document.getElementById('v1_exec_resumen').innerHTML = `<div class="mini-kpis">
+    <div class="mini-kpi neutral"><span>Toneladas pedidas en el período</span><b>${fmtTon(totTonPed)}</b><span>${fmt(totValor)}</span></div>
+    <div class="mini-kpi neutral"><span>Toneladas arribadas en el período</span><b>${fmtTon(totTonArribo)}</b><span>Por fecha real de arribo</span></div>
+    <div class="mini-kpi ${semLead}"><span>Ciclo real vs. meta</span><b>${Math.round(leadTotal)} d / ${Math.round(metaTotal)} d</b><span>Cuello: ${cuello?cuello.nombre:'sin dato'}</span></div>
+    <div class="mini-kpi neutral"><span>Caja requerida a 30 días</span><b>${fmt(flujo30.total)}</b><span>Confirmada y proyectada</span></div>
+  </div>`;
+  const acciones = [
+    {tipo:parcialesRetrasados.length?'bad':'', texto:'Llegadas proyectadas fuera de fecha', valor:`${fmtTonDirecto(tonRetrasada)} · ${parcialesRetrasados.length} parcial(es)`, vista:'v_sop', seccion:'v10_alertasPanel'},
+    {tipo:abiertosRiesgo.length?'warn':'', texto:'Toneladas en riesgo dentro del ciclo', valor:`${fmtTonDirecto(tonRiesgo)} · ${abiertosRiesgo.length} caso(s)`, vista:'v11', seccion:'gestion_produccion'},
+    {tipo:giros7.length?'warn':'', texto:'Giros que vencen en los próximos 7 días', valor:`${fmt(giros7.reduce((a,g)=>a+g.saldoReal,0))} · ${giros7.length}`, vista:'v4', seccion:'v4'},
+  ];
+  document.getElementById('v1_exec_alertas').innerHTML = acciones.map(a=>
+    `<button type="button" class="action-link ${a.tipo}" onclick="irAVistaYSeccion('${a.vista}','${a.seccion}')"><span>${a.texto}</span><b>${a.valor} ›</b></button>`
+  ).join('');
+
   document.getElementById('v1_narrativa').innerHTML =
     `En el período seleccionado (<b>${meses[0]}</b> a <b>${meses[meses.length-1]}</b>) se pidieron <b>${fmt(totValor)}</b> (~<b>${fmtTon(totTonPed)}</b>), `+
     `arribaron <b>${fmtTon(totTonArribo)}</b>, y se pagó en total <b>${fmt(totPagado)}</b> entre anticipos y saldos. `+
