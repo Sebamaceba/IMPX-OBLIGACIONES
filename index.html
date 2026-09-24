@@ -18,27 +18,29 @@
   @import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&display=swap');
   *{box-sizing:border-box;}
   body{margin:0;background:var(--paper);color:var(--ink);font-family:var(--sans);}
-  header{background:linear-gradient(135deg,var(--navy-deep),var(--navy) 60%,var(--steel));color:#fff;padding:9px 36px 7px;}
+  header{background:linear-gradient(135deg,var(--navy-deep),var(--navy) 60%,var(--steel));color:#fff;padding:9px 20px 7px;}
+  .header-title-row{display:flex;align-items:center;gap:12px;margin-bottom:2px;}
+  .aquila-logo{display:block;width:86px;height:37px;object-fit:contain;background:#fff;border-radius:6px;padding:3px 5px;box-shadow:0 1px 4px rgba(0,0,0,.18);}
   .eyebrow{font-family:var(--mono);font-size:10.5px;letter-spacing:.12em;text-transform:uppercase;opacity:.75;margin-bottom:4px;display:flex;align-items:center;gap:8px;}
   .dot{width:7px;height:7px;border-radius:50%;background:#8ee6a8;box-shadow:0 0 8px #8ee6a8;}
   .dot.loading{background:#f5c26b;box-shadow:0 0 8px #f5c26b;animation:pulse 1s infinite;}
   .dot.error{background:#e57373;box-shadow:0 0 8px #e57373;}
   @keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
-  h1{margin:0 0 2px;font-size:16px;font-weight:800;letter-spacing:-0.01em;}
+  h1{margin:0;font-size:16px;font-weight:800;letter-spacing:-0.01em;}
   .sub{font-size:10.5px;opacity:.8;}
   #statusMsg{font-size:10px;margin-top:3px;opacity:.85;}
-  .kpi-filterbar{display:flex;align-items:center;gap:8px;padding:10px 36px 0;background:#fff;font-size:12px;color:var(--ink-soft);}
-  .kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:9px;padding:10px 36px 13px;background:#fff;border-bottom:1px solid var(--line);}
-  .kpi{background:var(--paper);border:1px solid var(--line);border-left:4px solid var(--navy);border-radius:8px;padding:9px 11px;min-height:72px;}
+  .kpi-filterbar{display:flex;align-items:center;gap:8px;padding:6px 20px 0;background:#fff;font-size:11px;color:var(--ink-soft);}
+  .kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px 8px;padding:6px 20px 8px;background:#fff;border-bottom:1px solid var(--line);}
+  .kpi{background:var(--paper);border:1px solid var(--line);border-left:3px solid var(--navy);border-radius:7px;padding:5px 8px;min-height:49px;}
   .kpi.ok{border-left-color:var(--green);} .kpi.ok .val{color:var(--green);}
   .kpi.neutral{border-left-color:var(--slate);}
   .kpi.warn{border-left-color:var(--amber);} .kpi.warn .val{color:var(--amber);}
   .kpi.bad{border-left-color:var(--red);} .kpi.bad .val{color:var(--red);}
-  .kpi .lab{font-size:9.5px;color:var(--ink-soft);text-transform:uppercase;letter-spacing:.04em;font-weight:700;line-height:1.2;min-height:18px;display:flex;align-items:flex-start;}
-  .kpi .val{font-family:var(--mono);font-size:18px;font-weight:700;color:var(--navy);margin-top:3px;line-height:1;}
-  .kpi .sub{font-size:9.5px;color:var(--ink-soft);margin-top:5px;font-weight:500;line-height:1.25;}
+  .kpi .lab{font-size:8.5px;color:var(--ink-soft);text-transform:uppercase;letter-spacing:.035em;font-weight:700;line-height:1.1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .kpi .val{font-family:var(--mono);font-size:16px;font-weight:700;color:var(--navy);margin-top:3px;line-height:1;white-space:nowrap;}
+  .kpi .sub{font-size:8.5px;color:var(--ink-soft);margin-top:3px;font-weight:500;line-height:1.1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
   .kpi .sub b.ton{color:var(--gold);font-weight:700;}
-  .tablero-mando{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px;padding:9px 36px;background:linear-gradient(180deg,#fff,var(--paper));border-bottom:1px solid var(--line);}
+  .tablero-mando{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px;padding:8px 20px;background:linear-gradient(180deg,#fff,var(--paper));border-bottom:1px solid var(--line);}
   .tablero-card{background:#fff;border-radius:8px;padding:9px 11px;box-shadow:0 1px 3px rgba(14,53,82,0.08);border:1px solid var(--line);}
   .tablero-card .tc-top{display:flex;align-items:center;gap:5px;}
   .tablero-card .tc-dot{width:7px;height:7px;border-radius:50%;flex-shrink:0;}
@@ -47,7 +49,7 @@
   .tablero-card .tc-lab{font-size:9px;color:var(--ink-soft);font-weight:700;text-transform:uppercase;letter-spacing:.02em;}
   .tablero-card .tc-val{font-family:var(--mono);font-size:16px;font-weight:700;color:var(--navy);margin-top:3px;}
   .tablero-card .tc-sub{font-size:9px;color:var(--ink-soft);margin-top:2px;}
-  .bandeja-alertas{padding:0 36px 14px;background:var(--paper);border-bottom:1px solid var(--line);}
+  .bandeja-alertas{padding:0 20px 12px;background:var(--paper);border-bottom:1px solid var(--line);}
   .bandeja-alertas.vacia{display:none;}
   .bandeja-titulo{font-size:11.5px;font-weight:700;color:var(--navy);padding:10px 0 6px;text-transform:uppercase;letter-spacing:.03em;}
   .alerta-item{display:flex;align-items:center;gap:10px;background:#fff;border-radius:8px;padding:9px 14px;margin-bottom:6px;font-size:12px;border-left:4px solid var(--red);border:1px solid var(--line);border-left-width:4px;border-left-color:var(--red);}
@@ -55,7 +57,7 @@
   .alerta-item .ai-badge{font-weight:700;color:#fff;background:var(--red);border-radius:5px;padding:2px 8px;font-size:9.5px;letter-spacing:.02em;}
   .alerta-item.warn .ai-badge{background:var(--amber);}
   .kpi-filterbar select{font-family:var(--sans);font-size:12.5px;padding:5px 8px;border:1px solid var(--line);border-radius:6px;background:#fff;color:var(--navy);font-weight:600;}
-  nav{display:flex;gap:0;padding:4px 36px;background:#fff;border-bottom:1px solid var(--line);flex-wrap:wrap;align-items:center;}
+  nav{display:flex;gap:0;padding:4px 20px;background:#fff;border-bottom:1px solid var(--line);flex-wrap:wrap;align-items:center;}
   nav button{border:none;background:none;padding:11px 13px;font-family:var(--sans);font-size:12.5px;font-weight:600;color:var(--ink-soft);cursor:pointer;border-bottom:3px solid transparent;white-space:nowrap;}
   nav button.active{color:var(--navy);border-bottom-color:var(--amber);}
   nav button:hover{color:var(--navy);}
@@ -74,10 +76,10 @@
   .dp-item:last-of-type{border-bottom:none;}
   .dp-empty{font-size:10.5px;color:var(--ink-soft);font-style:italic;}
   .dp-total{font-size:11px;font-weight:700;color:var(--navy);margin-top:8px;padding-top:7px;border-top:1px solid var(--line);}
-  main{padding:24px 36px 60px;max-width:1500px;margin:0 auto;}
+  main{padding:18px 18px 52px;max-width:1800px;margin:0 auto;}
   .view{display:none;}
   .view.active{display:block;}
-  .panel{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:18px 20px;margin-bottom:18px;}
+  .panel{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:16px 17px;margin-bottom:14px;}
   .panel h2{margin:0 0 4px;font-size:14.5px;font-weight:700;color:var(--navy);letter-spacing:-0.01em;}
   .panel .desc{font-size:11.5px;color:var(--ink-soft);margin-bottom:14px;line-height:1.45;}
   .filters{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px;}
@@ -125,9 +127,10 @@
   .action-link{display:flex;width:100%;justify-content:space-between;gap:10px;align-items:center;text-decoration:none;color:var(--ink);font-family:var(--sans);font-size:11.5px;background:#fff;border:1px solid var(--line);border-left:4px solid var(--steel);border-radius:7px;padding:8px 10px;cursor:pointer;text-align:left;}
   .action-link.warn{border-left-color:var(--amber);}.action-link.bad{border-left-color:var(--red);}
   .action-link b{color:var(--navy);white-space:nowrap;}
-  @media(max-width:900px){.process-chain{grid-template-columns:repeat(2,1fr)}.process-step::after{display:none}.executive-grid{grid-template-columns:1fr}.kpis{grid-template-columns:repeat(2,1fr)}.grid2{grid-template-columns:1fr}}
+  @media(max-width:900px){.process-chain{grid-template-columns:repeat(2,1fr)}.process-step::after{display:none}.executive-grid{grid-template-columns:1fr}.grid2{grid-template-columns:1fr}}
+  @media(max-width:620px){.kpis{grid-template-columns:repeat(2,1fr)}.header-title-row{align-items:flex-start;}.aquila-logo{width:76px;height:33px;}}
   canvas{max-height:320px;}
-  footer{padding:18px 36px;font-size:11px;color:var(--ink-soft);text-align:center;}
+  footer{padding:18px 20px;font-size:11px;color:var(--ink-soft);text-align:center;}
   #loadOverlay{position:fixed;inset:0;background:rgba(8,42,64,.92);color:#fff;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:14px;z-index:999;font-family:var(--sans);}
   .pedido-card{border:1px solid var(--line);border-radius:8px;margin-bottom:10px;overflow:hidden;}
   .pedido-head{background:var(--paper);padding:10px 14px;display:flex;flex-wrap:wrap;gap:18px;align-items:center;cursor:pointer;}
@@ -154,7 +157,10 @@
 
 <header>
   <div class="eyebrow"><span class="dot loading" id="statusDot"></span> Live · conectado a Google Sheets · <span id="ultimaActualizacion" style="font-weight:600;">cargando…</span></div>
-  <h1>Gestión Integral de Abastecimiento y Caja</h1>
+  <div class="header-title-row">
+    <h1>Gestión Integral de Abastecimiento y Caja</h1>
+    <img class="aquila-logo" src="https://c5gwmsmjx1.execute-api.us-east-1.amazonaws.com/prod/empresa/logo/162139/AQUILA_CONSULTORIA_AZUL.png" alt="Aquila Consultoria em Gestão">
+  </div>
   <div class="sub">Seguimiento gerencial y operativo desde la orden de compra hasta la llegada, nacionalización y uso de caja.</div>
   <div id="statusMsg"></div>
 </header>
@@ -752,7 +758,7 @@
 
     <div class="panel section-anchor" id="gestion_produccion">
       <h2>1 · Producción — Tendencia mensual (Real vs. Meta, ponderado por Ton)</h2>
-      <div class="desc">Pedido (Fecha Proforma) → cierre de producción. La meta es el compromiso original del proveedor. Los saldos parciales solo se cierran por inactividad después de 90 días sin movimiento; los pedidos sin ninguna entrega permanecen abiertos salvo que estén marcados como “Pedido Cancelado”.</div>
+      <div class="desc">Pedido (Fecha Proforma) → cierre de producción. La meta es el compromiso original del proveedor. La regla de 90 días de inactividad se evalúa únicamente cuando existe un saldo pendiente.</div>
       <div class="filters"><label style="font-size:12px;color:var(--ink-soft);">Ver:</label> <select id="f11_e1_familia_tendencia"><option value="">Todas las familias</option></select></div>
       <div style="height:300px;"><canvas id="c_v11_e1_tendencia"></canvas></div>
       <div class="filters" style="margin-top:16px;border-top:1px solid var(--line);padding-top:14px;"><label style="font-size:12px;color:var(--ink-soft);">Filtrar tablas de abajo por mes:</label> <select id="f11_e1_mes"><option value="">Todos los meses</option></select></div>
@@ -1341,22 +1347,18 @@ function buildToneladasModel(pedDetRaw, impRaw, prof, spAll){
     g.filas.push(r);
   });
   const grupos = Object.values(porGrupo).map(g=>{
-    // Cierre automático: solo cuando la cantidad acumulada entregada cubre la cantidad pedida. Una entrega parcial
-    // no cierra el grupo por sí sola; permanece abierta hasta completar el saldo o cumplir la regla de inactividad.
     const ordenadas = g.filas.slice().sort((a,b)=>{
       const fa = a.fechaRealZarpe || a.fechaSeguimientoCantFinal || a.fechaProforma || 0;
       const fb = b.fechaRealZarpe || b.fechaSeguimientoCantFinal || b.fechaProforma || 0;
       return fa - fb;
     });
     const ultima = ordenadas[ordenadas.length-1];
+    const cerradoAutomatico = !!(ultima && ultima.cantidadEntregadaKg && ultima.cantidadEntregadaKg>0);
     const saldoKg = Math.max(0, g.cantidadPedidaKg - g.cantidadEntregadaKg);
-    const cerradoAutomatico = g.cantidadPedidaKg>0 && saldoKg<=0;
-    // La regla de 90 días aplica únicamente a pedidos con entrega parcial y saldo pendiente. Los pedidos sin
-    // ninguna entrega no se cierran por tiempo: solo salen del modelo cuando la fuente los marca como
-    // "Pedido Cancelado" (filtro global aplicado antes de agrupar).
+    // La inactividad de 90 días solo se evalúa si el pedido conserva saldo pendiente.
     const ultimoMovimiento = [ultima?.fechaRealProduccion, ultima?.fechaSeguimientoCantFinal, ultima?.fechaRealZarpe, ultima?.fechaProforma].filter(Boolean).sort((a,b)=>b-a)[0] || null;
     const diasSinMovimiento = ultimoMovimiento ? daysBetween(ultimoMovimiento, new Date()) : null;
-    const cerradoPorInactividad = !cerradoAutomatico && g.cantidadEntregadaKg>0 && saldoKg>0 && diasSinMovimiento!==null && diasSinMovimiento>=90;
+    const cerradoPorInactividad = !cerradoAutomatico && saldoKg>0 && diasSinMovimiento!==null && diasSinMovimiento>=90;
     const fechaCierrePorInactividad = cerradoPorInactividad ? addDays(ultimoMovimiento, 90) : null;
     return {...g, saldoKg, cerradoAutomatico, cerradoPorInactividad, fechaCierrePorInactividad, diasSinMovimiento, diferenciaKg: g.cantidadEntregadaKg - g.cantidadPedidaKg};
   });
@@ -2864,15 +2866,12 @@ function renderEtapaCumplimiento(prefix, datosCompletos, abiertos){
     const tonSaldoPendiente = conSaldo.reduce((a,o)=>a+(o.saldoKg||0),0)/1000;
     const pedidasCerradas = datos.reduce((a,o)=>a+(o.pedidoKg||0),0)/1000;
     const entregadasCerradas = datos.reduce((a,o)=>a+(o.entregadoKg||0),0)/1000;
-    const cerradosInactividad = datos.filter(o=>o.cerradoPorInactividad);
-    const tonNoEntregadasCierre = cerradosInactividad.reduce((a,o)=>a+(o.saldoKgNoEntregado||0),0)/1000;
     const pctCantidad = pedidasCerradas>0 ? Math.round(entregadasCerradas/pedidasCerradas*100) : null;
     const semCantidad = pctCantidad===null?'neutral':(pctCantidad>=98&&pctCantidad<=102?'ok':(pctCantidad>=95&&pctCantidad<=105?'warn':'bad'));
     document.getElementById('v11_produccion_abierta').innerHTML = `
       <div class="mini-kpi neutral"><span>Toneladas pedidas en producción</span><b>${fmtTonDirecto(tonPedidasEnProduccion)}</b><span>${sinEntrega.length} pedido(s) sin entrega</span></div>
       <div class="mini-kpi warn"><span>Saldo pendiente por entregar</span><b>${fmtTonDirecto(tonSaldoPendiente)}</b><span>${conSaldo.length} pedido(s) con entrega parcial</span></div>
       <div class="mini-kpi ${semCantidad}"><span>Cumplimiento de cantidad en cerrados</span><b>${pctCantidad!==null?pctCantidad+'%':'—'}</b><span>${fmtTonDirecto(entregadasCerradas)} de ${fmtTonDirecto(pedidasCerradas)}</span></div>
-      ${cerradosInactividad.length?`<div class="mini-kpi bad"><span>Saldo no entregado al cierre por inactividad</span><b>${fmtTonDirecto(tonNoEntregadasCierre)}</b><span>${cerradosInactividad.length} caso(s) con 90 días sin movimiento</span></div>`:''}
     `;
   }
 
@@ -3804,6 +3803,8 @@ function renderKPIs(){
   const valorEnProduccion = enProduccion.reduce((a,p)=>a+p.valorPedido,0);
   const tonPendienteParcial = conParcial.reduce((a,p)=>a+(p.saldoKg||0),0);
   const valorPendienteParcial = conParcial.reduce((a,p)=>a+p.saldoPendienteProyectos,0);
+  const tonCompletados = completados.reduce((a,p)=>a+(p.pedidoKg||0),0);
+  const valorCompletados = completados.reduce((a,p)=>a+p.valorPedido,0);
   const tonNavegando = navegando.reduce((a,s)=>a+(s.entregadoKg||0),0);
   const valorNavegando = navegandoValor.reduce((a,s)=>a+(s.valorFactura||0),0);
   const tonArribado = arribados.reduce((a,s)=>a+(s.pesoBrutoKg||s.entregadoKg||0),0);
@@ -3845,14 +3846,14 @@ function renderKPIs(){
   // que la diferencia quede clara en vez de asumir que son la misma cifra.
   const labelAnioArribados = anioSel==='todos' ? 'de pedidos (todos los años)' : `de pedidos ${anioSel}`;
   document.getElementById('kpiBar').innerHTML = `
-    <div class="kpi neutral"><div class="lab">Pedidos del período</div><div class="val">${pedidosAnio.length}</div><div class="sub"><b class="ton">${fmtTon(tonPedidosAnio)}</b> · ${fmt(valorPedidosAnio)}</div></div>
-    <div class="kpi neutral"><div class="lab">Entrado en ${anioArriboRef}</div><div class="val">${fmtTon(tonEntradoAnioCalendario)}</div><div class="sub">${fmt(valorEntradoAnioCalendario)} · todas las cohortes de pedido</div></div>
-    <div class="kpi neutral"><div class="lab">En Producción</div><div class="val">${enProduccion.length}</div><div class="sub"><b class="ton">${fmtTon(tonEnProduccion)}</b> · ${fmt(valorEnProduccion)}</div></div>
-    <div class="kpi warn"><div class="lab">Parcial Pendiente</div><div class="val">${conParcial.length}</div><div class="sub"><b class="ton">${fmtTon(tonPendienteParcial)}</b> · ${fmt(valorPendienteParcial)}</div></div>
-    <div class="kpi ok"><div class="lab">Completados</div><div class="val">${completados.length}</div><div class="sub">de ${pedidosAnio.length} del período</div></div>
-    <div class="kpi neutral"><div class="lab">Lead Time Ponderado</div><div class="val">${leadTimeProm?leadTimeProm+' d':'—'}</div><div class="sub">Pedido → Arribo</div></div>
-    <div class="kpi neutral"><div class="lab">Navegando</div><div class="val">${navegando.length}</div><div class="sub"><b class="ton">${fmtTon(tonNavegando)}</b> · ${fmt(valorNavegando)}</div></div>
-    <div class="kpi ok"><div class="lab">Arribado ${labelAnioArribados}</div><div class="val">${arribados.length}</div><div class="sub"><b class="ton">${fmtTon(tonArribado)}</b> · ${fmt(valorArribado)}</div></div>
+    <div class="kpi neutral"><div class="lab">Pedidos del período</div><div class="val">${fmtTon(tonPedidosAnio)}</div><div class="sub">${pedidosAnio.length} pedidos · ${fmt(valorPedidosAnio)}</div></div>
+    <div class="kpi neutral"><div class="lab">Entrado en ${anioArriboRef}</div><div class="val">${fmtTon(tonEntradoAnioCalendario)}</div><div class="sub">${arribadosAnioCalendario.length} proyectos · ${fmt(valorEntradoAnioCalendario)}</div></div>
+    <div class="kpi neutral"><div class="lab">En Producción</div><div class="val">${fmtTon(tonEnProduccion)}</div><div class="sub">${enProduccion.length} pedidos · ${fmt(valorEnProduccion)}</div></div>
+    <div class="kpi warn"><div class="lab">Parcial Pendiente</div><div class="val">${fmtTon(tonPendienteParcial)}</div><div class="sub">${conParcial.length} pedidos · ${fmt(valorPendienteParcial)}</div></div>
+    <div class="kpi ok"><div class="lab">Completados</div><div class="val">${fmtTon(tonCompletados)}</div><div class="sub">${completados.length} pedidos · ${fmt(valorCompletados)}</div></div>
+    <div class="kpi neutral"><div class="lab">Lead Time Ponderado</div><div class="val">${leadTimeProm?leadTimeProm+' d':'—'}</div><div class="sub">${leadTimePedidosAnio.length} pedidos · Pedido → Arribo</div></div>
+    <div class="kpi neutral"><div class="lab">Navegando</div><div class="val">${fmtTon(tonNavegando)}</div><div class="sub">${navegando.length} proyectos · ${fmt(valorNavegando)}</div></div>
+    <div class="kpi ok"><div class="lab">Arribado ${labelAnioArribados}</div><div class="val">${fmtTon(tonArribado)}</div><div class="sub">${arribados.length} proyectos · ${fmt(valorArribado)}</div></div>
   `;
 }
 
@@ -3902,11 +3903,7 @@ function buildCascadaCumplimiento(M){
     });
     const primera = ordenadas[0], ultima = ordenadas[ordenadas.length-1];
     if(!primera.fechaProforma || !(primera.diasEstimadosProduccion>0)) return;
-    if(!g.cerradoAutomatico && !g.cerradoPorInactividad) return;
-    // Si cerró por inactividad, el tiempo real termina al cumplirse los 90 días sin movimiento. Así el atraso
-    // y el faltante de toneladas quedan visibles en las métricas de cumplimiento.
-    const fechasProduccion = ordenadas.map(f=>f.fechaRealProduccion).filter(Boolean);
-    const fechaRealEfectiva = g.cerradoPorInactividad ? g.fechaCierrePorInactividad : (fechasProduccion.sort((a,b)=>b-a)[0]||null);
+    const fechaRealEfectiva = ultima.fechaRealProduccion || (g.cerradoPorInactividad ? g.fechaCierrePorInactividad : null);
     if(!fechaRealEfectiva) return;
     const realDias = daysBetween(primera.fechaProforma, fechaRealEfectiva);
     if(realDias===null || realDias<0) return;
@@ -3985,7 +3982,7 @@ function buildCascadaCumplimiento(M){
       return fa - fb;
     });
     const primera = ordenadas[0], ultima = ordenadas[ordenadas.length-1];
-    if(!primera.fechaProforma || !(primera.diasEstimadosProduccion>0) || g.cerradoAutomatico || g.cerradoPorInactividad) return;
+    if(!primera.fechaProforma || !(primera.diasEstimadosProduccion>0) || ultima.fechaRealProduccion) return;
     const transcurridos = daysBetween(primera.fechaProforma, HOY_ABIERTOS);
     if(transcurridos===null) return;
     const pedidoCod = M.ton.proformaToPedido[g.proforma];
@@ -4033,12 +4030,12 @@ function buildCascadaCumplimiento(M){
 
   const gruposAbiertosProduccion = M.ton.grupos.filter(g=>!g.cerradoAutomatico && !g.cerradoPorInactividad && g.saldoKg>0);
   const produccionAbierta = {
-    tonParcialPendiente: gruposAbiertosProduccion.filter(g=>g.cantidadEntregadaKg>0).reduce((a,g)=>a+g.saldoKg,0)/1000,
+    tonParcialPendiente: gruposAbiertosProduccion.filter(g=>g.cantidadEntregadaKg>0).reduce((a,g)=>a+g.saldoKg,0),
     nParcialPendiente: gruposAbiertosProduccion.filter(g=>g.cantidadEntregadaKg>0).length,
-    tonCeroEntregas: gruposAbiertosProduccion.filter(g=>g.cantidadEntregadaKg<=0).reduce((a,g)=>a+g.cantidadPedidaKg,0)/1000,
+    tonCeroEntregas: gruposAbiertosProduccion.filter(g=>g.cantidadEntregadaKg<=0).reduce((a,g)=>a+g.saldoKg,0),
     nCeroEntregas: gruposAbiertosProduccion.filter(g=>g.cantidadEntregadaKg<=0).length,
     nCerradosPorInactividad: M.ton.grupos.filter(g=>g.cerradoPorInactividad).length,
-    tonCerradaPorInactividad: M.ton.grupos.filter(g=>g.cerradoPorInactividad).reduce((a,g)=>a+g.saldoKg,0)/1000,
+    tonCerradaPorInactividad: M.ton.grupos.filter(g=>g.cerradoPorInactividad).reduce((a,g)=>a+g.saldoKg,0),
   };
 
   return { etapa1, etapa2, etapa3, etapa4, metaNacGlobalP80, abierto1, abierto2, abierto3, abierto4, produccionAbierta };
