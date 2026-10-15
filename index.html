@@ -294,9 +294,9 @@
       <div class="filters">
         <select id="f2_agrupa"><option value="pedido">Ver por: Proyecto en Producción</option><option value="mes">Ver por: Mes de Pedido</option></select>
         <select id="f2_orden"><option value="pedido">Ordenar por pedido</option><option value="mesPedido">Ordenar por mes de pedido</option></select>
-        <select id="f2_mes"><option value="">Todos los meses</option></select>
+        <select id="f2_anio"><option value="todos">Todos los años</option></select><select id="f2_mes"><option value="">Todos los meses</option></select>
         <select id="f2_estado"><option value="">Todos los estados ($)</option><option value="AL DÍA">Al día</option><option value="CON SALDOS PENDIENTES">Con saldos pendientes</option></select>
-        <select id="f2_estadoTon"><option value="">Todos los estados (ton.)</option><option value="EN PRODUCCIÓN">En producción</option><option value="CON ENTREGA PARCIAL">Con entrega parcial</option><option value="COMPLETADO">Completado</option></select>
+        <span id="f2_notaAnio" style="font-size:11.5px;color:var(--ink-soft);width:100%;"></span><select id="f2_estadoTon"><option value="">Todos los estados (ton.)</option><option value="EN PRODUCCIÓN">En producción</option><option value="CON ENTREGA PARCIAL">Con entrega parcial</option><option value="COMPLETADO">Completado</option></select>
         <select id="f2_cerrado"><option value="">Cerrados: todos</option><option value="SI">Solo cerrados (anticipo conciliado)</option><option value="NO">Excluir cerrados</option></select>
         <select id="f2_diferencia"><option value="">Diferencia de entrega: todas</option><option value="SI">Solo con diferencia relevante (&gt;5%)</option></select>
         <input id="f2_buscar" placeholder="Buscar pedido o proveedor...">
@@ -597,12 +597,15 @@
       <div class="scroll"><table id="tbl_v10_alertas"></table></div>
     </div>
     <div class="panel">
-      <h2>10.2b · Proyección de niveles de inventario (política de reposición 1.8×–2.5×)</h2>
+      <h2>10.2b · Niveles de inventario — histórico real y proyección (política de reposición 1.8×–2.5×)</h2>
       <div class="desc">Inventario con el que arrancaría cada mes (Ton. de bodega, sin tránsito ni producción), frente al mínimo/objetivo/máximo de reposición. <a href="#" id="v10_2b_link_metodologia" style="color:var(--navy);text-decoration:underline;">Ver metodología (cómo se calcula y por qué los meses más cercanos no siempre se pueden corregir) →</a></div>
       <div style="margin:8px 0;"><label style="font-size:12px;color:var(--ink-soft);margin-right:6px;">Ver:</label>
         <select id="f10_inventario_familia" style="padding:4px 8px;border-radius:6px;border:1px solid var(--line);">
           <option value="">General (4 familias)</option>
         </select>
+        <label style="font-size:12px;color:var(--ink-soft);margin:0 6px 0 14px;">Desde:</label><select id="f10_inv_desde" style="padding:4px 8px;border-radius:6px;border:1px solid var(--line);"></select>
+        <label style="font-size:12px;color:var(--ink-soft);margin:0 6px 0 10px;">Hasta:</label><select id="f10_inv_hasta" style="padding:4px 8px;border-radius:6px;border:1px solid var(--line);"></select>
+        <span style="font-size:11px;color:var(--ink-soft);margin-left:8px;">(elige un "Desde" anterior al mes actual para ver el histórico real)</span>
       </div>
       <div style="height:340px;"><canvas id="c_v10_inventario"></canvas></div>
       <div id="v10_inventarioNota" style="margin-top:10px;font-size:11.5px;color:var(--ink-soft);"></div>
@@ -677,6 +680,19 @@
       <div class="desc">Real = ya arribó físicamente. Confirmado en tránsito = ya zarpó, arribo estimado por navegación. Estimado = parciales pendientes + pedidos sin ningún envío, totalmente proyectado.</div>
       <div style="height:340px;"><canvas id="c_llegadasCerteza"></canvas></div>
     </div>
+    <div class="panel" id="v9_detalleProyectos">
+      <h2>9.1 · ¿Qué compone cada mes de llegada? — detalle por proyecto comex</h2>
+      <div class="desc">Las mismas Ton. de las dos gráficas de arriba, abiertas por proyecto comex (o parcial estimado), para contrastar un mes contra lo que Comex/Logística tiene en su control. <b>Arribó</b> = tiene fecha real de arribo. <b>Con zarpe</b> = ya zarpó, el arribo se estima con la navegación del país. <b>Sin zarpe</b> = parcial pendiente o pedido sin ningún envío: zarpe y arribo son estimados del modelo. El mes de llegada usa el mismo día de gabela de arriba.</div>
+      <div class="filters">
+        <select id="v91_familia"><option value="">Todas las familias</option></select>
+        <select id="v91_mes"><option value="">Todos los meses de llegada</option></select>
+        <select id="v91_estado"><option value="">Todos (con y sin zarpe)</option><option value="Arribó">Arribó</option><option value="Con zarpe">Con zarpe (en tránsito)</option><option value="concreto">Concreto (arribó + con zarpe)</option><option value="Sin zarpe">Sin zarpe (estimado)</option></select>
+        <input id="v91_buscar" placeholder="Buscar pedido, proyecto o proveedor...">
+        <button id="v91_descargar" type="button" style="background:var(--navy);color:#fff;border:none;border-radius:6px;padding:8px 14px;font-size:12px;cursor:pointer;">⬇ Descargar a Excel</button>
+      </div>
+      <div class="mini-kpis" id="v91_resumen"></div>
+      <div class="scroll" style="max-height:520px;"><table id="tbl_v91_detalle"></table></div>
+    </div>
     <div class="panel">
       <h2>1 · Confirmado (ya tiene zarpe o ya arribó) — lo más certero</h2>
       <div class="scroll"><table id="tbl_llegadas_confirmado"></table></div>
@@ -688,16 +704,6 @@
     <div class="panel">
       <h2>3 · Pedidos sin ningún parcial — proyección</h2>
       <div class="scroll"><table id="tbl_llegadas_sinparcial"></table></div>
-    </div>
-    <div class="panel">
-      <h2>3b · Detalle: de qué pedido madre viene cada llegada estimada</h2>
-      <div class="desc">Cada fila es un parcial proyectado (de Grupo A o Grupo B, Vista 4), repartido por Familia — para saber a qué pedido reclamarle si un arribo se atrasa.</div>
-      <div class="filters">
-        <input id="v9_buscar_pedido" placeholder="Buscar pedido, proveedor o proyecto...">
-        <select id="v9_filtro_familia"><option value="">Todas las familias</option></select>
-        <select id="v9_filtro_mes"><option value="">Todos los meses de llegada</option></select>
-      </div>
-      <div class="scroll"><table id="tbl_llegadas_detalle_pedido"></table></div>
     </div>
     <div class="panel">
       <h2>4 · Consolidado total (Cierto + Estimado) por mes y Familia</h2>
@@ -740,6 +746,17 @@
       <div class="scroll" style="max-height:420px;"><table id="tbl_v12_llegadas"></table></div>
       <h3 style="color:var(--navy);margin-top:18px;">Detalle de compras por mes y familia</h3>
       <div class="scroll" style="max-height:420px;"><table id="tbl_v12_compras"></table></div>
+    </div>
+    <div class="panel section-anchor" id="gestion_retrasados">
+      <h2>2 · Parciales que ya debieron zarpar — seguimiento con proveedores</h2>
+      <div class="desc">Parciales de pedidos ya colocados cuyo zarpe esperado ya pasó y todavía no aparecen como proyecto comex en Seguimiento de Proyectos. <b>Zarpe esperado</b> = fecha de pedido (o último BL) + los días típicos de ese proveedor; el tablero los re-proyecta desde hoy, por eso suman como "Ton. en riesgo de atraso". Las columnas del proveedor salen de Cuadro Pedidos. Puede ser un atraso real o un embarque ya hecho que falta registrar: en ambos casos hay una acción.</div>
+      <div class="filters">
+        <select id="vr_proveedor"><option value="">Todos los proveedores</option></select>
+        <select id="vr_familia"><option value="">Todas las familias</option></select>
+        <button id="vr_descargar" type="button" style="background:var(--navy);color:#fff;border:none;border-radius:6px;padding:8px 14px;font-size:12px;cursor:pointer;">⬇ Descargar a Excel</button>
+      </div>
+      <div class="mini-kpis" id="vr_resumen"></div>
+      <div class="scroll" style="max-height:480px;"><table id="tbl_vr_retrasados"></table></div>
     </div>
     <section id="gestion_tiempos">
     <div class="panel">
@@ -959,18 +976,33 @@ async function consultarEstadoMetas(){
 // Real de llegadas: TODO lo que tiene fecha real de arribo (Control de Importaciones), por familia del producto y mes de
 // disponibilidad (corte día 20). OJO: no se usa confirmadoReal de Vista 9 porque esa lista excluye pedidos colocados antes
 // del corte de datos confiables (1-nov-2025) — con eso ene-26 salía en 0 y feb/mar-26 muy por debajo de lo que llegó.
-function realLlegadasTon(M, mes, familia){
-  if(!M._llegRealPorMesFamilia){
+function diaGabelaActual(){ const el = document.getElementById('v9_gabela'); return parseInt((el&&el.value)||'20',10) || 20; }
+function realLlegadasTon(M, mes, familia, gabela){
+  gabela = gabela || 20;
+  M._llegRealCache = M._llegRealCache || {};
+  if(!M._llegRealCache[gabela]){
     const idx = {};
     M.ton.grupos.forEach(g=> g.filas.forEach(f=>{
       const imp = M.ton.porProyectoImport[f.nombreProyecto];
       if(!imp || !imp.fechaRealArribo) return;
-      const k = mesDisponibilidad(imp.fechaRealArribo, 20)+'|'+g.familia;
+      const k = mesDisponibilidad(imp.fechaRealArribo, gabela)+'|'+g.familia;
       idx[k] = (idx[k]||0) + (f.cantidadEntregadaKg||0)/1000;
     }));
-    M._llegRealPorMesFamilia = idx;
+    M._llegRealCache[gabela] = idx;
   }
-  return M._llegRealPorMesFamilia[mes+'|'+familia] || 0;
+  return M._llegRealCache[gabela][mes+'|'+familia] || 0;
+}
+// Venta REAL de un mes por juego de inventarios (Tanda 32, a pedido de Sebastián: la hoja PPTO es presupuesto en
+// todos los meses, también los pasados). Venta(m) = Inventario inicial real(m) + Entradas reales(m) − Inventario
+// inicial real(m+1). Entradas = llegadas con fecha real de arribo, asignadas al mes con el día de gabela (lo que
+// arriba después del día 20 entra al conteo del mes siguiente) — con gabela 20 la venta deducida queda mucho más
+// estable que por mes calendario (probado con los datos reales). null si falta alguno de los dos conteos.
+function ventaRealDeducidaTon(M, mes, familia, gabela){
+  const [y, m] = mes.split('-').map(Number), sig = monthKey(new Date(y, m, 1));
+  const a = M.inventarioInicialPorMes[mes] ? M.inventarioInicialPorMes[mes][familia] : null;
+  const b = M.inventarioInicialPorMes[sig] ? M.inventarioInicialPorMes[sig][familia] : null;
+  if(a===null || a===undefined || b===null || b===undefined) return null;
+  return a + realLlegadasTon(M, mes, familia, gabela) - b;
 }
 function realComprasTon(M, mes, familia){
   if(!M._tonPedidaPorMesFamilia){
@@ -2395,7 +2427,7 @@ function buildModel({profRaw, spRaw, pgRaw, gfRaw, nacRaw, pedDetRaw, impRaw, pp
         : addDays(zarpeAnterior, avgEntreParciales(p.proveedor, i, familiaPedidoA)||30); // i=1 → gap hacia el 2do parcial; i=2+ → gaps subsiguientes
       // Si el ZARPE pronosticado ya quedó en el pasado sin haberse confirmado en Seguimiento de Proyectos,
       // se marca RETRASADO y se re-ancla todo (zarpe, arribo, pago) a partir de HOY.
-      let retrasado = false;
+      let retrasado = false, zarpeModelo = zarpe;
       if(zarpe < HOY){ retrasado = true; zarpe = HOY; }
       const diasNav = diasNavegacionPedido(p.pedido)||45;
       const arribo = addDays(zarpe, diasNav);
@@ -2403,7 +2435,7 @@ function buildModel({profRaw, spRaw, pgRaw, gfRaw, nacRaw, pedDetRaw, impRaw, pp
         ? addDays(zarpe, condRep.dias)
         : addDays(zarpe, avgBlPago(p.proveedor)||15); // 'antes de embarque' o sin condición: no hay fecha de producción futura conocida, se usa respaldo estadístico
       if(pago < HOY) pago = HOY; // el pago nunca puede proyectarse en una fecha ya vencida
-      parciales.push({n:i+1, deN:n, fechaZarpeEstimada:zarpe, fechaArriboEstimada:arribo, fechaPagoEstimada:pago, valorEstimado:valorPorParcial, kgEstimado:kgPorParcial, retrasado});
+      parciales.push({n:i+1, deN:n, fechaZarpeEstimada:zarpe, fechaZarpeModelo:zarpeModelo, fechaArriboEstimada:arribo, fechaPagoEstimada:pago, valorEstimado:valorPorParcial, kgEstimado:kgPorParcial, retrasado});
       zarpeAnterior = zarpe;
     }
     return {...p, base:'sin_parcial', sinFechaBase:false, numParcialesEstimados:n,
@@ -2438,7 +2470,7 @@ function buildModel({profRaw, spRaw, pgRaw, gfRaw, nacRaw, pedDetRaw, impRaw, pp
     for(let i=0;i<nFaltan;i++){
       const posicion = p.nProyectosParciales + i; // posición del próximo gap a estimar (1=hacia el 2do parcial, 2+=subsiguientes)
       let zarpe = addDays(anchor, avgEntreParciales(p.proveedor, posicion, familiaPedidoB)||12);
-      let retrasado = false;
+      let retrasado = false, zarpeModelo = zarpe;
       if(zarpe < HOY){ retrasado = true; zarpe = HOY; }
       const diasNav = diasNavegacionPedido(p.pedido)||45;
       const arribo = addDays(zarpe, diasNav);
@@ -2446,7 +2478,7 @@ function buildModel({profRaw, spRaw, pgRaw, gfRaw, nacRaw, pedDetRaw, impRaw, pp
         ? addDays(zarpe, condRep.dias)
         : addDays(zarpe, avgBlPago(p.proveedor)||15);
       if(pago < HOY) pago = HOY; // el pago nunca puede proyectarse en una fecha ya vencida
-      parciales.push({n:p.nProyectosParciales+i+1, deN:p.nProyectosParciales+nFaltan, fechaZarpeEstimada:zarpe, fechaArriboEstimada:arribo, fechaPagoEstimada:pago, valorEstimado:valorPorParcial, kgEstimado:kgPorParcial, retrasado});
+      parciales.push({n:p.nProyectosParciales+i+1, deN:p.nProyectosParciales+nFaltan, fechaZarpeEstimada:zarpe, fechaZarpeModelo:zarpeModelo, fechaArriboEstimada:arribo, fechaPagoEstimada:pago, valorEstimado:valorPorParcial, kgEstimado:kgPorParcial, retrasado});
       anchor = zarpe;
     }
     return {...p, base:'parcial_incompleto', sinFechaBase:false, numParcialesFaltantes:nFaltan,
@@ -2700,6 +2732,12 @@ async function init(){
 }
 
 Chart.register(ChartDataLabels);
+// Tanda 31: ningún tooltip muestra más de 2 decimales (las gráficas con formato propio lo sobreescriben).
+Chart.defaults.plugins.tooltip.callbacks.label = function(ctx){
+  const v = ctx.parsed && typeof ctx.parsed === 'object' ? (ctx.parsed.y ?? ctx.parsed.r ?? ctx.raw) : ctx.raw;
+  const txt = typeof v === 'number' ? v.toLocaleString('en-US', {maximumFractionDigits:2}) : v;
+  return (ctx.dataset.label ? ctx.dataset.label+': ' : (ctx.label ? ctx.label+': ' : '')) + txt;
+};
 
 // ================= BITÁCORA MENSUAL (Meta congelada: Pedidos Sugeridos + Llegadas Proyectadas) =================
 // IMPORTANTE: reemplazar por la URL real una vez desplegado el Apps Script (ver Bitacora_AppsScript.gs).
@@ -2732,6 +2770,8 @@ function barChart(id, labels, datasets, opts={}, showLabels=false, formatter=nul
       }
     }};
   }
+  // Tanda 31: en gráficas de dinero (sin formatter propio) el tooltip muestra USD con 2 decimales, no el valor crudo.
+  const tooltipDinero = formatter ? {} : {callbacks:{label:ctx=> (ctx.raw===null||ctx.raw===undefined) ? null : `${ctx.dataset.label}: ${fmt(Number(ctx.raw))}`}};
   charts[id] = new Chart(document.getElementById(id), {
     type:'bar',
     data:{labels, datasets},
@@ -2739,8 +2779,11 @@ function barChart(id, labels, datasets, opts={}, showLabels=false, formatter=nul
       layout:{padding:{top:28}},
       interaction:{mode:'index', intersect:false},
       plugins:{
-        legend:{position:'bottom', labels:{font:{size:11}, boxWidth:10, boxHeight:10, usePointStyle:true, pointStyle:'rectRounded'}},
-        tooltip:{backgroundColor:'#16242F', padding:10, titleFont:{size:12,weight:600}, bodyFont:{size:11.5}, cornerRadius:4},
+        legend:{position:'bottom', labels:{font:{size:11}, boxWidth:10, boxHeight:10, usePointStyle:true, pointStyle:'rectRounded',
+          // líneas con puntos de semáforo: la leyenda usa el color de la línea, no el del primer punto
+          generateLabels: chart=>{ const items = Chart.defaults.plugins.legend.labels.generateLabels(chart);
+            items.forEach(it=>{ const ds = chart.data.datasets[it.datasetIndex]; if(ds && Array.isArray(ds.pointBackgroundColor)){ it.fillStyle = ds.borderColor; it.strokeStyle = ds.borderColor; } }); return items; }}},
+        tooltip:{backgroundColor:'#16242F', padding:10, titleFont:{size:12,weight:600}, bodyFont:{size:11.5}, cornerRadius:4, ...tooltipDinero},
         datalabels: showLabels ? {
           display: ctx => Math.abs(ctx.dataset.data[ctx.dataIndex]) > 0,
           color:'#16242F', font:{size:9.5, weight:600}, anchor:'end', align:'top', offset:2,
@@ -2796,12 +2839,12 @@ function renderTableroMando(){
 
   const cards = [
     {lab:'Caja 30 días', val:fmt(caja30), sub:'próximo mes', tipo:'neutral'},
-    {lab:'Ton. en riesgo de atraso', val:fmtTon(tonRetrasadas), sub:`${parcialesRetrasados.length} parcial(es) retrasado(s)`, tipo:parcialesRetrasados.length>0?'bad':'ok'},
+    {lab:'Ton. en riesgo de atraso ›', val:fmtTon(tonRetrasadas), sub:`${parcialesRetrasados.length} parcial(es) retrasado(s) · ver detalle`, tipo:parcialesRetrasados.length>0?'bad':'ok', ir:['v11','gestion_retrasados'], tip:'Parciales de pedidos ya colocados cuyo zarpe esperado ya pasó y no están registrados en Seguimiento de Proyectos. Clic para ver el detalle por pedido.'},
     {lab:'% del pipeline cierto', val:pctCierta+'%', sub:'vs. estimado (Vista 9)', tipo:pctCierta>=60?'ok':(pctCierta>=35?'warn':'bad')},
     {lab:'Giros vencen en 7 días', val:fmt(totalGiros7), sub:`${giros7dias.length} giro(s)`, tipo:giros7dias.length>0?'warn':'ok'},
   ];
   document.getElementById('tableroMando').innerHTML = `<div class="tablero-mando">` + cards.map(c=>
-    `<div class="tablero-card ${c.tipo}"><div class="tc-top"><span class="tc-dot"></span><span class="tc-lab">${c.lab}</span></div><div class="tc-val">${c.val}</div><div class="tc-sub">${c.sub}</div></div>`
+    `<div class="tablero-card ${c.tipo}"${c.ir?` style="cursor:pointer;" title="${c.tip||''}" onclick="irAVistaYSeccion('${c.ir[0]}','${c.ir[1]}')"`:''}><div class="tc-top"><span class="tc-dot"></span><span class="tc-lab">${c.lab}</span></div><div class="tc-val">${c.val}</div><div class="tc-sub">${c.sub}</div></div>`
   ).join('') + `</div>`;
 }
 
@@ -2814,7 +2857,7 @@ function renderBandejaAlertas(){
     ...M.grupoA.flatMap(p=>p.parciales.map(par=>({...par, pedido:p.pedido}))),
     ...M.grupoB.flatMap(p=>p.parciales.map(par=>({...par, pedido:p.pedido}))),
   ].filter(par=>par.retrasado);
-  if(parcialesRetrasados.length) alertas.push({tipo:'bad', badge:'RETRASADO', texto:`${parcialesRetrasados.length} parcial(es) proyectado(s) ya deberían haber zarpado y no están confirmados en Seguimiento de Proyectos.`, ir:'v4'});
+  if(parcialesRetrasados.length) alertas.push({tipo:'bad', badge:'RETRASADO', texto:`${parcialesRetrasados.length} parcial(es) proyectado(s) ya deberían haber zarpado y no están confirmados en Seguimiento de Proyectos. Ver detalle ›`, irSeccion:['v11','gestion_retrasados']});
 
   const giros7 = M.gfAbiertos.filter(g=>g.fechaVencimiento && daysBetween(new Date(), g.fechaVencimiento)>=0 && daysBetween(new Date(), g.fechaVencimiento)<=7);
   if(giros7.length) alertas.push({tipo:'warn', badge:'GIROS', texto:`${giros7.length} giro(s) financiero(s) vencen en los próximos 7 días (${fmt(giros7.reduce((a,g)=>a+g.saldoReal,0))}).`, ir:'v4'});
@@ -2829,7 +2872,7 @@ function renderBandejaAlertas(){
   if(!alertas.length){ div.className = 'bandeja-alertas vacia'; div.innerHTML=''; return; }
   div.className = 'bandeja-alertas';
   div.innerHTML = `<div class="bandeja-titulo">⚠ Necesita tu atención (${alertas.length})</div>` +
-    alertas.map(a=>`<div class="alerta-item ${a.tipo}"><span class="ai-badge">${a.badge}</span><span>${a.texto}</span></div>`).join('');
+    alertas.map(a=>`<div class="alerta-item ${a.tipo}"${a.irSeccion?` style="cursor:pointer;" onclick="irAVistaYSeccion('${a.irSeccion[0]}','${a.irSeccion[1]}')"`:''}><span class="ai-badge">${a.badge}</span><span>${a.texto}</span></div>`).join('');
 }
 
 // ================= VISTA 8 — ESTADÍSTICAS DEL MODELO =================
@@ -3168,10 +3211,13 @@ function renderView12(){
   // ---- Tendencia mensual ----
   function grafico(id, tipo){
     const pm = resumenPorMes(filasMetas(tipo, fFam));
+    // Semáforo por punto (Tanda 31): verde si cumple la regla de su indicador, rojo si no; gris = mes en curso o sin meta
+    const colPts = pm.map(x=>{ if(x.enCurso || !(x.conMeta && x.meta>0)) return COLORS.slate; return semaforoMeta(tipo, x.real/x.meta)==='ok' ? '#1F8A4C' : '#C0392B'; });
     barChart(id, pm.map(x=>fmtMesLabel(x.mes)+(x.enCurso?' (en curso)':'')), [
       {label:'Meta', data:pm.map(x=>x.conMeta?x.meta:null), backgroundColor:COLORS.mist},
       {label:'Real', data:pm.map(x=>x.conMeta?x.real:x.realTotal), backgroundColor:COLORS.navy},
-      {label:'% cumplimiento', type:'line', yAxisID:'y1', data:pm.map(x=>x.conMeta&&x.meta>0?Math.round(x.real/x.meta*100):null), borderColor:COLORS.gold, backgroundColor:COLORS.gold, borderWidth:2, pointRadius:3, fill:false, spanGaps:false},
+      {label:'% cumplimiento', type:'line', yAxisID:'y1', data:pm.map(x=>x.conMeta&&x.meta>0?Math.round(x.real/x.meta*100):null), borderColor:COLORS.slate, backgroundColor:COLORS.slate, borderWidth:1.5, pointRadius:6, pointHoverRadius:8, fill:false, spanGaps:false,
+        pointBackgroundColor:colPts, pointBorderColor:colPts},
     ], {scales:{y:{ticks:{callback:tonFmt}}, y1:{position:'right', min:0, grid:{display:false}, border:{display:false}, ticks:{callback:v=>v+'%', font:{size:10.5}}}},
         plugins:{datalabels:{display:false}, tooltip:{callbacks:{label:ctx=> ctx.dataset.yAxisID==='y1' ? `% cumplimiento: ${ctx.raw}%` : `${ctx.dataset.label}: ${tonFmt(ctx.raw)} Ton`}}}}, false, tonFmt, false);
   }
@@ -3182,7 +3228,68 @@ function renderView12(){
   renderTablaMetas('tbl_v12_compras', 'compras', fFam||null);
 }
 
+// Parciales que ya debieron zarpar (Tanda 32): mismo criterio que la tarjeta "Ton. en riesgo de atraso".
+function filasParcialesRetrasados(M){
+  const fechaPorProforma = {};
+  M.ton.grupos.forEach(g=>{
+    const ped = M.ton.proformaToPedido[g.proforma]; if(!ped) return;
+    const o = fechaPorProforma[ped] = fechaPorProforma[ped] || {zarpeProv:null, prodProv:null, obs:'', familias:{}};
+    o.familias[g.familia] = (o.familias[g.familia]||0) + (g.saldoKg||0);
+    g.filas.filter(f=>!f.fechaRealZarpe).forEach(f=>{
+      if(f.fechaEstimadaZarpe && (!o.zarpeProv || f.fechaEstimadaZarpe>o.zarpeProv)) o.zarpeProv = f.fechaEstimadaZarpe;
+      if(f.fechaEstimadaProduccion && (!o.prodProv || f.fechaEstimadaProduccion>o.prodProv)) o.prodProv = f.fechaEstimadaProduccion;
+      if(f.clasificacionObservaciones) o.obs = f.clasificacionObservaciones;
+    });
+  });
+  const hoy = new Date();
+  const out = [];
+  [['A', M.grupoA], ['B', M.grupoB]].forEach(([grp, lista])=> lista.forEach(p=> (p.parciales||[]).filter(x=>x.retrasado).forEach(x=>{
+    const info = fechaPorProforma[p.pedido] || {familias:{}};
+    const fams = Object.entries(info.familias).filter(([,kg])=>kg>0).sort((a,b)=>b[1]-a[1]).map(([f])=>f);
+    const dias = Math.round(daysBetween(x.fechaZarpeModelo, hoy));
+    let accion;
+    if(info.zarpeProv && info.zarpeProv >= hoy) accion = `Proveedor reporta zarpe el ${fmtDate(info.zarpeProv)}: confirmar booking y registrar el proyecto comex al zarpar`;
+    else if(info.zarpeProv) accion = `La fecha de zarpe del proveedor (${fmtDate(info.zarpeProv)}) ya venció: pedir nueva fecha comprometida`;
+    else accion = 'Sin fecha de zarpe del proveedor en Cuadro Pedidos: solicitar fecha de producción y zarpe';
+    out.push({pedido:p.pedido, proveedor:p.proveedor||'—', familia: fams[0]||'—', familias: fams, tipo: grp==='A'?'Sin ningún envío':'Parcial pendiente', parcial:`${x.n}/${x.deN}`,
+      kg:x.kgEstimado||0, fechaPedido:p.fechaPedido, zarpeModelo:x.fechaZarpeModelo, dias, zarpeProv:info.zarpeProv||null, prodProv:info.prodProv||null, obs:info.obs||'', accion});
+  })));
+  return out.sort((a,b)=>b.dias-a.dias);
+}
+function renderParcialesRetrasados(){
+  const M = MODEL, todas = filasParcialesRetrasados(M);
+  const selP = document.getElementById('vr_proveedor'), selF = document.getElementById('vr_familia');
+  const prevP = selP.value, prevF = selF.value;
+  const provs = [...new Set(todas.map(r=>r.proveedor))].sort();
+  selP.innerHTML = '<option value="">Todos los proveedores</option>' + provs.map(v=>`<option value="${v}">${v}</option>`).join(''); if(provs.includes(prevP)) selP.value = prevP;
+  selF.innerHTML = '<option value="">Todas las familias</option>' + FAMILIAS_ORDEN.map(v=>`<option value="${v}">${v}</option>`).join(''); selF.value = prevF;
+  const filas = todas.filter(r=>(!selP.value||r.proveedor===selP.value) && (!selF.value||r.familias.includes(selF.value)));
+  const ton = filas.reduce((a,r)=>a+r.kg,0);
+  document.getElementById('vr_resumen').innerHTML =
+    `<div class="mini-kpi bad"><span>Ton. en riesgo de atraso</span><b>${fmtTon(ton)}</b></div>`+
+    `<div class="mini-kpi"><span>Parciales / pedidos</span><b>${filas.length} / ${new Set(filas.map(r=>r.pedido)).size}</b></div>`+
+    `<div class="mini-kpi"><span>Proveedores</span><b>${new Set(filas.map(r=>r.proveedor)).size}</b></div>`+
+    `<div class="mini-kpi warn"><span>Atraso máximo</span><b>${filas.length?filas[0].dias+' d':'—'}</b></div>`;
+  let h = '<tr><th>Pedido</th><th>Proveedor</th><th>Familia</th><th>Tipo</th><th>Parcial</th><th>Ton.</th><th>Fecha pedido</th><th>Zarpe esperado (modelo)</th><th>Días de atraso</th><th>Zarpe estimado proveedor</th><th>Producción estimada proveedor</th><th>Observación (Cuadro Pedidos)</th><th>Acción sugerida</th></tr>';
+  filas.forEach(r=>{
+    h += `<tr class="${r.dias>30?'row-bad':''}"><td class="txt"><b>${r.pedido}</b></td><td class="txt">${r.proveedor}</td><td class="txt">${r.familias.join(', ')||'—'}</td><td class="txt">${r.tipo}</td><td>${r.parcial}</td><td>${fmtTon(r.kg)}</td>`+
+      `<td>${fmtDate(r.fechaPedido)}</td><td>${fmtDate(r.zarpeModelo)}</td><td><span class="pill ${r.dias>30?'bad':'warn'}">${r.dias} d</span></td><td>${fmtDate(r.zarpeProv)}</td><td>${fmtDate(r.prodProv)}</td>`+
+      `<td class="txt" style="font-size:11px;">${r.obs||'—'}</td><td class="txt" style="font-size:11px;">${r.accion}</td></tr>`;
+  });
+  if(!filas.length) h += '<tr><td class="txt" colspan="13" style="color:var(--ink-soft);">No hay parciales retrasados con este filtro.</td></tr>';
+  else h += `<tr style="background:var(--paper);font-weight:700;"><td class="txt" colspan="5">TOTAL</td><td>${fmtTon(ton)}</td><td colspan="7"></td></tr>`;
+  document.getElementById('tbl_vr_retrasados').innerHTML = h;
+  selP.onchange = renderParcialesRetrasados; selF.onchange = renderParcialesRetrasados;
+  document.getElementById('vr_descargar').onclick = ()=>{
+    const aoa = [['Pedido','Proveedor','Familia','Tipo','Parcial','Ton','Fecha pedido','Zarpe esperado (modelo)','Días de atraso','Zarpe estimado proveedor','Producción estimada proveedor','Observación','Acción sugerida']];
+    filas.forEach(r=> aoa.push([r.pedido, r.proveedor, r.familias.join(', '), r.tipo, r.parcial, Number((r.kg/1000).toFixed(2)), fmtDate(r.fechaPedido), fmtDate(r.zarpeModelo), r.dias, fmtDate(r.zarpeProv), fmtDate(r.prodProv), r.obs, r.accion]));
+    const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(aoa), 'Parciales retrasados');
+    XLSX.writeFile(wb, `Parciales_retrasados_${fmtDate(new Date())}.xlsx`);
+  };
+}
+
 function renderView11(){
+  renderParcialesRetrasados();
   const M = MODEL;
   const C = M._cascadaCache || (M._cascadaCache = buildCascadaCumplimiento(M));
 
@@ -3205,8 +3312,9 @@ function renderView11(){
   const totalAbiertosRiesgo = (r1.nAbiertosRiesgo||0)+(r2.nAbiertosRiesgo||0)+(r3.nAbiertosRiesgo||0)+(r4.nAbiertosRiesgo||0);
   document.getElementById('v11_resumenGlobal').innerHTML = `
     <div class="mini-kpi ${semGlobal}"><span>% Cumplimiento del Proceso (Pedido→Levante)</span><b>${pctGlobal!==null?pctGlobal+'%':'—'}</b></div>
-    <div class="mini-kpi"><span>Días Reales Totales (suma de las 4 etapas)</span><b>${Math.round((r1.realProm||0)+(r2.realProm||0)+(r3.realProm||0)+(r4.realProm||0))} d</b></div>
-    <div class="mini-kpi"><span>Meta Total</span><b>${Math.round((r1.metaProm||0)+(r2.metaProm||0)+(r3.metaProm||0)+(r4.metaProm||0))} d</b></div>
+    <div class="mini-kpi"><span>Ciclo Pedido → Levante (suma de las 4 etapas)</span><b>${Math.round((r1.realProm||0)+(r2.realProm||0)+(r3.realProm||0)+(r4.realProm||0))} d</b><span>mismo número del encabezado y del Resumen</span></div>
+    <div class="mini-kpi"><span>Meta total</span><b>${Math.round((r1.metaProm||0)+(r2.metaProm||0)+(r3.metaProm||0)+(r4.metaProm||0))} d</b></div>
+    <div class="mini-kpi"><span>Tiempo a arribo por Kg (motor de compras)</span><b>${leadTimeTablero(M).dias?Math.round(leadTimeTablero(M).dias)+' d':'—'}</b><span>días promedio en que llega cada Ton pedida: es el que se usa para fechar los pedidos sugeridos</span></div>
     <div class="mini-kpi ${semCuello}"><span>Etapa con mayor desviación</span><b>${cuello?cuello.n:'—'}</b><span>${cuello?Math.round(cuello.r.realProm-cuello.r.metaProm)+' d vs. meta':'Sin dato'}</span></div>
     <div class="mini-kpi ${totalAbiertosRiesgo>0?'warn':'ok'}"><span>Abiertos en riesgo (todas las etapas)</span><b>${totalAbiertosRiesgo}</b></div>
   `;
@@ -3238,6 +3346,83 @@ function renderView11(){
   });
 }
 
+// 9.1 · Detalle por proyecto comex de las llegadas de un mes (Tanda 31, a pedido de Sebastián: la analista ve en la
+// gráfica que en noviembre llegan X Ton. y necesita contrastarlo proyecto por proyecto). Agrupa por proyecto comex
+// (o pedido + parcial estimado) y familia. Los filtros se pueden fijar desde 10.2b (clic en una barra gris).
+let V91_DATOS = [];
+function renderDetalleProyectosLlegada(confirmadoReal, confirmadoTransito, estimadoTodo){
+  const grupos = {};
+  function sumar(lista, estado){
+    lista.forEach(it=>{
+      const ref = estado==='Sin zarpe' ? `${it.pedido||'—'} · parcial ${it.parcial||'—'} (${it.tipo==='Sin parcial'?'pedido sin envíos':'parcial pendiente'})` : (it.proyecto||'—');
+      const k = [estado, it.mesDisp, it.familia, it.pedido||'', ref].join('|');
+      const g = grupos[k] = grupos[k] || {estado, mes:it.mesDisp, familia:it.familia, proveedor:it.proveedor||'—', pedido:it.pedido||'—', ref, fechaZarpe:it.fechaZarpe||null, fechaArribo:it.fechaArribo||null, kg:0};
+      g.kg += it.kg||0;
+      if(it.fechaArribo && (!g.fechaArribo || it.fechaArribo>g.fechaArribo)) g.fechaArribo = it.fechaArribo;
+      if(it.fechaZarpe && (!g.fechaZarpe || it.fechaZarpe<g.fechaZarpe)) g.fechaZarpe = it.fechaZarpe;
+    });
+  }
+  sumar(confirmadoReal, 'Arribó'); sumar(confirmadoTransito, 'Con zarpe'); sumar(estimadoTodo, 'Sin zarpe');
+  V91_DATOS = Object.values(grupos).filter(g=>g.mes && g.kg>0.5);
+  const selF = document.getElementById('v91_familia'), selM = document.getElementById('v91_mes');
+  if(!selF.dataset.poblado){ selF.innerHTML += FAMILIAS_ORDEN.map(f=>`<option value="${f}">${f}</option>`).join(''); selF.dataset.poblado='1'; }
+  const previo = selM.value, meses = [...new Set(V91_DATOS.map(g=>g.mes))].sort();
+  selM.innerHTML = '<option value="">Todos los meses de llegada</option>' + meses.map(m=>`<option value="${m}">${fmtMesLabel(m)}</option>`).join('');
+  if(meses.includes(previo)) selM.value = previo;
+  ['v91_familia','v91_mes','v91_estado'].forEach(id=> document.getElementById(id).onchange = pintarDetalleProyectosLlegada);
+  document.getElementById('v91_buscar').oninput = pintarDetalleProyectosLlegada;
+  document.getElementById('v91_descargar').onclick = ()=>{
+    const filas = filtrarV91();
+    const aoa = [['Mes de llegada','Estado','Familia','Proveedor','Pedido','Proyecto comex / parcial','Fecha zarpe','Fecha arribo','Ton']];
+    filas.forEach(g=> aoa.push([fmtMesLabel(g.mes), g.estado, g.familia, g.proveedor, g.pedido, g.ref, fmtDate(g.fechaZarpe), fmtDate(g.fechaArribo), Number((g.kg/1000).toFixed(2))]));
+    const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(aoa), 'Detalle llegadas');
+    XLSX.writeFile(wb, `Detalle_llegadas_por_proyecto_${fmtDate(new Date())}.xlsx`);
+  };
+  pintarDetalleProyectosLlegada();
+}
+function filtrarV91(){
+  const fF = document.getElementById('v91_familia').value, fM = document.getElementById('v91_mes').value, fE = document.getElementById('v91_estado').value;
+  const q = (document.getElementById('v91_buscar').value||'').toLowerCase();
+  const orden = {'Arribó':0,'Con zarpe':1,'Sin zarpe':2};
+  return V91_DATOS.filter(g=>(!fF||g.familia===fF) && (!fM||g.mes===fM) &&
+      (!fE || (fE==='concreto' ? g.estado!=='Sin zarpe' : g.estado===fE)) &&
+      (!q || [g.pedido,g.ref,g.proveedor].some(x=>String(x).toLowerCase().includes(q))))
+    .sort((a,b)=> a.mes.localeCompare(b.mes) || orden[a.estado]-orden[b.estado] || (a.fechaArribo||0)-(b.fechaArribo||0));
+}
+function pintarDetalleProyectosLlegada(){
+  const filas = filtrarV91();
+  const tot = e => filas.filter(g=>!e || g.estado===e).reduce((a,g)=>a+g.kg,0);
+  document.getElementById('v91_resumen').innerHTML =
+    `<div class="mini-kpi"><span>Total (filtro actual)</span><b>${fmtTon(tot())}</b></div>`+
+    `<div class="mini-kpi ok"><span>Arribó</span><b>${fmtTon(tot('Arribó'))}</b></div>`+
+    `<div class="mini-kpi"><span>Con zarpe (en tránsito)</span><b>${fmtTon(tot('Con zarpe'))}</b></div>`+
+    `<div class="mini-kpi warn"><span>Sin zarpe (estimado)</span><b>${fmtTon(tot('Sin zarpe'))}</b></div>`;
+  let h = '<tr><th>Mes de llegada</th><th>Estado</th><th>Familia</th><th>Proveedor</th><th>Pedido</th><th>Proyecto comex / parcial</th><th>Fecha zarpe</th><th>Fecha arribo</th><th>Ton.</th></tr>';
+  let mesPrev = null;
+  const pill = {'Arribó':'ok','Con zarpe':'','Sin zarpe':'warn'};
+  filas.forEach(g=>{
+    if(g.mes!==mesPrev){
+      const delMes = filas.filter(x=>x.mes===g.mes), t = e=>delMes.filter(x=>!e||x.estado===e).reduce((a,x)=>a+x.kg,0);
+      h += `<tr style="background:var(--paper);"><td class="txt" colspan="8" style="font-weight:700;color:var(--navy);">${fmtMesLabel(g.mes)} — arribó ${fmtTon(t('Arribó'))} · con zarpe ${fmtTon(t('Con zarpe'))} · sin zarpe ${fmtTon(t('Sin zarpe'))}</td><td style="font-weight:700;">${fmtTon(t())}</td></tr>`;
+      mesPrev = g.mes;
+    }
+    const est = g.estado!=='Arribó';
+    h += `<tr><td class="txt">${fmtMesLabel(g.mes)}</td><td><span class="pill ${pill[g.estado]}">${g.estado}</span></td><td class="txt">${g.familia}</td><td class="txt">${g.proveedor}</td><td class="txt">${g.pedido}</td><td class="txt" style="font-size:11.5px;">${g.ref}</td>`+
+      `<td>${fmtDate(g.fechaZarpe)}${g.estado==='Sin zarpe'?' <span class="pill warn">estimada</span>':''}</td><td>${fmtDate(g.fechaArribo)}${est?' <span class="pill warn">estimada</span>':''}</td><td>${fmtTon(g.kg)}</td></tr>`;
+  });
+  h += `<tr style="background:var(--paper);font-weight:700;"><td class="txt" colspan="8">TOTAL</td><td>${fmtTon(tot())}</td></tr>`;
+  document.getElementById('tbl_v91_detalle').innerHTML = h;
+}
+// Desde 10.2b: lleva al detalle 9.1 con el mes y la familia de la barra clicada.
+function irADetalleLlegadas(mes, familia){
+  const selM = document.getElementById('v91_mes'), selF = document.getElementById('v91_familia');
+  if(selM && [...selM.options].some(o=>o.value===mes)) selM.value = mes;
+  if(selF) selF.value = familia||'';
+  const selE = document.getElementById('v91_estado'); if(selE) selE.value = '';
+  pintarDetalleProyectosLlegada();
+  const el = document.getElementById('v9_detalleProyectos'); if(el) el.scrollIntoView({behavior:'smooth', block:'start'});
+}
+
 function renderView9(){
   const M = MODEL;
   const diaGabela = parseInt(document.getElementById('v9_gabela').value||'20',10);
@@ -3261,38 +3446,9 @@ function renderView9(){
   const tSinParcial = tablaMesFamilia(sinParcial, FAMILIAS_ORDEN);
   document.getElementById('tbl_llegadas_sinparcial').innerHTML = tSinParcial.html;
 
-  // 3b: detalle de cada llegada estimada, con su pedido madre (para trazabilidad operativa)
-  const selFamiliaV9 = document.getElementById('v9_filtro_familia');
-  if(!selFamiliaV9.dataset.poblado){
-    selFamiliaV9.innerHTML = '<option value="">Todas las familias</option>' + FAMILIAS_ORDEN.map(f=>`<option value="${f}">${f}</option>`).join('');
-    selFamiliaV9.dataset.poblado = '1';
-    selFamiliaV9.onchange = renderDetallePedido;
-  }
-  const selMesV9 = document.getElementById('v9_filtro_mes');
-  if(!selMesV9.dataset.poblado){
-    const mesesDisponiblesV9 = [...new Set(estimadoTodo.map(it=>it.mesDisp).filter(Boolean))].sort();
-    selMesV9.innerHTML = '<option value="">Todos los meses de llegada</option>' + mesesDisponiblesV9.map(m=>`<option value="${m}">${fmtMesLabel(m)}</option>`).join('');
-    selMesV9.dataset.poblado = '1';
-    selMesV9.onchange = renderDetallePedido;
-  }
-  function renderDetallePedido(){
-    const q = (document.getElementById('v9_buscar_pedido').value||'').toLowerCase();
-    const fFamilia = selFamiliaV9.value;
-    const fMes = selMesV9.value;
-    const filas = estimadoTodo.filter(it=>(!q || (it.pedido||'').toLowerCase().includes(q) || (it.proveedor||'').toLowerCase().includes(q))
-        && (!fFamilia || it.familia===fFamilia) && (!fMes || it.mesDisp===fMes))
-      .sort((a,b)=>(a.fechaArribo||0)-(b.fechaArribo||0));
-    let htmlDet = '<tr><th>Pedido Madre</th><th>Proveedor</th><th>Tipo</th><th>Parcial</th><th>Familia</th><th>Ton. Estimadas</th><th>Fecha Arribo Estimada</th><th>Mes Disponible</th></tr>';
-    filas.forEach(it=>{
-      htmlDet += `<tr class="${it.tipo==='Parcial pendiente'?'':'row-bad'}"><td class="txt">${it.pedido||'—'}</td><td class="txt">${it.proveedor||'—'}</td>
-        <td class="txt">${it.tipo}</td><td>${it.parcial||'—'}</td><td class="txt">${it.familia}</td><td>${fmtTon(it.kg)}</td>
-        <td>${fmtDate(it.fechaArribo)}</td><td>${fmtMesLabel(it.mesDisp)}</td></tr>`;
-    });
-    htmlDet += `<tr style="background:var(--paper);font-weight:700;"><td class="txt" colspan="7">TOTAL</td><td>${fmtTon(filas.reduce((a,it)=>a+it.kg,0))}</td></tr>`;
-    document.getElementById('tbl_llegadas_detalle_pedido').innerHTML = htmlDet;
-  }
-  document.getElementById('v9_buscar_pedido').oninput = renderDetallePedido;
-  renderDetallePedido();
+  // 9.1: detalle por proyecto comex / parcial de lo que compone cada mes de llegada (reemplaza la antigua tabla 3b,
+  // que solo mostraba lo estimado). Sale de las MISMAS listas que las gráficas, así que los totales cuadran con ellas.
+  renderDetalleProyectosLlegada(confirmadoReal, confirmadoTransito, estimadoTodo);
 
   // 4: consolidado (2 filas por mes: CIERTO y ESTIMADO, + fila de total)
   const mesesTodos = [...new Set([...cierto, ...estimadoTodo].map(it=>it.mesDisp).filter(Boolean))].sort();
@@ -3369,6 +3525,18 @@ function renderView9(){
 }
 
 // ================= VISTA 10 · PEDIDOS NUEVOS PROYECTADOS =================
+// Lead time ÚNICO del Tablero (Tanda 31): Pedido→Arribo, promedio ponderado por los Kg llegados de cada pedido y por
+// recencia, sobre todos los pedidos con llegada real. Es el mismo número que usa el motor de compras (respaldo global de
+// leadTimePromedioProveedorConRespaldo). Lo muestran el encabezado, el Resumen Gerencial y Gestión del Ciclo — una sola fuente.
+function leadTimeTablero(M){ return {dias: M.GLOBAL_leadTimePromedio, n: (M.leadTimePorPedidoArr||[]).length}; }
+// Ciclo completo Pedido→Levante (Tanda 32, a pedido de Sebastián): suma de las 4 etapas, cada una ponderada por Ton.
+// Es el número de gestión que muestran el encabezado, el Resumen y Gestión del Ciclo (una sola función).
+function cicloPorEtapas(M){
+  const C = M._cascadaCache || (M._cascadaCache = buildCascadaCumplimiento(M));
+  const et = [C.etapa1, C.etapa2, C.etapa3, C.etapa4];
+  const real = et.map(d=>promedioPonderadoGenerico(d,'realDias','peso')||0), meta = et.map(d=>promedioPonderadoGenerico(d,'metaDias','peso')||0);
+  return {real: real.reduce((a,b)=>a+b,0), meta: meta.reduce((a,b)=>a+b,0), etapasReal: real, etapasMeta: meta};
+}
 const fmtTonDirecto = t => t===null||t===undefined ? '—' : t.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2}) + ' Ton'; // 't' YA está en toneladas (PPTO, gaps) — no dividir de nuevo por 1000 como hace fmtTon() con los kg del resto del Tablero
 function renderView10(){
   // Tanda 28 (14-oct-2026): reescrito junto con el motor (planeación hacia atrás por mes de llegada). Todo lo que se
@@ -3410,36 +3578,91 @@ function renderView10(){
     pintarAlertas();
   } else alertasPanel.style.display = 'none';
 
-  // ---- 10.2b Proyección de niveles de inventario (lee directo R.inventarioPorMes) ----
+  // ---- 10.2b Niveles de inventario: histórico real + proyección (Tanda 31) ----
+  // Meses pasados (antes del mes en curso): inventario inicial = conteo físico real (hoja PPTO, INV INICIAL), entradas
+  // = llegadas reales (fecha real de arribo, corte día 20), salidas = venta del mes de la hoja PPTO (real en meses
+  // cerrados), y "Diferencia vs. conteo" = inventario real del mes siguiente − (inicio + entradas − venta): lo que el
+  // kardex no explica (exactitud de inventario, compras locales, producción, reclasificaciones o datos tardíos).
+  // Mes en curso y siguientes: exactamente los mismos números del motor (R.inventarioPorMes), sin recalcular.
   const selFamInv = document.getElementById('f10_inventario_familia');
   if(!selFamInv.dataset.poblado){
     FAMILIAS_ORDEN.forEach(fam=> selFamInv.innerHTML += `<option value="${fam}">${fam}</option>`);
     selFamInv.dataset.poblado = '1';
   }
-  selFamInv.onchange = renderInventarioConsolidado;
+  const mesHoyInv = monthKey(new Date());
+  const mesesConInvReal = Object.keys(M.inventarioInicialPorMes||{}).filter(m=>m<mesHoyInv && M.pptoPorMes[m]).sort();
+  const mesesInvTodos = [...mesesConInvReal, ...mesesHorizonte];
+  const selDesde = document.getElementById('f10_inv_desde'), selHasta = document.getElementById('f10_inv_hasta');
+  const desdePrev = selDesde.value, hastaPrev = selHasta.value;
+  selDesde.innerHTML = mesesInvTodos.map(m=>`<option value="${m}">${fmtMesLabel(m)}</option>`).join('');
+  selHasta.innerHTML = selDesde.innerHTML;
+  selDesde.value = mesesInvTodos.includes(desdePrev) ? desdePrev : mesHoyInv;
+  selHasta.value = mesesInvTodos.includes(hastaPrev) ? hastaPrev : mesesHorizonte[mesesHorizonte.length-1];
+  [selFamInv, selDesde, selHasta].forEach(el=> el.onchange = renderInventarioConsolidado);
+  function filaHistorica(m, familias){
+    const g = diaGabelaActual();
+    let invInicio=0, entradas=0, venta=0, ppto=0, faltaInv=false, faltaVenta=false;
+    familias.forEach(f=>{
+      const inv = M.inventarioInicialPorMes[m] ? M.inventarioInicialPorMes[m][f] : null;
+      if(inv===null || inv===undefined){ faltaInv = true; return; }
+      const v = ventaRealDeducidaTon(M, m, f, g);
+      invInicio += inv; entradas += realLlegadasTon(M, m, f, g); ppto += (M.pptoPorMes[m]||{})[f]||0;
+      if(v===null) faltaVenta = true; else venta += v;
+    });
+    const base = ppto; // Tanda 33: la banda siempre contra el PPTO (la meta de abastecimiento); la venta real se contrasta en el tooltip
+    return {mes:m, historico:true, invInicio: faltaInv?null:invInicio, real:entradas, ya:0, nuevo:0, venta: faltaVenta?null:venta, ppto,
+      min:BANDA_INVENTARIO_MIN*base, obj:BANDA_INVENTARIO_OBJETIVO*base, max:BANDA_INVENTARIO_MAX*base};
+  }
   function renderInventarioConsolidado(){
     const filtroFam = selFamInv.value;
     const familias = filtroFam ? [filtroFam] : FAMILIAS_ORDEN;
-    const filas = mesesHorizonte.map(m=>{
+    let desde = selDesde.value, hasta = selHasta.value; if(desde>hasta){ const t=desde; desde=hasta; hasta=t; }
+    const filas = mesesInvTodos.filter(m=>m>=desde && m<=hasta).map(m=>{
+      if(m < mesHoyInv) return filaHistorica(m, familias);
       const xs = R.inventarioPorMes.filter(x=>x.mes===m && familias.includes(x.familia));
       if(!xs.length) return null;
       const s = k => xs.reduce((a,x)=>a+(x[k]||0),0);
-      return {mes:m, invInicio:s('invInicial'), ya:s('llegaYaPedidoTon'), nuevo:s('llegaNuevoTon'), venta:s('ventaMes'), min:s('bandaMin'), obj:s('bandaObjetivo'), max:s('bandaMax'), real: xs.some(x=>x.esReal)};
+      return {mes:m, historico:false, invInicio:s('invInicial'), real:0, ya:s('llegaYaPedidoTon'), nuevo:s('llegaNuevoTon'), venta:s('ventaMes'), min:s('bandaMin'), obj:s('bandaObjetivo'), max:s('bandaMax'), dif:null, esReal: xs.some(x=>x.esReal)};
     }).filter(Boolean);
-    barChart('c_v10_inventario', filas.map(f=>fmtMesLabel(f.mes)), [
-      {label:'Llegadas de lo ya pedido', type:'bar', data:filas.map(f=>f.ya), backgroundColor:COLORS.mist, stack:'mov'},
-      {label:'Llegadas de pedidos nuevos (10.3)', type:'bar', data:filas.map(f=>f.nuevo), backgroundColor:COLORS.gold, stack:'mov'},
-      {label:'Salidas por venta (PPTO)', type:'bar', data:filas.map(f=>-f.venta), backgroundColor:COLORS.red, stack:'mov'},
-      {label:'Inventario al inicio del mes', type:'line', data:filas.map(f=>f.invInicio), borderColor:COLORS.navy, backgroundColor:COLORS.navy, borderWidth:2.5, pointRadius:3, pointBackgroundColor:COLORS.navy, tension:0.15, fill:false, order:0, stack:'l_inv'},
+    const enRango = f => f.invInicio!==null && f.invInicio >= f.min - 1e-6 && f.invInicio <= f.max + 1e-6;
+    const colorPunto = filas.map(f=> f.invInicio===null ? COLORS.slate : (enRango(f) ? '#1F8A4C' : '#C0392B'));
+    const hayHist = filas.some(f=>f.historico);
+    const datasets = [];
+    if(hayHist) datasets.push({label:'Llegadas reales (histórico)', type:'bar', data:filas.map(f=>f.historico?f.real:0), backgroundColor:COLORS.steel, stack:'mov'});
+    datasets.push(
+      {label:'Llegadas de lo ya pedido (clic para ver el detalle)', type:'bar', data:filas.map(f=>f.ya), backgroundColor:COLORS.mist, stack:'mov'},
+      {label:'Llegadas de sugeridos (10.3)', type:'bar', data:filas.map(f=>f.nuevo), backgroundColor:COLORS.gold, stack:'mov'},
+      {label: hayHist ? 'Salidas por venta (real deducida / PPTO)' : 'Salidas por venta (PPTO)', type:'bar', data:filas.map(f=>f.venta===null?null:-f.venta), backgroundColor:'#1E5631', stack:'mov'});
+    datasets.push(
+      {label:'Inventario al inicio del mes', type:'line', data:filas.map(f=>f.invInicio), borderColor:COLORS.navy, backgroundColor:COLORS.navy, pointBackgroundColor:colorPunto, pointBorderColor:colorPunto, borderWidth:2.5, pointRadius:5, pointHoverRadius:7, tension:0.15, fill:false, order:0, stack:'l_inv'},
       {label:`Mínimo (${BANDA_INVENTARIO_MIN}× venta del mes)`, type:'line', data:filas.map(f=>f.min), borderColor:COLORS.green, borderDash:[6,4], borderWidth:1.5, pointRadius:0, fill:false, order:1, stack:'l_min'},
       {label:`Objetivo (${BANDA_INVENTARIO_OBJETIVO}× venta del mes)`, type:'line', data:filas.map(f=>f.obj), borderColor:COLORS.amber, borderDash:[3,3], borderWidth:1.5, pointRadius:0, fill:false, order:1, stack:'l_obj'},
-      {label:`Máximo de referencia (${BANDA_INVENTARIO_MAX}×)`, type:'line', data:filas.map(f=>f.max), borderColor:COLORS.steel, borderDash:[2,3], borderWidth:1.5, pointRadius:0, fill:false, order:1, stack:'l_max'},
-    ], {scales:{x:{stacked:true}, y:{stacked:true, ticks:{callback:tonFmt}}}, plugins:{datalabels:{display:false}, tooltip:{callbacks:{label:ctx=>`${ctx.dataset.label}: ${tonFmt(Math.abs(ctx.raw))} Ton`}}}}, false, tonFmt, false);
-    const bajoMin = filas.filter(f=>f.invInicio < f.min - 1e-6).map(f=>fmtMesLabel(f.mes));
-    const primeraReal = filas.find(f=>f.real);
+      {label:`Máximo de referencia (${BANDA_INVENTARIO_MAX}×)`, type:'line', data:filas.map(f=>f.max), borderColor:COLORS.steel, borderDash:[2,3], borderWidth:1.5, pointRadius:0, fill:false, order:1, stack:'l_max'});
+    const idxYa = datasets.findIndex(d=>d.label.startsWith('Llegadas de lo ya pedido'));
+    barChart('c_v10_inventario', filas.map(f=>fmtMesLabel(f.mes)+(f.historico?' ·real':'')), datasets,
+      {scales:{x:{stacked:true}, y:{stacked:true, ticks:{callback:tonFmt}}},
+       onClick:(evt, els)=>{ const el = (els||[]).find(e=>e.datasetIndex===idxYa); if(el && filas[el.index] && filas[el.index].ya>0) irADetalleLlegadas(filas[el.index].mes, filtroFam); },
+       onHover:(evt, els)=>{ const t = evt.native && evt.native.target; if(t) t.style.cursor = (els||[]).some(e=>e.datasetIndex===idxYa) ? 'pointer' : 'default'; },
+       interaction:{mode:'nearest', intersect:true},
+       plugins:{datalabels:{display:false}, tooltip:{mode:'index', intersect:false, callbacks:{
+         label:ctx=> ctx.raw===null||ctx.raw===undefined ? null : `${ctx.dataset.label.replace(' (clic para ver el detalle)','')}: ${tonFmt(Math.abs(ctx.raw))} Ton`,
+         afterBody:items=>{ const f = filas[items[0].dataIndex]; if(!f) return '';
+           const out = [];
+           if(f.historico && f.venta!==null && f.ppto>0) out.push(`Venta PPTO del mes: ${tonFmt(f.ppto)} Ton · real vs. PPTO: ${f.venta>=f.ppto?'+':''}${Math.round((f.venta/f.ppto-1)*100)}%`);
+           if(f.historico && f.venta===null) out.push('Sin conteo físico del mes siguiente: no se puede deducir la venta real (se muestra solo el inventario).');
+           if(f.invInicio!==null) out.push(enRango(f) ? '● Inventario dentro del rango (mínimo–máximo)' : '● Inventario FUERA del rango (mínimo–máximo)');
+           return out; }}}}},
+      false, tonFmt, false);
+    const fuera = filas.filter(f=>f.invInicio!==null && !enRango(f)).map(f=>fmtMesLabel(f.mes));
+    const hist = filas.filter(f=>f.historico && f.venta!==null);
+    const vReal = hist.reduce((a,f)=>a+f.venta,0), vPpto = hist.reduce((a,f)=>a+f.ppto,0);
+    const negativos = hist.filter(f=>f.venta<0).map(f=>fmtMesLabel(f.mes));
     document.getElementById('v10_inventarioNota').innerHTML =
-      (primeraReal ? `Inventario anclado al conteo físico de ${fmtMesLabel(primeraReal.mes)}; los meses siguientes son proyección (inicio + llegadas − venta). ` : 'Sin conteo físico cargado: la línea arranca en 0. ') +
-      (bajoMin.length ? `<b>Arranca bajo el mínimo:</b> ${bajoMin.join(', ')} — ver panel ⚠ (son meses que ya no alcanza ningún pedido nuevo, o con tope de proveedor).` : '<b>Todos los meses arrancan en o sobre el mínimo.</b>');
+      `Puntos de la línea: <b style="color:#1F8A4C;">verde</b> = arranca dentro del rango mínimo–máximo, <b style="color:#C0392B;">rojo</b> = fuera del rango. ` +
+      (fuera.length ? `<b>Fuera del rango:</b> ${fuera.join(', ')}. ` : '<b>Todos los meses del rango arrancan dentro de la banda.</b> ') +
+      `Las barras grises son clicables: abren el detalle por proyecto comex de ese mes (9.1).` +
+      (hayHist ? `<br>Meses "·real": inventario inicial = conteo físico; entradas = llegadas reales (corte día ${diaGabelaActual()}); <b>salidas = venta real deducida por juego de inventarios</b> (inicio + entradas − conteo del mes siguiente), por familia. La banda mínimo/objetivo/máximo se mide siempre contra el PPTO, que es la meta de abastecimiento. En el rango: venta real ${tonFmt(vReal)} Ton vs. PPTO ${tonFmt(vPpto)} Ton (${vPpto>0?(vReal>=vPpto?'+':'')+Math.round((vReal/vPpto-1)*100)+'%':'—'}).` +
+        (negativos.length ? ` <b style="color:var(--red);">Venta deducida negativa en ${negativos.join(', ')}</b>: el conteo subió más de lo que llegó — revisar conteo, entradas no registradas en Control de Importaciones o reclasificaciones entre familias.` : '') : '');
   }
   renderInventarioConsolidado();
 
@@ -3706,8 +3929,11 @@ function renderKPIs(){
 
   const pedidosAnio = M.pedidos.filter(p=>enAnio(p.fechaPedido));
   const pedidosAnioSet = new Set(pedidosAnio.map(p=>p.pedido));
-  const enProduccion = pedidosAnio.filter(p=>p.estatusPedido==='EN PRODUCCIÓN');
-  const conParcial = pedidosAnio.filter(p=>p.estatusPedido==='CON ENTREGA PARCIAL');
+  // Tanda 33: lo ABIERTO (en producción / con entrega parcial) se muestra de TODOS los años — si no, en enero los
+  // pedidos abiertos del año anterior desaparecerían de las tarjetas aunque sigan pendientes. Lo cerrado/del período
+  // (Pedidos del período, Completados, Arribado) sí sigue la "Visión del año".
+  const enProduccion = M.pedidos.filter(p=>p.estatusPedido==='EN PRODUCCIÓN');
+  const conParcial = M.pedidos.filter(p=>p.estatusPedido==='CON ENTREGA PARCIAL');
   const completados = pedidosAnio.filter(p=>p.estatusPedido==='COMPLETADO');
 
   // Navegando/Arribado: SIEMPRE sobre la cohorte "pedidos de este período" (por fechaPedido del PEDIDO
@@ -3760,8 +3986,8 @@ function renderKPIs(){
   // Lead time de cumplimiento: metodología de 2 pasos (ver buildModel) — un leadtime por PEDIDO (ya
   // ponderado por Kg de sus propias entregas), promediado aquí por RECENCIA sobre la cohorte del año
   // seleccionado. Mismo array que usan Vista 2 (ranking por proveedor) y Vista 10 (mix) — una sola fuente.
-  const leadTimePedidosAnio = M.leadTimePorPedidoArr.filter(p=>pedidosAnioSet.has(p.pedido));
-  const leadTimeProm = leadTimePedidosAnio.length ? Math.round(weightedMean(leadTimePedidosAnio.map(p=>({valor:p.dias, fecha:p.fecha})))) : null;
+  const LT = leadTimeTablero(M);
+  const leadTimeProm = LT.dias ? Math.round(LT.dias) : null;
 
   // Etiqueta de año para las dos tarjetas de arribo/entrada (16-sep, a pedido de Sebastián: separadas en
   // tarjetas propias — antes "Entrado en Y" vivía como sub-línea chica dentro de "Pedidos del período",
@@ -3774,15 +4000,23 @@ function renderKPIs(){
   document.getElementById('kpiBar').innerHTML = `
     <div class="kpi neutral"><div class="lab">Pedidos del período</div><div class="val">${fmtTon(tonPedidosAnio)}</div><div class="sub">${pedidosAnio.length} pedidos · ${fmt(valorPedidosAnio)}</div></div>
     <div class="kpi neutral"><div class="lab">Entrado en ${anioArriboRef}</div><div class="val">${fmtTon(tonEntradoAnioCalendario)}</div><div class="sub">${arribadosAnioCalendario.length} proyectos · ${fmt(valorEntradoAnioCalendario)}</div></div>
-    <div class="kpi neutral"><div class="lab">En Producción</div><div class="val">${fmtTon(tonEnProduccion)}</div><div class="sub">${enProduccion.length} pedidos · ${fmt(valorEnProduccion)}</div></div>
-    <div class="kpi warn"><div class="lab">Parcial Pendiente</div><div class="val">${fmtTon(tonPendienteParcial)}</div><div class="sub">${conParcial.length} pedidos · ${fmt(valorPendienteParcial)}</div></div>
-    <div class="kpi ok"><div class="lab">Completados</div><div class="val">${fmtTon(tonCompletados)}</div><div class="sub">${completados.length} pedidos · ${fmt(valorCompletados)}</div></div>
-    <div class="kpi neutral"><div class="lab">Lead Time Ponderado</div><div class="val">${leadTimeProm?leadTimeProm+' d':'—'}</div><div class="sub">${leadTimePedidosAnio.length} pedidos · Pedido → Arribo</div></div>
+    <div class="kpi neutral" style="cursor:pointer;" title="Pedidos sin ninguna entrega todavía, de cualquier año. Clic para ver el detalle." onclick="irATrazabilidadEstado('EN PRODUCCIÓN','todos')"><div class="lab">En Producción ›</div><div class="val">${fmtTon(tonEnProduccion)}</div><div class="sub">${enProduccion.length} pedidos abiertos (todos los años) · ${fmt(valorEnProduccion)}</div></div>
+    <div class="kpi warn" style="cursor:pointer;" title="Ton. que faltan por entregar (pedidas − entregadas) de los pedidos con entrega parcial, de cualquier año. Clic para ver el detalle en Trazabilidad." onclick="irATrazabilidadEstado('CON ENTREGA PARCIAL','todos')"><div class="lab">Parcial Pendiente ›</div><div class="val">${fmtTon(tonPendienteParcial)}</div><div class="sub">${conParcial.length} pedidos abiertos (todos los años) · ${fmt(valorPendienteParcial)}</div></div>
+    <div class="kpi ok" style="cursor:pointer;" title="Pedidos del año entregados completos (o con saldo ≤5%). Clic para ver el detalle." onclick="irATrazabilidadEstado('COMPLETADO', document.getElementById('kpi_anio').value)"><div class="lab">Completados ›</div><div class="val">${fmtTon(tonCompletados)}</div><div class="sub">${completados.length} pedidos · ${fmt(valorCompletados)}</div></div>
+    <div class="kpi neutral" style="cursor:pointer;" title="Suma de las 4 etapas (Producción + Embarque + Navegación + Nacionalización), cada una ponderada por Ton. Clic para ver el detalle por etapa." onclick="irAVistaYSeccion('v11','gestion_tiempos')"><div class="lab">Ciclo Pedido → Levante</div><div class="val">${Math.round(cicloPorEtapas(M).real)} d</div><div class="sub">meta ${Math.round(cicloPorEtapas(M).meta)} d · a arribo por Kg: ${leadTimeProm?leadTimeProm+' d':'—'}</div></div>
     <div class="kpi neutral"><div class="lab">Navegando</div><div class="val">${fmtTon(tonNavegando)}</div><div class="sub">${navegando.length} proyectos · ${fmt(valorNavegando)}</div></div>
     <div class="kpi ok"><div class="lab">Arribado ${labelAnioArribados}</div><div class="val">${fmtTon(tonArribado)}</div><div class="sub">${arribados.length} proyectos · ${fmt(valorArribado)}</div></div>
   `;
 }
 
+function irATrazabilidadEstado(estado, anio){
+  const v = document.querySelector('[id="f2_estadoTon"]')?.closest('.view');
+  ['f2_mes','f2_estado','f2_cerrado','f2_diferencia'].forEach(id=>{ const el=document.getElementById(id); if(el) el.value=''; });
+  const b = document.getElementById('f2_buscar'); if(b) b.value='';
+  const sa = document.getElementById('f2_anio'); if(sa) sa.value = [...sa.options].some(o=>o.value===String(anio)) ? String(anio) : 'todos';
+  const sel = document.getElementById('f2_estadoTon'); sel.value = estado; sel.onchange && sel.onchange();
+  if(v) irAVistaYSeccion(v.id, 'f2_estadoTon');
+}
 // ================= VISTA 1 =================
 function monthRange(from, to){
   const [fy,fm] = from.split('-').map(Number);
@@ -3998,10 +4232,10 @@ function buildLlegadasPorFamilia(M){
       const imp = M.ton.porProyectoImport[f.nombreProyecto];
       const kg = f.cantidadEntregadaKg||0; if(!kg) return;
       if(imp && imp.fechaRealArribo){
-        confirmadoReal.push({familia:g.familia, kg, fechaArribo:imp.fechaRealArribo, proveedor:pedido.proveedor});
+        confirmadoReal.push({familia:g.familia, kg, fechaArribo:imp.fechaRealArribo, fechaZarpe:f.fechaRealZarpe, proveedor:pedido.proveedor, pedido:pedidoCod, proyecto:f.nombreProyecto});
       } else {
         const dias = M.nav.diasNavegacion(f.paisOrigen);
-        confirmadoTransito.push({familia:g.familia, kg, fechaArribo: addDays(f.fechaRealZarpe, dias||M.nav.GLOBAL||45), proveedor:pedido.proveedor});
+        confirmadoTransito.push({familia:g.familia, kg, fechaArribo: addDays(f.fechaRealZarpe, dias||M.nav.GLOBAL||45), fechaZarpe:f.fechaRealZarpe, proveedor:pedido.proveedor, pedido:pedidoCod, proyecto:f.nombreProyecto});
       }
     });
   });
@@ -4030,7 +4264,7 @@ function buildLlegadasPorFamilia(M){
     const pct = composicionFamiliaPedido(p.pedido, 'total'); if(!pct) return;
     p.parciales.forEach(par=>{
       Object.entries(pct).forEach(([familia,frac])=>{
-        estimado.push({familia, kg: (par.kgEstimado||0)*frac, fechaArribo: par.fechaArriboEstimada, proveedor:p.proveedor, pedido:p.pedido, parcial:`${par.n}/${par.deN}`, tipo:'Sin parcial'});
+        estimado.push({familia, kg: (par.kgEstimado||0)*frac, fechaArribo: par.fechaArriboEstimada, fechaZarpe: par.fechaZarpeEstimada, proveedor:p.proveedor, pedido:p.pedido, parcial:`${par.n}/${par.deN}`, tipo:'Sin parcial'});
       });
     });
   });
@@ -4039,7 +4273,7 @@ function buildLlegadasPorFamilia(M){
     const pct = composicionFamiliaPedido(p.pedido, 'saldo'); if(!pct) return;
     p.parciales.forEach(par=>{
       Object.entries(pct).forEach(([familia,frac])=>{
-        estimado.push({familia, kg: (par.kgEstimado||0)*frac, fechaArribo: par.fechaArriboEstimada, proveedor:p.proveedor, pedido:p.pedido, parcial:`${par.n}/${par.deN}`, tipo:'Parcial pendiente'});
+        estimado.push({familia, kg: (par.kgEstimado||0)*frac, fechaArribo: par.fechaArriboEstimada, fechaZarpe: par.fechaZarpeEstimada, proveedor:p.proveedor, pedido:p.pedido, parcial:`${par.n}/${par.deN}`, tipo:'Parcial pendiente'});
       });
     });
   });
@@ -4096,20 +4330,12 @@ function consolidarLlegadasPorMes(llegadas, diaGabela){
 // caso típico mientras Sebastián no haya cargado un segundo mes) no hay ningún mes con este dato todavía —
 // se activa solo, sin tocar nada, en cuanto exista esa segunda ancla.
 function calcularVentaRealDeducidaPorMes(M, mesesHorizonte, llegadasIdx){
+  // Tanda 32: una sola fuente — ventaRealDeducidaTon (juego de inventarios con llegadas reales).
   const out = {};
-  for(let i=0;i<mesesHorizonte.length-1;i++){
-    const mesA = mesesHorizonte[i], mesB = mesesHorizonte[i+1];
-    const invA = M.inventarioInicialPorMes[mesA], invB = M.inventarioInicialPorMes[mesB];
-    if(!invA || !invB) continue;
-    const cubierto = llegadasIdx[mesA];
-    FAMILIAS_ORDEN.forEach(familia=>{
-      const invIniA = invA[familia], invIniB = invB[familia];
-      if(invIniA===null||invIniA===undefined||invIniB===null||invIniB===undefined) return;
-      const entradasCiertoTon = cubierto ? (cubierto.cierto[familia]||0)/1000 : 0;
-      out[mesA] = out[mesA] || {};
-      out[mesA][familia] = invIniA + entradasCiertoTon - invIniB;
-    });
-  }
+  mesesHorizonte.forEach(mes=> FAMILIAS_ORDEN.forEach(familia=>{
+    const v = ventaRealDeducidaTon(M, mes, familia, diaGabelaActual());
+    if(v!==null){ out[mes] = out[mes] || {}; out[mes][familia] = v; }
+  }));
   return out;
 }
 
@@ -4245,8 +4471,7 @@ function buildPedidosNuevosProyectados(M, opts={}){
   const ventaBaseDe = (mes, familia)=>{
     const ppto = M.pptoPorMes[mes]; if(!ppto) return null;
     const pp = ppto[familia]||0;
-    const vr = ventaRealDeducidaPorMes[mes] && ventaRealDeducidaPorMes[mes][familia];
-    return (pp>0 && vr>0) ? vr : pp; // venta real deducida (balance de masa) cuando existe, si no el PPTO
+    return pp; // Tanda 33 (Sebastián): la banda mín/objetivo/máx SIEMPRE contra el PPTO — es la meta que se busca abastecer. La venta real deducida se muestra aparte, como contraste.
   };
   const llegaYaPedidoTon = (mes, familia)=>{ const c = llegadasIdx[mes]; return c ? ((c.cierto[familia]||0)+(c.estimado[familia]||0))/1000 : 0; };
 
@@ -4534,11 +4759,11 @@ function renderView1(){
   document.getElementById('v1_exec_resumen').innerHTML = `<div class="mini-kpis">
     <div class="mini-kpi neutral"><span>Toneladas pedidas en el período</span><b>${fmtTon(totTonPed)}</b><span>${fmt(totValor)}</span></div>
     <div class="mini-kpi neutral"><span>Toneladas arribadas en el período</span><b>${fmtTon(totTonArribo)}</b><span>Por fecha real de arribo</span></div>
-    <div class="mini-kpi ${semLead}"><span>Ciclo real vs. meta</span><b>${Math.round(leadTotal)} d / ${Math.round(metaTotal)} d</b><span>Cuello: ${cuello?cuello.nombre:'sin dato'}</span></div>
+    <div class="mini-kpi ${semLead}"><span>Ciclo Pedido → Levante (real vs. meta)</span><b>${Math.round(cicloPorEtapas(M).real)} d / ${Math.round(cicloPorEtapas(M).meta)} d</b><span>Cuello: ${cuello?cuello.nombre:'sin dato'} · a arribo por Kg: ${leadTimeTablero(M).dias?Math.round(leadTimeTablero(M).dias)+' d':'—'}</span></div>
     <div class="mini-kpi neutral"><span>Caja requerida a 30 días</span><b>${fmt(flujo30.total)}</b><span>Confirmada y proyectada</span></div>
   </div>`;
   const acciones = [
-    {tipo:parcialesRetrasados.length?'bad':'', texto:'Llegadas proyectadas fuera de fecha', valor:`${fmtTonDirecto(tonRetrasada)} · ${parcialesRetrasados.length} parcial(es)`, vista:'v_sop', seccion:'v10_alertasPanel'},
+    {tipo:parcialesRetrasados.length?'bad':'', texto:'Llegadas proyectadas fuera de fecha', valor:`${fmtTonDirecto(tonRetrasada)} · ${parcialesRetrasados.length} parcial(es)`, vista:'v11', seccion:'gestion_retrasados'},
     {tipo:abiertosRiesgo.length?'warn':'', texto:'Toneladas en riesgo dentro del ciclo', valor:`${fmtTonDirecto(tonRiesgo)} · ${abiertosRiesgo.length} caso(s)`, vista:'v11', seccion:'gestion_produccion'},
     {tipo:giros7.length?'warn':'', texto:'Giros que vencen en los próximos 7 días', valor:`${fmt(giros7.reduce((a,g)=>a+g.saldoReal,0))} · ${giros7.length}`, vista:'v4', seccion:'v4'},
   ];
@@ -4581,6 +4806,12 @@ function renderView2(){
   const M = MODEL;
   const meses = [...new Set(M.pedidos.map(p=>p.mesPedido).filter(Boolean))].sort();
   document.getElementById('f2_mes').innerHTML = '<option value="">Todos los meses</option>' + meses.map(m=>`<option value="${m}">${fmtMesLabel(m)}</option>`).join('');
+  const selAnio2 = document.getElementById('f2_anio');
+  if(!selAnio2.dataset.poblado){
+    const aniosP = [...new Set(M.pedidos.map(p=>p.fechaPedido&&p.fechaPedido.getFullYear()).filter(Boolean))].sort((a,b)=>b-a);
+    selAnio2.innerHTML = '<option value="todos">Todos los años</option>' + aniosP.map(a=>`<option value="${a}">Pedidos ${a}</option>`).join('');
+    selAnio2.dataset.poblado = '1';
+  }
   function go(){
     const modo = document.getElementById('f2_agrupa').value;
     const fm = document.getElementById('f2_mes').value;
@@ -4589,7 +4820,9 @@ function renderView2(){
     const fc = document.getElementById('f2_cerrado').value;
     const fd = document.getElementById('f2_diferencia').value;
     const q = document.getElementById('f2_buscar').value.toLowerCase();
-    let base = M.pedidos.filter(p => (!fm||p.mesPedido===fm) && (!fe||p.alDia===fe) && (!feTon||p.estatusPedido===feTon) &&
+    const anioV = document.getElementById('f2_anio').value || 'todos';
+    const notaAnio = document.getElementById('f2_notaAnio'); if(notaAnio) notaAnio.innerHTML = '';
+    let base = M.pedidos.filter(p => (anioV==='todos' || (p.fechaPedido && String(p.fechaPedido.getFullYear())===anioV)) && (!fm||p.mesPedido===fm) && (!fe||p.alDia===fe) && (!feTon||p.estatusPedido===feTon) &&
       (!fc || (fc==='SI'?p.cerrado:!p.cerrado)) &&
       (!fd || (fd==='SI' && p.pedidoKg && Math.abs((p.diferenciaEntregaKg||0)/p.pedidoKg)>0.05)) &&
       (!q || (p.pedido||'').toLowerCase().includes(q) || (p.proveedor||'').toLowerCase().includes(q)));
@@ -4636,7 +4869,7 @@ function renderView2(){
     });
     document.getElementById('tbl_pedidos').innerHTML = html;
   }
-  ['f2_agrupa','f2_orden','f2_mes','f2_estado','f2_estadoTon','f2_cerrado','f2_diferencia'].forEach(id=>document.getElementById(id).onchange=go);
+  ['f2_agrupa','f2_orden','f2_anio','f2_mes','f2_estado','f2_estadoTon','f2_cerrado','f2_diferencia'].forEach(id=>document.getElementById(id).onchange=go);
   document.getElementById('f2_buscar').oninput = go;
   go();
 
@@ -5248,7 +5481,7 @@ function renderView5(){
       {label:'Valor Real COP', data:meses.map(m=>M.nacMes[m].valorReal), backgroundColor:COLORS.navy},
       {label:'Valor Estimado COP', data:meses.map(m=>M.nacMes[m].valorEstimado), backgroundColor:COLORS.amber},
     ]},
-    options:{responsive:true, plugins:{legend:{position:'bottom'}}, scales:{y:{ticks:{callback:v=>'$'+(v/1e6).toFixed(1)+'M'}}}}
+    options:{responsive:true, plugins:{legend:{position:'bottom'}, tooltip:{callbacks:{label:ctx=>`${ctx.dataset.label}: ${fmt(Number(ctx.raw||0))}`}}}, scales:{y:{ticks:{callback:v=>'$'+(v/1e6).toFixed(2)+'M'}}}}
   });
   document.getElementById('f5_mes').innerHTML = '<option value="">Todos los meses</option>' + meses.map(m=>`<option value="${m}">${fmtMesLabel(m)}</option>`).join('');
   function go(){
