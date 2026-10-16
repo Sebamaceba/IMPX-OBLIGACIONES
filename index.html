@@ -208,8 +208,9 @@
       <div class="desc">Prioriza tres preguntas: ¿está llegando el material necesario?, ¿en qué etapa se está atrasando el ciclo? y ¿qué caja debe asegurarse para sostenerlo?</div>
       <div class="executive-grid">
         <div class="executive-block">
-          <h3>Lectura ejecutiva</h3>
-          <div id="v1_exec_resumen"></div>
+          <h3>Embudo del abastecimiento — ¿dónde está lo que pedimos?</h3>
+          <div id="v1_embudo"></div>
+          <div id="v1_exec_resumen" style="display:none;"></div>
         </div>
         <div class="executive-block">
           <h3>Prioridades para revisión</h3>
@@ -733,6 +734,11 @@
         <button class="process-step" type="button" data-view-target="v4"><strong>6. Caja</strong><span>Obligaciones y pagos</span></button>
       </div>
       <div class="filters"><label style="font-size:12px;color:var(--ink-soft);">Familia:</label> <select id="f12_familia"><option value="">Todas las familias</option></select></div>
+    </div>
+    <div class="panel section-anchor" id="gestion_embudo">
+      <h2>Embudo del abastecimiento — ¿dónde está lo que pedimos?</h2>
+      <div class="desc">Cada nivel se reparte en el de abajo, con los mismos números de las tarjetas de arriba (filtro "Visión del año"). Clic en un nivel para ir a su detalle.</div>
+      <div id="v11_embudo" style="margin-top:10px;"></div>
     </div>
     <div class="panel section-anchor" id="gestion_plan">
       <h2>1 · Metas del mes — llegadas y plan de compras</h2>
@@ -3989,6 +3995,10 @@ function renderKPIs(){
   // Tanda 35: composición de "Por embarcar" (misma cohorte del año) — para que cuadre con Trazabilidad y Gestión del Ciclo.
   const sinEntregaAnioKg = pedidosAnio.filter(p=>p.estatusPedido==='EN PRODUCCIÓN').reduce((a,p)=>a+(p.pedidoKg||0),0);
   const saldoParcialAnioKg = pedidosAnio.filter(p=>p.estatusPedido==='CON ENTREGA PARCIAL').reduce((a,p)=>a+(p.saldoKg||0),0);
+  const retrAnio = filasParcialesRetrasados(M).filter(r=>pedidosAnioSet.has(r.pedido));
+  EMBUDO_PARCIAL = { anio: anioSel, sinEntrega: sinEntregaAnioKg, nSinEntrega: pedidosAnio.filter(p=>p.estatusPedido==='EN PRODUCCIÓN').length,
+    saldo: saldoParcialAnioKg, nSaldo: pedidosAnio.filter(p=>p.estatusPedido==='CON ENTREGA PARCIAL').length,
+    retr: retrAnio.reduce((a,r)=>a+r.kg,0), nRetr: retrAnio.length };
 
   // "Toneladas entradas este año" (calendario, 16-sep a pedido de Sebastián): NO es lo mismo que "Arribados"
   // de arriba. "Arribados" es por COHORTE (pedidos colocados en el año seleccionado que ya llegaron, sin
@@ -4017,15 +4027,21 @@ function renderKPIs(){
   // calendario real de arribo (anioArriboRef) — se etiqueta cada tarjeta con SU año correspondiente para
   // que la diferencia quede clara en vez de asumir que son la misma cifra.
   const labelAnioArribados = anioSel==='todos' ? 'de pedidos (todos los años)' : `de pedidos ${anioSel}`;
+  EMBUDO = {...EMBUDO_PARCIAL, pedidas: tonPedidosAnio, nPedidos: pedidosAnio.length, arribado: tonArribado, nArribado: arribados.length,
+    navegando: tonNavegando, nNavegando: navegando.length, porEmbarcar: tonEnProduccion,
+    resto: Math.max(0, tonEnProduccion - EMBUDO_PARCIAL.sinEntrega - EMBUDO_PARCIAL.saldo)};
+  renderEmbudo('v11_embudo', false); renderEmbudo('v1_embudo', true);
+  // Tanda 36 (orden pedido por Sebastián): fila 1 = el flujo Pedido → Por embarcar → Navegando → Arribado;
+  // fila 2 = Entrado (bajo Pedidos), Ciclo y Parcial pendiente (centro), Completados (bajo Arribado).
   document.getElementById('kpiBar').innerHTML = `
     <div class="kpi neutral"><div class="lab">Pedidos del período</div><div class="val">${fmtTon(tonPedidosAnio)}</div><div class="sub">${pedidosAnio.length} pedidos · ${fmt(valorPedidosAnio)}</div></div>
-    <div class="kpi neutral"><div class="lab">Entrado en ${anioArriboRef}</div><div class="val">${fmtTon(tonEntradoAnioCalendario)}</div><div class="sub">${arribadosAnioCalendario.length} proyectos · ${fmt(valorEntradoAnioCalendario)}</div></div>
-    <div class="kpi neutral" style="cursor:pointer;" title="Ton. de los pedidos ${anioSel==='todos'?'':anioSel+' '}que todavía no han zarpado = Pedidas − Navegando − Arribado (así Pedidos del período = Por embarcar + Navegando + Arribado). Se compone de: pedidos sin ninguna entrega, saldos de pedidos con entrega parcial, y lo ya producido/asignado a un proyecto comex que aún no zarpa (más diferencias peso neto vs. bruto). Clic para ver los pedidos sin entrega." onclick="irATrazabilidadEstado('EN PRODUCCIÓN', document.getElementById('kpi_anio').value)"><div class="lab">Por embarcar ›</div><div class="val">${fmtTon(tonEnProduccion)}</div><div class="sub">sin entrega ${fmtTon(sinEntregaAnioKg)} · saldo parciales ${fmtTon(saldoParcialAnioKg)} · producido sin zarpar y otros ${fmtTon(Math.max(0,tonEnProduccion-sinEntregaAnioKg-saldoParcialAnioKg))}</div></div>
-    <div class="kpi warn" style="cursor:pointer;" title="Ton. que faltan por entregar (pedidas − entregadas) de los pedidos con entrega parcial, de cualquier año. Clic para ver el detalle en Trazabilidad." onclick="irATrazabilidadEstado('CON ENTREGA PARCIAL','todos')"><div class="lab">Parcial Pendiente ›</div><div class="val">${fmtTon(tonPendienteParcial)}</div><div class="sub">${conParcial.length} pedidos abiertos (todos los años) · ${fmt(valorPendienteParcial)}</div></div>
-    <div class="kpi ok" style="cursor:pointer;" title="Pedidos del año entregados completos (o con saldo ≤5%). Clic para ver el detalle." onclick="irATrazabilidadEstado('COMPLETADO', document.getElementById('kpi_anio').value)"><div class="lab">Completados ›</div><div class="val">${fmtTon(tonCompletados)}</div><div class="sub">${completados.length} pedidos · ${fmt(valorCompletados)}</div></div>
-    <div class="kpi neutral" style="cursor:pointer;" title="Suma de las 4 etapas (Producción + Embarque + Navegación + Nacionalización), cada una ponderada por Ton. Clic para ver el detalle por etapa." onclick="irAVistaYSeccion('v11','gestion_tiempos')"><div class="lab">Ciclo Pedido → Levante</div><div class="val">${Math.round(cicloPorEtapas(M).real)} d</div><div class="sub">meta ${Math.round(cicloPorEtapas(M).meta)} d · a arribo por Kg: ${leadTimeProm?leadTimeProm+' d':'—'}</div></div>
+    <div class="kpi neutral" style="cursor:pointer;" title="Ton. de los pedidos ${anioSel==='todos'?'':anioSel+' '}que todavía no han zarpado = Pedidas − Navegando − Arribado (así Pedidos del período = Por embarcar + Navegando + Arribado). Se compone de: pedidos sin ninguna entrega, saldos de pedidos con entrega parcial, y lo ya producido/asignado a un proyecto comex que aún no zarpa (más diferencias peso neto vs. bruto). Clic para ver los pedidos sin entrega." onclick="irATrazabilidadEstado('EN PRODUCCIÓN', document.getElementById('kpi_anio').value)"><div class="lab">Por embarcar ›</div><div class="val">${fmtTon(tonEnProduccion)}</div><div class="sub">① ${Math.round(sinEntregaAnioKg/1000).toLocaleString('en-US')} sin entrega · ② ${Math.round(saldoParcialAnioKg/1000).toLocaleString('en-US')} saldos · ③ ${Math.round(Math.max(0,tonEnProduccion-sinEntregaAnioKg-saldoParcialAnioKg)/1000).toLocaleString('en-US')} sin zarpar</div></div>
     <div class="kpi neutral"><div class="lab">Navegando</div><div class="val">${fmtTon(tonNavegando)}</div><div class="sub">${navegando.length} proyectos · ${fmt(valorNavegando)}</div></div>
     <div class="kpi ok"><div class="lab">Arribado ${labelAnioArribados}</div><div class="val">${fmtTon(tonArribado)}</div><div class="sub">${arribados.length} proyectos · ${fmt(valorArribado)}</div></div>
+    <div class="kpi neutral"><div class="lab">Entrado en ${anioArriboRef}</div><div class="val">${fmtTon(tonEntradoAnioCalendario)}</div><div class="sub">${arribadosAnioCalendario.length} proyectos · ${fmt(valorEntradoAnioCalendario)}</div></div>
+    <div class="kpi neutral" style="cursor:pointer;" title="Suma de las 4 etapas (Producción + Embarque + Navegación + Nacionalización), cada una ponderada por Ton. Clic para ver el detalle por etapa." onclick="irAVistaYSeccion('v11','gestion_tiempos')"><div class="lab">Ciclo Pedido → Levante</div><div class="val">${Math.round(cicloPorEtapas(M).real)} d</div><div class="sub">meta ${Math.round(cicloPorEtapas(M).meta)} d · a arribo por Kg: ${leadTimeProm?leadTimeProm+' d':'—'}</div></div>
+    <div class="kpi warn" style="cursor:pointer;" title="Ton. que faltan por entregar (pedidas − entregadas) de los pedidos con entrega parcial, de cualquier año. Clic para ver el detalle en Trazabilidad." onclick="irATrazabilidadEstado('CON ENTREGA PARCIAL','todos')"><div class="lab">Parcial Pendiente ›</div><div class="val">${fmtTon(tonPendienteParcial)}</div><div class="sub">${conParcial.length} pedidos abiertos (todos los años) · ${fmt(valorPendienteParcial)}</div></div>
+    <div class="kpi ok" style="cursor:pointer;" title="Pedidos del año entregados completos (o con saldo ≤5%). Clic para ver el detalle." onclick="irATrazabilidadEstado('COMPLETADO', document.getElementById('kpi_anio').value)"><div class="lab">Completados ›</div><div class="val">${fmtTon(tonCompletados)}</div><div class="sub">${completados.length} pedidos · ${fmt(valorCompletados)}</div></div>
   `;
 }
 
@@ -4034,8 +4050,41 @@ function irATrazabilidadEstado(estado, anio){
   ['f2_mes','f2_estado','f2_cerrado','f2_diferencia'].forEach(id=>{ const el=document.getElementById(id); if(el) el.value=''; });
   const b = document.getElementById('f2_buscar'); if(b) b.value='';
   const sa = document.getElementById('f2_anio'); if(sa) sa.value = [...sa.options].some(o=>o.value===String(anio)) ? String(anio) : 'todos';
-  const sel = document.getElementById('f2_estadoTon'); sel.value = estado; sel.onchange && sel.onchange();
+  const sel = document.getElementById('f2_estadoTon'); sel.value = estado||''; sel.onchange && sel.onchange();
   if(v) irAVistaYSeccion(v.id, 'f2_estadoTon');
+}
+// ================= EMBUDO DEL ABASTECIMIENTO (Tanda 36) =================
+// Una sola fuente: EMBUDO se llena en renderKPIs con exactamente los mismos números de las tarjetas del encabezado.
+let EMBUDO = null, EMBUDO_PARCIAL = null;
+function renderEmbudo(containerId, compacto){
+  const el = document.getElementById(containerId); if(!el || !EMBUDO) return;
+  const E = EMBUDO, base = E.pedidas || 1, anioTxt = E.anio==='todos' ? 'todos los años' : E.anio;
+  const anioJs = E.anio==='todos' ? 'todos' : String(E.anio);
+  const pct = (v, padre)=> padre>0 ? Math.round(v/padre*100)+'%' : '—';
+  const filas = [
+    {n:0, lab:`Pedidos del período (${anioTxt})`, v:E.pedidas, sub:`${E.nPedidos} pedidos`, col:COLORS.navy, ir:`irATrazabilidadEstado('', '${anioJs}')`},
+    {n:1, lab:'Arribado — ya llegó a Colombia', v:E.arribado, sub:`${E.nArribado} proyectos · ${pct(E.arribado,E.pedidas)} de lo pedido`, col:'#1F8A4C'},
+    {n:1, lab:'Navegando — zarpó, viene en camino', v:E.navegando, sub:`${E.nNavegando} proyectos · ${pct(E.navegando,E.pedidas)} de lo pedido`, col:COLORS.steel},
+    {n:1, lab:'Por embarcar — sigue en origen', v:E.porEmbarcar, sub:`${pct(E.porEmbarcar,E.pedidas)} de lo pedido`, col:COLORS.gold},
+    {n:2, lab:'① Sin ninguna entrega', v:E.sinEntrega, sub:`${E.nSinEntrega} pedidos · ${pct(E.sinEntrega,E.porEmbarcar)} de por embarcar`, col:COLORS.amber, ir:`irATrazabilidadEstado('EN PRODUCCIÓN','${anioJs}')`},
+    {n:2, lab:'② Saldo de pedidos con entrega parcial', v:E.saldo, sub:`${E.nSaldo} pedidos · ${pct(E.saldo,E.porEmbarcar)} de por embarcar`, col:COLORS.amber, ir:`irATrazabilidadEstado('CON ENTREGA PARCIAL','${anioJs}')`},
+    {n:2, lab:'③ Producido / en embarque, sin zarpar', v:E.resto, sub:`${pct(E.resto,E.porEmbarcar)} de por embarcar`, col:COLORS.mist, ir:`irAVistaYSeccion('v11','gestion_embarque')`},
+    {n:3, lab:'⚠ De ① + ②, ya debió zarpar', v:E.retr, sub:`${E.nRetr} parciales · ${pct(E.retr,E.sinEntrega+E.saldo)} de ①+②`, col:'#C0392B', ir:`irAVistaYSeccion('v11','gestion_retrasados')`},
+  ];
+  const fs = compacto ? 11.5 : 12.5;
+  let h = `<div style="display:flex;flex-direction:column;gap:${compacto?5:7}px;">`;
+  filas.forEach(f=>{
+    const w = Math.max(0.8, f.v/base*100);
+    h += `<div ${f.ir?`onclick="${f.ir}" title="Clic para ver el detalle"`:''} style="display:grid;grid-template-columns:${compacto?'minmax(170px,42%)':'minmax(230px,30%)'} 1fr ${compacto?'110px':'230px'};align-items:center;gap:10px;${f.ir?'cursor:pointer;':''}padding-left:${f.n*(compacto?12:22)}px;">
+      <div style="font-size:${fs}px;color:var(--ink);${f.n===0?'font-weight:700;':''}${f.n===3?'color:#C0392B;font-weight:600;':''}">${f.lab}${f.ir?' <span style="color:var(--ink-soft);">›</span>':''}</div>
+      <div style="background:var(--paper);border-radius:4px;height:${compacto?14:18}px;"><div style="width:${w}%;height:100%;background:${f.col};border-radius:4px;"></div></div>
+      <div style="text-align:right;font-family:var(--mono);font-size:${fs}px;font-weight:700;color:var(--navy);">${fmtTon(f.v)}${compacto?'':`<div style="font-family:var(--sans);font-weight:400;font-size:10.5px;color:var(--ink-soft);">${f.sub}</div>`}</div>
+    </div>`;
+  });
+  h += '</div>';
+  const llegado = E.pedidas>0 ? Math.round((E.arribado+E.navegando)/E.pedidas*100) : 0;
+  h += `<div style="margin-top:10px;font-size:${fs}px;color:var(--ink-soft);line-height:1.5;">De lo pedido en ${anioTxt}, <b>${llegado}%</b> ya está en Colombia o navegando. Sigue en origen <b>${fmtTon(E.porEmbarcar)}</b>; de lo que el proveedor aún debe (①+②), <b style="color:#C0392B;">${fmtTon(E.retr)} ya van tarde</b>.${compacto?` <a href="#" onclick="irAVistaYSeccion('v11','gestion_embudo');return false;" style="color:var(--navy);">Ver embudo completo →</a>`:''}</div>`;
+  el.innerHTML = h;
 }
 // ================= VISTA 1 =================
 function monthRange(from, to){
