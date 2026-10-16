@@ -752,7 +752,7 @@
     <div class="panel">
       <h2>Cumplimiento integral de tiempos de importación</h2>
       <div class="desc">Gestión del ciclo completo Pedido → Levante, dividido en sus 4 etapas físicas — cada una con su Real (medido), su Meta (objetivo) y su % de cumplimiento, ponderado por toneladas. El objetivo: saber exactamente en cuál etapa se está perdiendo tiempo, no solo "que el ciclo es largo".</div>
-      <div class="mini-kpis" id="v11_resumenGlobal"></div>
+      <div class="mini-kpis" id="v11_resumenGlobal" style="display:grid;grid-template-columns:repeat(5,minmax(0,1fr));"></div>
     </div>
     <div class="panel">
       <h2>Cascada — dónde se pierde el tiempo (Real vs. Meta, por etapa)</h2>
@@ -3000,17 +3000,25 @@ function renderEtapaCumplimiento(prefix, datosCompletos, abiertos){
   `;
 
   if(prefix==='e1'){
-    const sinEntrega = abiertosMes.filter(o=>(o.cantidadEntregadaKg||0)<=0);
-    const conSaldo = abiertosMes.filter(o=>(o.cantidadEntregadaKg||0)>0 && (o.saldoKg||0)>0);
-    const tonPedidasEnProduccion = sinEntrega.reduce((a,o)=>a+(o.cantidadPedidaKg||0),0)/1000;
-    const tonSaldoPendiente = conSaldo.reduce((a,o)=>a+(o.saldoKg||0),0)/1000;
+    // Tanda 35: las cantidades abiertas salen de la MISMA fuente que las tarjetas del encabezado (estado del pedido
+    // en Trazabilidad: EN PRODUCCIÓN / CON ENTREGA PARCIAL, todos los años). Antes se calculaban por línea de
+    // Cuadro Pedidos con fecha real de producción — y como Cuadro Pedidos no abre una fila nueva para el saldo de
+    // una entrega parcial, toda línea con algo producido quedaba "cerrada" y el saldo pendiente salía siempre en 0.
+    const enProdPed = MODEL.pedidos.filter(p=>p.estatusPedido==='EN PRODUCCIÓN' && (!fMes || p.mesPedido===fMes));
+    const parcialPed = MODEL.pedidos.filter(p=>p.estatusPedido==='CON ENTREGA PARCIAL' && (!fMes || p.mesPedido===fMes));
+    const tonPedidasEnProduccion = enProdPed.reduce((a,p)=>a+(p.pedidoKg||0),0)/1000;
+    const tonSaldoPendiente = parcialPed.reduce((a,p)=>a+(p.saldoKg||0),0)/1000;
+    const setAbiertos = new Set([...enProdPed, ...parcialPed].map(p=>p.pedido));
+    const retr = filasParcialesRetrasados(MODEL).filter(r=>setAbiertos.has(r.pedido));
+    const tonRetr = retr.reduce((a,r)=>a+r.kg,0)/1000;
     const pedidasCerradas = datos.reduce((a,o)=>a+(o.pedidoKg||0),0)/1000;
     const entregadasCerradas = datos.reduce((a,o)=>a+(o.entregadoKg||0),0)/1000;
     const pctCantidad = pedidasCerradas>0 ? Math.round(entregadasCerradas/pedidasCerradas*100) : null;
     const semCantidad = pctCantidad===null?'neutral':(pctCantidad>=98&&pctCantidad<=102?'ok':(pctCantidad>=95&&pctCantidad<=105?'warn':'bad'));
     document.getElementById('v11_produccion_abierta').innerHTML = `
-      <div class="mini-kpi neutral"><span>Toneladas pedidas en producción</span><b>${fmtTonDirecto(tonPedidasEnProduccion)}</b><span>${sinEntrega.length} pedido(s) sin entrega</span></div>
-      <div class="mini-kpi warn"><span>Saldo pendiente por entregar</span><b>${fmtTonDirecto(tonSaldoPendiente)}</b><span>${conSaldo.length} pedido(s) con entrega parcial</span></div>
+      <div class="mini-kpi neutral" style="cursor:pointer;" title="Pedidos sin ninguna entrega todavía (todos los años). Mismo número de la tarjeta del encabezado. Clic para ver el detalle." onclick="irATrazabilidadEstado('EN PRODUCCIÓN','todos')"><span>Toneladas pedidas en producción ›</span><b>${fmtTonDirecto(tonPedidasEnProduccion)}</b><span>${enProdPed.length} pedido(s) sin entrega</span></div>
+      <div class="mini-kpi warn" style="cursor:pointer;" title="Ton. pedidas − entregadas de los pedidos con entrega parcial (todos los años). Mismo número de la tarjeta del encabezado. Clic para ver el detalle." onclick="irATrazabilidadEstado('CON ENTREGA PARCIAL','todos')"><span>Saldo pendiente por entregar ›</span><b>${fmtTonDirecto(tonSaldoPendiente)}</b><span>${parcialPed.length} pedido(s) con entrega parcial</span></div>
+      <div class="mini-kpi ${retr.length?'bad':'ok'}" style="cursor:pointer;" title="De lo abierto, lo que ya debió zarpar según el tiempo típico del proveedor (tabla 1b)." onclick="irAVistaYSeccion('v11','gestion_retrasados')"><span>De lo abierto, ya debió zarpar ›</span><b>${fmtTonDirecto(tonRetr)}</b><span>${retr.length} parcial(es) · ver 1b</span></div>
       <div class="mini-kpi ${semCantidad}"><span>Cumplimiento de cantidad en cerrados</span><b>${pctCantidad!==null?pctCantidad+'%':'—'}</b><span>${fmtTonDirecto(entregadasCerradas)} de ${fmtTonDirecto(pedidasCerradas)}</span></div>
     `;
   }
@@ -3312,10 +3320,9 @@ function renderView11(){
   const semCuello = !cuello?'neutral':semaforoCumplimiento(cuello.r.realProm,cuello.r.metaProm);
   const totalAbiertosRiesgo = (r1.nAbiertosRiesgo||0)+(r2.nAbiertosRiesgo||0)+(r3.nAbiertosRiesgo||0)+(r4.nAbiertosRiesgo||0);
   document.getElementById('v11_resumenGlobal').innerHTML = `
-    <div class="mini-kpi ${semGlobal}"><span>% Cumplimiento del Proceso (Pedido→Levante)</span><b>${pctGlobal!==null?pctGlobal+'%':'—'}</b></div>
-    <div class="mini-kpi"><span>Ciclo Pedido → Levante (suma de las 4 etapas)</span><b>${Math.round((r1.realProm||0)+(r2.realProm||0)+(r3.realProm||0)+(r4.realProm||0))} d</b><span>mismo número del encabezado y del Resumen</span></div>
-    <div class="mini-kpi"><span>Meta total</span><b>${Math.round((r1.metaProm||0)+(r2.metaProm||0)+(r3.metaProm||0)+(r4.metaProm||0))} d</b></div>
-    <div class="mini-kpi"><span>Tiempo a arribo por Kg (motor de compras)</span><b>${leadTimeTablero(M).dias?Math.round(leadTimeTablero(M).dias)+' d':'—'}</b><span>días promedio en que llega cada Ton pedida: es el que se usa para fechar los pedidos sugeridos</span></div>
+    <div class="mini-kpi ${semGlobal}"><span>% Cumplimiento del proceso</span><b>${pctGlobal!==null?pctGlobal+'%':'—'}</b></div>
+    <div class="mini-kpi"><span>Ciclo Pedido → Levante</span><b>${Math.round((r1.realProm||0)+(r2.realProm||0)+(r3.realProm||0)+(r4.realProm||0))} d</b><span>meta ${Math.round((r1.metaProm||0)+(r2.metaProm||0)+(r3.metaProm||0)+(r4.metaProm||0))} d · suma de las 4 etapas</span></div>
+    <div class="mini-kpi" title="Días promedio en que llega cada Ton pedida (ponderado por Kg). Es el que usa el motor de compras para fechar los pedidos sugeridos."><span>Tiempo a arribo por Kg</span><b>${leadTimeTablero(M).dias?Math.round(leadTimeTablero(M).dias)+' d':'—'}</b><span>el que usa el motor de compras</span></div>
     <div class="mini-kpi ${semCuello}"><span>Etapa con mayor desviación</span><b>${cuello?cuello.n:'—'}</b><span>${cuello?Math.round(cuello.r.realProm-cuello.r.metaProm)+' d vs. meta':'Sin dato'}</span></div>
     <div class="mini-kpi ${totalAbiertosRiesgo>0?'warn':'ok'}"><span>Abiertos en riesgo (todas las etapas)</span><b>${totalAbiertosRiesgo}</b></div>
   `;
@@ -3979,6 +3986,9 @@ function renderKPIs(){
   // no cuántas toneladas), y no tiene por qué cuadrar en USD contra Navegando+Arribado (esos son valor
   // FACTURADO por embarque, que puede diferir del valor de la proforma completa).
   const tonEnProduccion = Math.max(0, tonPedidosAnio - tonNavegando - tonArribado);
+  // Tanda 35: composición de "Por embarcar" (misma cohorte del año) — para que cuadre con Trazabilidad y Gestión del Ciclo.
+  const sinEntregaAnioKg = pedidosAnio.filter(p=>p.estatusPedido==='EN PRODUCCIÓN').reduce((a,p)=>a+(p.pedidoKg||0),0);
+  const saldoParcialAnioKg = pedidosAnio.filter(p=>p.estatusPedido==='CON ENTREGA PARCIAL').reduce((a,p)=>a+(p.saldoKg||0),0);
 
   // "Toneladas entradas este año" (calendario, 16-sep a pedido de Sebastián): NO es lo mismo que "Arribados"
   // de arriba. "Arribados" es por COHORTE (pedidos colocados en el año seleccionado que ya llegaron, sin
@@ -4010,7 +4020,7 @@ function renderKPIs(){
   document.getElementById('kpiBar').innerHTML = `
     <div class="kpi neutral"><div class="lab">Pedidos del período</div><div class="val">${fmtTon(tonPedidosAnio)}</div><div class="sub">${pedidosAnio.length} pedidos · ${fmt(valorPedidosAnio)}</div></div>
     <div class="kpi neutral"><div class="lab">Entrado en ${anioArriboRef}</div><div class="val">${fmtTon(tonEntradoAnioCalendario)}</div><div class="sub">${arribadosAnioCalendario.length} proyectos · ${fmt(valorEntradoAnioCalendario)}</div></div>
-    <div class="kpi neutral" style="cursor:pointer;" title="Pedidos sin ninguna entrega todavía, de cualquier año. Clic para ver el detalle." onclick="irATrazabilidadEstado('EN PRODUCCIÓN','todos')"><div class="lab">En Producción ›</div><div class="val">${fmtTon(tonEnProduccion)}</div><div class="sub">${enProduccion.length} pedidos abiertos (todos los años) · ${fmt(valorEnProduccion)}</div></div>
+    <div class="kpi neutral" style="cursor:pointer;" title="Ton. de los pedidos ${anioSel==='todos'?'':anioSel+' '}que todavía no han zarpado = Pedidas − Navegando − Arribado (así Pedidos del período = Por embarcar + Navegando + Arribado). Se compone de: pedidos sin ninguna entrega, saldos de pedidos con entrega parcial, y lo ya producido/asignado a un proyecto comex que aún no zarpa (más diferencias peso neto vs. bruto). Clic para ver los pedidos sin entrega." onclick="irATrazabilidadEstado('EN PRODUCCIÓN', document.getElementById('kpi_anio').value)"><div class="lab">Por embarcar ›</div><div class="val">${fmtTon(tonEnProduccion)}</div><div class="sub">sin entrega ${fmtTon(sinEntregaAnioKg)} · saldo parciales ${fmtTon(saldoParcialAnioKg)} · producido sin zarpar y otros ${fmtTon(Math.max(0,tonEnProduccion-sinEntregaAnioKg-saldoParcialAnioKg))}</div></div>
     <div class="kpi warn" style="cursor:pointer;" title="Ton. que faltan por entregar (pedidas − entregadas) de los pedidos con entrega parcial, de cualquier año. Clic para ver el detalle en Trazabilidad." onclick="irATrazabilidadEstado('CON ENTREGA PARCIAL','todos')"><div class="lab">Parcial Pendiente ›</div><div class="val">${fmtTon(tonPendienteParcial)}</div><div class="sub">${conParcial.length} pedidos abiertos (todos los años) · ${fmt(valorPendienteParcial)}</div></div>
     <div class="kpi ok" style="cursor:pointer;" title="Pedidos del año entregados completos (o con saldo ≤5%). Clic para ver el detalle." onclick="irATrazabilidadEstado('COMPLETADO', document.getElementById('kpi_anio').value)"><div class="lab">Completados ›</div><div class="val">${fmtTon(tonCompletados)}</div><div class="sub">${completados.length} pedidos · ${fmt(valorCompletados)}</div></div>
     <div class="kpi neutral" style="cursor:pointer;" title="Suma de las 4 etapas (Producción + Embarque + Navegación + Nacionalización), cada una ponderada por Ton. Clic para ver el detalle por etapa." onclick="irAVistaYSeccion('v11','gestion_tiempos')"><div class="lab">Ciclo Pedido → Levante</div><div class="val">${Math.round(cicloPorEtapas(M).real)} d</div><div class="sub">meta ${Math.round(cicloPorEtapas(M).meta)} d · a arribo por Kg: ${leadTimeProm?leadTimeProm+' d':'—'}</div></div>
