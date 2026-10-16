@@ -85,6 +85,7 @@
   .filters{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px;}
   .filters select, .filters input{font-family:var(--sans);font-size:12.5px;padding:7px 10px;border:1px solid var(--line);border-radius:6px;background:#fff;color:var(--ink);}
   .grid2{display:grid;grid-template-columns:1.3fr 1fr;gap:18px;}
+  table.tabla-liviana{width:max-content;min-width:100%;} table.tabla-liviana th, table.tabla-liviana td{white-space:nowrap !important;padding-top:6px;padding-bottom:6px;}
   table{width:100%;border-collapse:collapse;font-size:12px;}
   th{text-align:left;background:var(--paper);color:var(--ink-soft);font-weight:600;padding:7px 9px;font-size:10.5px;text-transform:uppercase;letter-spacing:.03em;position:sticky;top:0;border-bottom:2px solid var(--line);}
   td{padding:6px 9px;border-bottom:1px solid var(--line);font-family:var(--mono);white-space:nowrap;}
@@ -747,17 +748,6 @@
       <h3 style="color:var(--navy);margin-top:18px;">Detalle de compras por mes y familia</h3>
       <div class="scroll" style="max-height:420px;"><table id="tbl_v12_compras"></table></div>
     </div>
-    <div class="panel section-anchor" id="gestion_retrasados">
-      <h2>2 · Parciales que ya debieron zarpar — seguimiento con proveedores</h2>
-      <div class="desc">Parciales de pedidos ya colocados cuyo zarpe esperado ya pasó y todavía no aparecen como proyecto comex en Seguimiento de Proyectos. <b>Zarpe esperado</b> = fecha de pedido (o último BL) + los días típicos de ese proveedor; el tablero los re-proyecta desde hoy, por eso suman como "Ton. en riesgo de atraso". Las columnas del proveedor salen de Cuadro Pedidos. Puede ser un atraso real o un embarque ya hecho que falta registrar: en ambos casos hay una acción.</div>
-      <div class="filters">
-        <select id="vr_proveedor"><option value="">Todos los proveedores</option></select>
-        <select id="vr_familia"><option value="">Todas las familias</option></select>
-        <button id="vr_descargar" type="button" style="background:var(--navy);color:#fff;border:none;border-radius:6px;padding:8px 14px;font-size:12px;cursor:pointer;">⬇ Descargar a Excel</button>
-      </div>
-      <div class="mini-kpis" id="vr_resumen"></div>
-      <div class="scroll" style="max-height:480px;"><table id="tbl_vr_retrasados"></table></div>
-    </div>
     <section id="gestion_tiempos">
     <div class="panel">
       <h2>Cumplimiento integral de tiempos de importación</h2>
@@ -797,6 +787,17 @@
       <div class="filters"><label style="font-size:12px;color:var(--ink-soft);">Familia:</label> <select id="f11_e1_abiertos_familia"><option value="">Todas las familias</option></select></div>
       <div class="mini-kpis" id="v11_e1_abiertos_resumen"></div>
       <div class="scroll"><table id="tbl_v11_e1_abiertos"></table></div>
+    </div>
+    <div class="panel section-anchor" id="gestion_retrasados">
+      <h2>1b · Parciales que ya debieron zarpar — seguimiento con proveedores</h2>
+      <div class="desc">Parciales de pedidos ya colocados cuyo zarpe esperado ya pasó y todavía no aparecen como proyecto comex en Seguimiento de Proyectos. <b>Zarpe esperado</b> = fecha de pedido (o último BL) + los días típicos de ese proveedor; el tablero los re-proyecta desde hoy, por eso suman como "Ton. en riesgo de atraso". Las columnas del proveedor salen de Cuadro Pedidos. Puede ser un atraso real o un embarque ya hecho que falta registrar: en ambos casos hay una acción.</div>
+      <div class="filters">
+        <select id="vr_proveedor"><option value="">Todos los proveedores</option></select>
+        <select id="vr_familia"><option value="">Todas las familias</option></select>
+        <button id="vr_descargar" type="button" style="background:var(--navy);color:#fff;border:none;border-radius:6px;padding:8px 14px;font-size:12px;cursor:pointer;">⬇ Descargar a Excel</button>
+      </div>
+      <div class="mini-kpis" id="vr_resumen"></div>
+      <div class="scroll" style="max-height:480px;overflow-x:auto;"><table id="tbl_vr_retrasados" class="tabla-liviana"></table></div>
     </div>
 
     <div class="panel section-anchor" id="gestion_embarque">
@@ -3274,7 +3275,7 @@ function renderParcialesRetrasados(){
   filas.forEach(r=>{
     h += `<tr class="${r.dias>30?'row-bad':''}"><td class="txt"><b>${r.pedido}</b></td><td class="txt">${r.proveedor}</td><td class="txt">${r.familias.join(', ')||'—'}</td><td class="txt">${r.tipo}</td><td>${r.parcial}</td><td>${fmtTon(r.kg)}</td>`+
       `<td>${fmtDate(r.fechaPedido)}</td><td>${fmtDate(r.zarpeModelo)}</td><td><span class="pill ${r.dias>30?'bad':'warn'}">${r.dias} d</span></td><td>${fmtDate(r.zarpeProv)}</td><td>${fmtDate(r.prodProv)}</td>`+
-      `<td class="txt" style="font-size:11px;">${r.obs||'—'}</td><td class="txt" style="font-size:11px;">${r.accion}</td></tr>`;
+      `<td class="txt" style="font-size:11px;">${r.obs||'—'}</td><td class="txt" style="font-size:11px;color:var(--ink-soft);">${r.accion}</td></tr>`;
   });
   if(!filas.length) h += '<tr><td class="txt" colspan="13" style="color:var(--ink-soft);">No hay parciales retrasados con este filtro.</td></tr>';
   else h += `<tr style="background:var(--paper);font-weight:700;"><td class="txt" colspan="5">TOTAL</td><td>${fmtTon(ton)}</td><td colspan="7"></td></tr>`;
@@ -3414,6 +3415,14 @@ function pintarDetalleProyectosLlegada(){
   document.getElementById('tbl_v91_detalle').innerHTML = h;
 }
 // Desde 10.2b: lleva al detalle 9.1 con el mes y la familia de la barra clicada.
+// Relleno rayado (Tanda 34): distingue barras proyectadas (PPTO) de las reales sin cambiar de color.
+function patronRayado(color){
+  const c = document.createElement('canvas'); c.width = c.height = 8;
+  const x = c.getContext('2d');
+  x.fillStyle = 'rgba(30,86,49,0.12)'; x.fillRect(0,0,8,8);
+  x.strokeStyle = color; x.lineWidth = 2; x.beginPath(); x.moveTo(0,8); x.lineTo(8,0); x.moveTo(-2,2); x.lineTo(2,-2); x.moveTo(6,10); x.lineTo(10,6); x.stroke();
+  return x.createPattern(c, 'repeat');
+}
 function irADetalleLlegadas(mes, familia){
   const selM = document.getElementById('v91_mes'), selF = document.getElementById('v91_familia');
   if(selM && [...selM.options].some(o=>o.value===mes)) selM.value = mes;
@@ -3632,7 +3641,8 @@ function renderView10(){
     datasets.push(
       {label:'Llegadas de lo ya pedido (clic para ver el detalle)', type:'bar', data:filas.map(f=>f.ya), backgroundColor:COLORS.mist, stack:'mov'},
       {label:'Llegadas de sugeridos (10.3)', type:'bar', data:filas.map(f=>f.nuevo), backgroundColor:COLORS.gold, stack:'mov'},
-      {label: hayHist ? 'Salidas por venta (real deducida / PPTO)' : 'Salidas por venta (PPTO)', type:'bar', data:filas.map(f=>f.venta===null?null:-f.venta), backgroundColor:'#1E5631', stack:'mov'});
+      {label:'Salidas por venta real (deducida)', type:'bar', data:filas.map(f=>f.historico && f.venta!==null ? -f.venta : null), backgroundColor:'#1E5631', stack:'mov'},
+      {label:'Salidas por venta PPTO (proyectada)', type:'bar', data:filas.map(f=>!f.historico && f.venta!==null ? -f.venta : null), backgroundColor:patronRayado('#1E5631'), borderColor:'#1E5631', borderWidth:1.5, borderSkipped:false, stack:'mov'});
     datasets.push(
       {label:'Inventario al inicio del mes', type:'line', data:filas.map(f=>f.invInicio), borderColor:COLORS.navy, backgroundColor:COLORS.navy, pointBackgroundColor:colorPunto, pointBorderColor:colorPunto, borderWidth:2.5, pointRadius:5, pointHoverRadius:7, tension:0.15, fill:false, order:0, stack:'l_inv'},
       {label:`Mínimo (${BANDA_INVENTARIO_MIN}× venta del mes)`, type:'line', data:filas.map(f=>f.min), borderColor:COLORS.green, borderDash:[6,4], borderWidth:1.5, pointRadius:0, fill:false, order:1, stack:'l_min'},
