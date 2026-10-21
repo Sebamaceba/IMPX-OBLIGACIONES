@@ -5461,7 +5461,7 @@ function descargarBDPagos(){
     const tot = cols.map((c,i)=>+a.slice(1).reduce((s,r)=>s+r[i+1],0).toFixed(2)); a.push(['TOTAL', ...tot, +tot.reduce((x,y)=>x+y,0).toFixed(2)]);
     XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(a), nombre);
   }
-  hojaPivot('Resumen por concepto', 'Concepto · Tipo (USD)', piv(f=>`${f.concepto} · ${f.tipo}`));
+  hojaPivot('Resumen por concepto', 'Concepto · Tipo (USD)', piv(f=> f.concepto.startsWith('4.') ? `${f.concepto} · ${f.detalle}` : `${f.concepto} · ${f.tipo}`));
   hojaPivot('Por proveedor', 'Proveedor / contraparte (USD)', piv(f=>f.contraparte||'—'));
   XLSX.writeFile(wb, `BD_Pagos_Proyectados_${corte}.xlsx`);
 }
@@ -5598,11 +5598,13 @@ function renderPanelBDPagos(){
   const el = document.getElementById('bd_resumen'); if(!el || !MODEL) return;
   const B = construirBDPagos(MODEL, 12);
   const cols = ['VENCIDO', ...B.meses];
-  const conceptos = [...new Set(B.filas.map(f=>`${f.concepto} · ${f.tipo}`))].sort();
+  // Tanda 42: el pedido nuevo sugerido se abre en Anticipo / Saldo / Nacionalización (antes salía sumado en una sola línea)
+  const claveRes = f => f.concepto.startsWith('4.') ? `${f.concepto} · ${({Anticipo:'a. Anticipo', Saldo:'b. Saldo', 'Nacionalización':'c. Nacionalización'})[f.detalle]||f.detalle}` : `${f.concepto} · ${f.tipo}`;
+  const conceptos = [...new Set(B.filas.map(claveRes))].sort();
   let h = `<tr><th>Concepto</th>${cols.map(c=>`<th>${c==='VENCIDO'?'Vencido':fmtMesLabel(c)}</th>`).join('')}<th>Total</th></tr>`;
   const totCol = cols.map(()=>0);
   conceptos.forEach(k=>{
-    const vals = cols.map((c,i)=>{ const v = B.filas.filter(f=>`${f.concepto} · ${f.tipo}`===k && f.mesPago===c).reduce((a,f)=>a+(f.montoUsd||0),0); totCol[i]+=v; return v; });
+    const vals = cols.map((c,i)=>{ const v = B.filas.filter(f=>claveRes(f)===k && f.mesPago===c).reduce((a,f)=>a+(f.montoUsd||0),0); totCol[i]+=v; return v; });
     h += `<tr><td class="txt">${k}</td>${vals.map(v=>`<td>${v?Math.round(v).toLocaleString('en-US'):'—'}</td>`).join('')}<td><b>${Math.round(vals.reduce((a,b)=>a+b,0)).toLocaleString('en-US')}</b></td></tr>`;
   });
   h += `<tr style="background:var(--paper);font-weight:700;"><td class="txt">TOTAL USD</td>${totCol.map(v=>`<td>${Math.round(v).toLocaleString('en-US')}</td>`).join('')}<td>${Math.round(totCol.reduce((a,b)=>a+b,0)).toLocaleString('en-US')}</td></tr>`;
