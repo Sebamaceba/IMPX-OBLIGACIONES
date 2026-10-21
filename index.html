@@ -1469,14 +1469,17 @@ function normSP(r){
     estadoPago: get(r,'ESTADO DE PAGO')
   };
 }
+function normGiro(v){ const t = String(v||'').trim(); return /^GIRO FINANCIADO\b/i.test(t) ? 'GIRO FINANCIADO' : t; }
 function normPG(r){
   return {
     fecha: dt(get(r,'FECHA DE PAGO')),
     proyectoComex: get(r,'PROYECTO COMEX'),
     pedido: get(r,'PROYECTO EN PRODUCCIÓN'),
-    concepto: get(r,'CONCEPTO'),
+    // Tanda 43: "GIRO FINANCIADO DEUDA EXTERNA" es un giro financiado (deuda externa): se normaliza para que cuente igual
+    // en todas las vistas (antes 9 pagos quedaban fuera de "Giro financiado" y salían como "otros"). El texto original se conserva.
+    concepto: normGiro(get(r,'CONCEPTO')), conceptoOriginal: get(r,'CONCEPTO'),
     valor: num(get(r,'PAGO USD')),
-    formaPago: get(r,'FORMA DE PAGO'),
+    formaPago: normGiro(get(r,'FORMA DE PAGO')), formaPagoOriginal: get(r,'FORMA DE PAGO'),
     banco: get(r,'BANCO DEL PAGO')
   };
 }
@@ -5707,17 +5710,17 @@ const CAUSAS = {
   difNac:'Nacionalización: se pagó distinto al supuesto (arancel / IVA / TRM)',
   provAtraso:'Corrido · el proveedor incumplió su fecha de zarpe', nacArribo:'Corrido · la mercancía arribó después de lo esperado',
   modeloSinFecha:'Corrido · error del modelo (sin fecha del proveedor)', modeloIgnoro:'Corrido · error del modelo (el proveedor había dado otra fecha)',
-  zarpoNoPago:'Corrido · zarpó y no se pagó (Tesorería)', facturadoNoPago:'Corrido · facturado y no pagado (Tesorería)',
+  zarpoNoPago:'Corrido · zarpó, está facturado y no se pagó (Tesorería)', facturadoNoPago:'Corrido · facturado y no pagado (Tesorería)',
   financiado:'Corrido · se financió con giro (sale después como giro)', gfNoPago:'Corrido · giro no pagado / prorrogado (Tesorería)',
   nacNoPago:'Corrido · nacionalización no pagada / sin registrar', noColocado:'Corrido · pedido sugerido no colocado (Compras)',
-  adelantado:'Adelantado (estaba para meses siguientes)', rezago:'Rezago: pago de algo que se corrió del mes anterior', noPlan:'No planeado'};
-const RESP = {ok:'Cumplido', prov:'Proveedor / logística', nos:'Imporinox (Tesorería / Compras)', modelo:'Modelo (asertividad del pronóstico)', otros:'Rezagos y no planeados'};
+  adelantado:'Adelantado (estaba para meses siguientes)', pendiente:'Pendiente: vence después de hoy (mes en curso)', rezago:'Rezago: pago de algo que se corrió del mes anterior', noPlan:'No planeado'};
+const RESP = {ok:'Cumplido', pend:'Pendiente (aún no vence)', prov:'Proveedor / logística', nos:'Imporinox (Tesorería / Compras)', modelo:'Modelo (asertividad del pronóstico)', otros:'Rezagos y no planeados'};
 const CAUSA_RESP = {
   [CAUSAS.segun]:RESP.ok, [CAUSAS.provAtraso]:RESP.prov, [CAUSAS.nacArribo]:RESP.prov,
   [CAUSAS.difMas]:RESP.modelo, [CAUSAS.difMenos]:RESP.modelo, [CAUSAS.difNac]:RESP.modelo, [CAUSAS.modeloSinFecha]:RESP.modelo, [CAUSAS.modeloIgnoro]:RESP.modelo,
   [CAUSAS.zarpoNoPago]:RESP.nos, [CAUSAS.facturadoNoPago]:RESP.nos, [CAUSAS.financiado]:RESP.nos, [CAUSAS.gfNoPago]:RESP.nos, [CAUSAS.nacNoPago]:RESP.nos,
-  [CAUSAS.noColocado]:RESP.nos, [CAUSAS.adelantado]:RESP.nos, [CAUSAS.rezago]:RESP.otros, [CAUSAS.noPlan]:RESP.otros};
-const RESP_ORDEN = [RESP.prov, RESP.nos, RESP.modelo, RESP.otros];
+  [CAUSAS.noColocado]:RESP.nos, [CAUSAS.adelantado]:RESP.nos, [CAUSAS.pendiente]:RESP.pend, [CAUSAS.rezago]:RESP.otros, [CAUSAS.noPlan]:RESP.otros};
+const RESP_ORDEN = [RESP.pend, RESP.prov, RESP.nos, RESP.modelo, RESP.otros];
 function numPlan(v){ if(v===null||v===undefined||v==='') return 0; return typeof v==='number' ? v : (parseFloat(String(v).replace(/,/g,''))||0); }
 function fechaPlan(v){ if(!v) return null; if(v instanceof Date) return v; const m = String(v).match(/^(\d{4})-(\d{2})-(\d{2})/); return m ? new Date(+m[1], +m[2]-1, +m[3]) : null; }
 function filasMeta(mes){ const a = FIN.meta.filter(f=>String(f['Mes de corte'])===mes); return a.length ? a : FIN.metaLocal.filter(f=>String(f['Mes de corte'])===mes); }
@@ -5740,33 +5743,53 @@ function analizarPlanVsReal(M, mesCorte){
   const libres = pred => reales.filter((r,i)=>!usado.has(i) && pred(r));
   const lineas = [];
   const zarpeProv = zarpeProveedorPorPedido(M);
+  // Tanda 43: (1) líneas del plan con la MISMA clave específica (p. ej. una factura en varias líneas de producto) se agrupan
+  // y se comparan contra la suma de sus pagos; (2) los cruces aproximados (giro por pedido, parcial estimado, pedido sugerido)
+  // son uno a uno: se toma el pago de monto más parecido, no todos los del pedido; (3) en el mes en curso, lo que vence
+  // después de hoy no es desvío todavía: "Pendiente (aún no vence)".
+  const hoyD = soloDia(new Date()), enCursoMes = mesCorte===monthKey(new Date());
+  const agrupable = c => c && !c.endsWith('|*') && !c.endsWith('|') && !c.startsWith('NUEVO|') && !c.startsWith('NAC|*|') && c!=='NAC|*|*';
+  const grupos = []; const idxClave = {};
   plan.forEach(f=>{
-    const montoPlan = numPlan(f['Monto a pagar USD']);
-    if(!(montoPlan>0)) return;
-    const clave = String(f['Clave de cruce']||''), pedido = String(f['Pedido']||''), ref = String(f['Proyecto comex / parcial']||''), conc = String(f['Concepto']||''), det = String(f['Detalle']||'');
-    // cruce: clave exacta → por pedido (parciales estimados, giros, nacionalización) → consolidados de descargas viejas
-    let cands = libres(r=>r.clave===clave);
-    if(!cands.length && clave.startsWith('SALDO|') && clave.endsWith('|*')) cands = libres(r=>r.comp==='1. Saldo a proveedor' && r.pedido===pedido);
-    if(!cands.length && clave.startsWith('GF|')) cands = libres(r=>r.comp==='2. Giro financiero' && pedido && r.pedido===pedido);
+    const monto = numPlan(f['Monto a pagar USD']); if(!(monto>0)) return;
+    const clave = String(f['Clave de cruce']||'');
+    if(agrupable(clave) && idxClave[clave]!==undefined){ const g = grupos[idxClave[clave]]; g.monto += monto; g.n++; const fp = fechaPlan(f['Fecha de pago']); if(fp && (!g.fp || fp<g.fp)) g.fp = fp; return; }
+    if(agrupable(clave)) idxClave[clave] = grupos.length;
+    grupos.push({f, clave, monto, n:1, fp:fechaPlan(f['Fecha de pago'])});
+  });
+  // primero las claves exactas, luego los cruces aproximados (así un pago exacto no lo "roba" un cruce por pedido)
+  grupos.sort((a,b)=> (agrupable(b.clave)?1:0)-(agrupable(a.clave)?1:0) || ((a.fp||0)-(b.fp||0)));
+  const unoAUno = (cands, monto)=>{
+    if(cands.length<=1) return cands;
+    const tot = cands.reduce((x,r)=>x+r.usd,0); if(Math.abs(tot-monto)<=0.05*monto) return cands;
+    return [cands.slice().sort((a,b)=>Math.abs(a.usd-monto)-Math.abs(b.usd-monto))[0]];
+  };
+  grupos.forEach(G=>{
+    const f = G.f, montoPlan = G.monto;
+    const clave = G.clave, pedido = String(f['Pedido']||''), ref = String(f['Proyecto comex / parcial']||''), conc = String(f['Concepto']||''), det = String(f['Detalle']||'');
+    let cands = libres(r=>r.clave===clave), aprox = false;
+    if(!cands.length && clave.startsWith('SALDO|') && clave.endsWith('|*')){ cands = libres(r=>r.comp==='1. Saldo a proveedor' && r.pedido===pedido); aprox = true; }
+    if(!cands.length && clave.startsWith('GF|')){ cands = libres(r=>r.comp==='2. Giro financiero' && pedido && r.pedido===pedido); aprox = true; }
     if(!cands.length && clave==='NAC|*|*') cands = libres(r=>r.comp==='3. Nacionalización');
-    else if(!cands.length && clave.startsWith('NAC|*|')) cands = libres(r=>r.comp==='3. Nacionalización' && pedido && r.pedido===pedido);
+    else if(!cands.length && clave.startsWith('NAC|*|')){ cands = libres(r=>r.comp==='3. Nacionalización' && pedido && r.pedido===pedido); aprox = true; }
     if(!cands.length && clave.startsWith('NUEVO|') && det==='Saldo'){ const prov = clave.split('|')[1]; cands = libres(r=>r.comp==='1. Saldo a proveedor' && r.proveedor===prov && r.fechaPedido && corte && r.fechaPedido>=corte); }
-    if(!cands.length && !clave && conc.startsWith('1.')) cands = libres(r=>r.comp==='1. Saldo a proveedor' && r.pedido===pedido);
-    if(cands.length>1 && clave.startsWith('NUEVO|')) cands = cands.slice(0,1);   // un pedido sugerido = un pago
+    if(!cands.length && !clave && conc.startsWith('1.')){ cands = libres(r=>r.comp==='1. Saldo a proveedor' && r.pedido===pedido); aprox = true; }
+    if(aprox || clave.startsWith('NUEVO|') || clave.startsWith('GF|')) cands = unoAUno(cands, montoPlan);
     const caja = cands.filter(r=>!r.financiado), fin = cands.filter(r=>r.financiado);
     cands.forEach(r=> usado.add(reales.indexOf(r)));
     const real = caja.reduce((a,r)=>a+r.usd,0);
-    const base = {mes:mesCorte, concepto:conc, detalle:det, tipo:f['Tipo'], proveedor:f['Proveedor / contraparte'], pedido, referencia:ref, plan:montoPlan, real, fechaPlan:fechaPlan(f['Fecha de pago']),
-      fechaReal: caja.length ? caja[0].fecha : null};
+    const base = {mes:mesCorte, concepto:conc, detalle: G.n>1 ? `${det} (${G.n} líneas del plan)` : det, tipo:f['Tipo'], proveedor:f['Proveedor / contraparte'], pedido, referencia:ref, plan:montoPlan, real, fechaPlan:G.fp,
+      fechaReal: caja.length ? caja[0].fecha : (fin.length ? fin[0].fecha : null)};
     if(real>0){
       const d = real - montoPlan;
       if(Math.abs(d) <= 0.05*montoPlan) lineas.push({...base, causa:CAUSAS.segun, impacto:0});
       else lineas.push({...base, causa: conc.startsWith('3.') ? CAUSAS.difNac : (d>0?CAUSAS.difMas:CAUSAS.difMenos), impacto:d});
       return;
     }
-    // ---- corrido: ¿por qué?
+    // ---- no se pagó (todavía): ¿por qué?
     let causa;
     if(fin.length) causa = CAUSAS.financiado;
+    else if(enCursoMes && G.fp && G.fp >= hoyD) causa = CAUSAS.pendiente;
     else if(conc.startsWith('4.')) causa = CAUSAS.noColocado;
     else if(conc.startsWith('2.')) causa = CAUSAS.gfNoPago;
     else if(conc.startsWith('3.')){
@@ -5776,8 +5799,13 @@ function analizarPlanVsReal(M, mesCorte){
       causa = (arr && (!arriboReal || arriboReal > finMes)) ? CAUSAS.nacArribo : CAUSAS.nacNoPago;
     } else if(String(f['Tipo'])==='Real') causa = CAUSAS.facturadoNoPago;
     else {
-      const zarpoEnMes = M.spAll.some(s=>s.pedido===pedido && s.fechaRealZarpe && s.fechaRealZarpe<=finMes && s.fechaRealZarpe>=new Date(y, m-2, 1));
-      if(zarpoEnMes) causa = CAUSAS.zarpoNoPago;
+      // Tesorería solo si hay un embarque REAL de ese pedido que zarpó, ya está facturado (proyecto comex) y su pago
+      // ya debió hacerse y sigue pendiente. Si el embarque que zarpó ya se pagó, este parcial es uno que el modelo
+      // esperaba y no ocurrió → se evalúa contra la fecha del proveedor.
+      const limite = enCursoMes ? hoyD : finMes;
+      const zarpoSinPagar = M.spAll.some(s=>s.pedido===pedido && s.fechaRealZarpe && s.fechaRealZarpe<=finMes && s.fechaRealZarpe>=new Date(y, m-2, 1)
+        && s.estadoCalculado==='PENDIENTE POR PAGAR' && s.fechaUsada && s.fechaUsada<=limite);
+      if(zarpoSinPagar) causa = CAUSAS.zarpoNoPago;
       else {
         const zp = fechaPlan(f['Zarpe estimado por el proveedor']) || (f['Zarpe estimado por el proveedor']===undefined || f['Zarpe estimado por el proveedor']==='' ? zarpeProv[pedido] : null);
         causa = !zp ? CAUSAS.modeloSinFecha : (zp <= finMes ? CAUSAS.provAtraso : CAUSAS.modeloIgnoro);
@@ -5813,11 +5841,12 @@ function renderPlanVsReal(){
     (A.origen.startsWith('Histórica') ? 'Meta reconstruida de una descarga anterior: el cruce es por pedido / proyecto / proveedor y es aproximado. ' : '') +
     `Todo en USD. ${A.nPlan} líneas en el plan.` + (A.nacSinTrm ? ` <b style="color:var(--amber);">${A.nacSinTrm} nacionalización(es) pagadas valoradas sin TRM (falta conectar Finanzas).</b>` : '') +
     (A.nacSinValor ? ` <b style="color:var(--red);">${A.nacSinValor} nacionalización(es) pagadas sin TRM ni valor factura: no entran al real.</b>` : '');
-  const pct = A.totPlan>0 ? A.totReal/A.totPlan : null, acierto = A.totPlan>0 ? A.segun/A.totPlan : null;
+  const pend = A.lineas.filter(l=>l.causa===CAUSAS.pendiente).reduce((a,l)=>a+l.plan,0), metaVencida = A.totPlan - pend;
+  const pct = metaVencida>0 ? A.totReal/metaVencida : null, acierto = metaVencida>0 ? A.segun/metaVencida : null;
   document.getElementById('pvr_kpis').innerHTML =
-    `<div class="mini-kpi"><span>Caja planeada (meta)</span><b>${fmt0(A.totPlan)}</b></div>`+
+    `<div class="mini-kpi"><span>Caja planeada (meta)</span><b>${fmt0(A.totPlan)}</b>${pend?`<span>${fmt0(pend)} vence después de hoy</span>`:''}</div>`+
     `<div class="mini-kpi"><span>Caja real pagada</span><b>${fmt0(A.totReal)}</b></div>`+
-    `<div class="mini-kpi ${semaforoRatio(pct)}"><span>Cumplimiento (real / meta)</span><b>${pct===null?'—':Math.round(pct*100)+'%'}</b><span>verde ±5% · ámbar ±10%</span></div>`+
+    `<div class="mini-kpi ${semaforoRatio(pct)}"><span>Cumplimiento ${pend?'a la fecha':''} (real / meta${pend?' ya vencida':''})</span><b>${pct===null?'—':Math.round(pct*100)+'%'}</b><span>verde ±5% · ámbar ±10%</span></div>`+
     `<div class="mini-kpi ${acierto===null?'':(acierto>=0.8?'ok':(acierto>=0.6?'warn':'bad'))}"><span>Acierto del plan</span><b>${acierto===null?'—':Math.round(acierto*100)+'%'}</b><span>% de la meta pagado como se planeó (±5%)</span></div>`;
   // ---- Árbol: responsable → causa
   let t = '<tr><th>Responsable / causa</th><th>Líneas</th><th>Impacto USD</th><th>% de la meta</th></tr>';
