@@ -192,7 +192,7 @@
   </div>
   <div class="nav-grupo"><span class="nav-grupo-label">Finanzas</span>
     <button data-view="v4">Pendientes por Pagar</button>
-    <button data-view="v5">Nacionalización</button>
+    <button data-view="v_fc">Flujo de Caja y Asertividad</button>
   </div>
   <div class="nav-grupo"><span class="nav-grupo-label">Modelo</span>
     <button data-view="v8">Estadísticas del Modelo</button>
@@ -349,31 +349,6 @@
   </div>
 
   <div class="view" id="v4">
-    <div class="panel" id="bd_pagos_panel">
-      <h2>Base de datos de pagos proyectados — próximos 12 meses</h2>
-      <div class="desc">Todas las salidas de dinero que conoce el tablero, una fila por pago: saldos a proveedores (reales y estimados), giros financieros, nacionalizaciones (registradas sin pagar y estimadas) y pedidos nuevos sugeridos (anticipo, saldo y nacionalización). Cada fila trae proveedor, pedido, proyecto comex, Ton, valor de la factura y lo ya pagado, para analizar con filtros o tablas dinámicas. "Vencido" = pagos reales con fecha pasada que siguen sin registrarse como pagados. Todo en USD: la nacionalización se valora con el mismo supuesto de Vista 4 (arancel + IVA sobre el valor factura); la conversión a pesos se hace en el FC financiero. Cada mes se congela una foto automática (FC_VIGENTE / FC_PLAN_MES) para comparar lo proyectado contra lo pagado.</div>
-      <div class="filters">
-        <button id="bd_descargar" type="button" style="background:var(--navy);color:#fff;border:none;border-radius:6px;padding:8px 14px;font-size:12px;cursor:pointer;">⬇ Descargar BD de pagos (Excel)</button>
-      </div>
-      <div id="bd_nota" style="font-size:11.5px;color:var(--ink-soft);margin:6px 0;"></div>
-      <div class="scroll"><table id="bd_resumen" class="tabla-liviana"></table></div>
-    </div>
-    <div class="panel" id="pvr_panel">
-      <h2>Plan vs. real de caja — ¿por qué se pagó distinto a lo planeado?</h2>
-      <div class="desc">Meta = plan de pagos congelado el 1.er día hábil del mes (hoja FC_PLAN_MES). Real = pagos registrados en la hoja Pagos (USD; un saldo "financiado" no es salida de caja) + nacionalizaciones pagadas, valoradas en USD con el mismo supuesto del plan (por eso en nacionalización se mide la fecha, no el monto). Todo en USD, sin TRM. Cada diferencia se atribuye a una causa: pagado según plan (±5%), diferencia de monto, corrido (por qué), adelantado o no planeado.</div>
-      <div class="filters">
-        <label style="font-size:12px;color:var(--ink-soft);">Mes del plan: <select id="pvr_mes" style="margin-left:6px;"></select></label>
-        <label style="font-size:12px;color:var(--ink-soft);">Causa: <select id="pvr_causa" style="margin-left:6px;"></select></label>
-        <button id="pvr_descargar" type="button" style="background:var(--navy);color:#fff;border:none;border-radius:6px;padding:8px 14px;font-size:12px;cursor:pointer;">⬇ Descargar plan vs real (Excel)</button>
-      </div>
-      <div id="pvr_estado" style="font-size:11.5px;color:var(--ink-soft);margin:6px 0;"></div>
-      <div class="mini-kpis" id="pvr_kpis"></div>
-      <div style="height:320px;"><canvas id="c_pvr_cascada"></canvas></div>
-      <h3 style="font-size:13px;margin:14px 0 6px;">Componente × causa (USD)</h3>
-      <div class="scroll"><table id="pvr_tabla" class="tabla-liviana"></table></div>
-      <h3 style="font-size:13px;margin:14px 0 6px;">Detalle por línea (ordenado por impacto)</h3>
-      <div class="scroll" style="max-height:420px;"><table id="pvr_detalle" class="tabla-liviana"></table></div>
-    </div>
     <div class="panel">
       <h2>Resumen: total pendiente por pagar actualmente</h2>
       <div class="mini-kpis" id="v4_resumen"></div>
@@ -458,9 +433,10 @@
       </div>
     </div>
     <div class="panel">
-      <h2>4.7 · Nacionalización estimada (Arancel + IVA) — consolidada por mes de pago</h2>
-      <div class="desc">Así se paga en la realidad: todas las llegadas (reales o estimadas) de un mes se acumulan, y el arancel + IVA de ese acumulado se paga en la <b>primera semana del mes siguiente</b>. Fórmula: Nacionalización = Valor Acumulado × Arancel% × (1 + IVA%). Incluye proyectos comex navegando, parciales incompletos y pedidos sin parcial — lo que ya arribó y no está registrado se lista aparte, no se pronostica (ya debió pagarse).</div>
+      <h2>4.7 · Nacionalización estimada (% efectivo por familia) — consolidada por mes de pago</h2>
+      <div class="desc">Así se paga en la realidad: todas las llegadas (reales o estimadas) de un mes se acumulan, y el arancel + IVA de ese acumulado se paga en la <b>primera semana del mes siguiente</b>. Fórmula (desde 21-oct-2026): Nacionalización = Valor factura × <b>% efectivo de su familia</b> (mediana de lo realmente pagado en los últimos 12 meses: COP ÷ TRM del día ÷ factura USD; detalle en la pestaña Flujo de Caja y Asertividad). Si no hay TRM o hay menos de 4 proyectos pagados, se usa el respaldo Arancel% × (1 + IVA%). Incluye proyectos comex navegando, parciales incompletos y pedidos sin parcial — lo que ya arribó y no está registrado se lista aparte, no se pronostica (ya debió pagarse).</div>
       <div class="filters">
+        <span style="font-size:11.5px;color:var(--ink-soft);">Respaldo (solo si no hay calibración):</span>
         <label style="font-size:11.5px;color:var(--ink-soft);">Arancel % <input id="v4_arancel" type="number" step="0.1" value="6" style="width:60px;"></label>
         <label style="font-size:11.5px;color:var(--ink-soft);">IVA % <input id="v4_iva" type="number" step="0.1" value="19" style="width:60px;"></label>
         <select id="f46_mes"><option value="">Todos los meses de pago</option></select>
@@ -471,19 +447,60 @@
     </div>
   </div>
 
-  <div class="view" id="v5">
-
+  <div class="view" id="v_fc">
     <div class="panel">
-      <h2>5 · Nacionalizaciones por mes</h2>
-      <div class="desc">Valor real y estimado en COP, y qué proyectos comex incluye cada mes.</div>
-      <canvas id="c_nacMes" height="80"></canvas>
+      <h2>Flujo de caja de abastecimiento — información para Finanzas</h2>
+      <div class="desc">El Tablero calcula todos los pagos de abastecimiento en USD (saldos a proveedores, giros financieros, nacionalización y pedidos nuevos sugeridos) y los guarda en el Sheet de Finanzas: la proyección de 12 meses (se sobrescribe cada mes), la meta congelada de cada mes (historial) y los pagos reales. La nacionalización, que se paga en COP, se pasa a USD con la TRM oficial (pagos reales) o con la TRM del mes de pago (proyección); la TRM proyectada la puede ajustar Finanzas en la hoja TRM_MENSUAL.</div>
+      <div id="fin_estado"></div>
     </div>
-    <div class="panel">
-      <h2>Detalle de nacionalizaciones</h2>
+    <div class="panel" id="bd_pagos_panel">
+      <h2>1 · Base de datos de pagos proyectados — próximos 12 meses (USD)</h2>
+      <div class="desc">Todas las salidas de dinero de abastecimiento, una fila por pago, en USD: saldos a proveedores (reales y estimados), giros financieros, nacionalizaciones (registradas sin pagar y estimadas) y pedidos nuevos sugeridos (anticipo, saldo y nacionalización). Cada fila trae proveedor, pedido, proyecto comex, Ton, valor factura, lo ya pagado y la clave de cruce para el análisis meta vs. real. Nacionalización: registrada = saldo COP ÷ TRM del mes de pago; estimada = valor factura × supuesto % (arancel × (1+IVA), Vista 4.7), con el COP equivalente y la TRM usada como referencia. "Vencido" = pagos reales con fecha pasada que siguen sin registrarse como pagados. El 1.er día hábil de cada mes esta BD se guarda en el Sheet de Finanzas (FC_PROYECCION_12M se sobrescribe; FC_META_MES guarda la meta del mes).</div>
+      <div class="filters">
+        <button id="bd_descargar" type="button" style="background:var(--navy);color:#fff;border:none;border-radius:6px;padding:8px 14px;font-size:12px;cursor:pointer;">⬇ Descargar BD de pagos (Excel)</button>
+        <label style="background:#fff;color:var(--navy);border:1px solid var(--navy);border-radius:6px;padding:7px 14px;font-size:12px;cursor:pointer;">⬆ Cargar meta desde descargas anteriores
+          <input id="fin_hist_files" type="file" accept=".xlsx" multiple style="display:none;"></label>
+        <span id="fin_hist_msg" style="font-size:11.5px;color:var(--ink-soft);"></span>
+      </div>
+      <div id="bd_nota" style="font-size:11.5px;color:var(--ink-soft);margin:6px 0;"></div>
+      <div class="scroll"><table id="bd_resumen" class="tabla-liviana"></table></div>
+    </div>
+    <div class="panel" id="pvr_panel">
+      <h2>2 · Meta vs. real de caja — ¿dónde estuvo el desvío y de quién?</h2>
+      <div class="desc">Meta = foto de los pagos congelada el 1.er día hábil del mes en el Sheet de Finanzas (hoja FC_META_MES: vencidos + pagos del mes). Real = pagos registrados en la hoja Pagos (USD; un saldo "financiado" no es salida de caja: sale después como giro) + nacionalizaciones pagadas, pasadas a USD con la TRM oficial del día del pago. Cada dólar de diferencia se explica en un árbol: <b>responsable</b> (Proveedor / logística · Imporinox · Modelo · Rezagos) → <b>causa</b> → línea. Cumplimiento: verde ±5%, ámbar ±10%, rojo fuera.</div>
+      <div class="filters">
+        <label style="font-size:12px;color:var(--ink-soft);">Mes de la meta: <select id="pvr_mes" style="margin-left:6px;"></select></label>
+        <label style="font-size:12px;color:var(--ink-soft);">Ver detalle de: <select id="pvr_causa" style="margin-left:6px;"></select></label>
+        <button id="pvr_descargar" type="button" style="background:var(--navy);color:#fff;border:none;border-radius:6px;padding:8px 14px;font-size:12px;cursor:pointer;">⬇ Descargar meta vs real (Excel)</button>
+      </div>
+      <div id="pvr_estado" style="font-size:11.5px;color:var(--ink-soft);margin:6px 0;"></div>
+      <div class="mini-kpis" id="pvr_kpis"></div>
+      <div class="grid-2" style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:16px;align-items:start;">
+        <div><h3 style="font-size:13px;margin:6px 0;">Árbol del desvío: responsable → causa (USD)</h3><div class="scroll"><table id="pvr_arbol" class="tabla-liviana"></table></div></div>
+        <div><h3 style="font-size:13px;margin:6px 0;">Cascada meta → real por responsable</h3><div style="height:300px;"><canvas id="c_pvr_cascada"></canvas></div></div>
+      </div>
+      <h3 style="font-size:13px;margin:14px 0 6px;">Componente × responsable (USD)</h3>
+      <div class="scroll"><table id="pvr_tabla" class="tabla-liviana"></table></div>
+      <h3 style="font-size:13px;margin:14px 0 6px;">Detalle por línea (ordenado por impacto)</h3>
+      <div class="scroll" style="max-height:420px;"><table id="pvr_detalle" class="tabla-liviana"></table></div>
+      <h3 style="font-size:13px;margin:14px 0 6px;">Seguimiento mensual — todas las metas guardadas</h3>
+      <div class="scroll"><table id="pvr_hist" class="tabla-liviana"></table></div>
+    </div>
+    <div class="panel" id="nac_panel">
+      <h2>3 · Nacionalización — estimado vs. real y asertividad del supuesto</h2>
+      <div class="desc">Valor estimado (gris) y real (azul) en COP por mes, según la hoja de Nacionalización. El % sobre la barra azul es el cumplimiento: real ÷ estimado de las nacionalizaciones ya pagadas (verde ±5%, ámbar ±10%, rojo fuera).</div>
+      <div style="height:320px;"><canvas id="c_nacMes"></canvas></div>
+      <h3 style="font-size:13px;margin:14px 0 6px;">Cumplimiento por mes</h3>
+      <div class="scroll" style="max-height:300px;"><table id="nac_cumpl" class="tabla-liviana"></table></div>
+      <h3 style="font-size:13px;margin:16px 0 6px;">¿Con qué % estimó el modelo y con cuál se pagó? (USD)</h3>
+      <div class="mini-kpis" id="nac_calib_kpis"></div>
+      <div class="scroll" style="max-height:300px;"><table id="nac_calib" class="tabla-liviana"></table></div>
+      <div class="note" id="nac_nota" style="margin-top:10px;"></div>
+      <h3 style="font-size:13px;margin:14px 0 6px;">Detalle de nacionalizaciones</h3>
       <div class="filters">
         <select id="f5_mes"><option value="">Todos los meses</option></select>
       </div>
-      <div class="scroll"><table id="tbl_nac"></table></div>
+      <div class="scroll" style="max-height:480px;"><table id="tbl_nac"></table></div>
     </div>
   </div>
 
@@ -2755,10 +2772,18 @@ async function init(){
       METAS = metas; METAS_ESTADO = estado;
       renderView12(); renderComparacionSugeridosVsReal(); renderComparacionLlegadasVsReal();
       guardarFotoAutomatica();
-      guardarFotoPagosAutomatica(estado);
-      renderPanelBDPagos();
-      cargarPlanCaja().then(renderPlanVsReal);
     });
+    // Tanda 40: Sheet de Finanzas (meta de caja, TRM) → re-render → envío de proyección y pagos reales
+    cargarFinanzas().then(async ()=>{
+      // Tanda 41: con la TRM de Finanzas se calibra el % efectivo de nacionalización y se recalculan las vistas que lo usan
+      try{ SUPUESTO_NAC = calibrarNacionalizacion(MODEL); }catch(e){ console.warn('Calibración de nacionalización:', e); SUPUESTO_NAC = null; }
+      if(SUPUESTO_NAC){ [renderTableroMando, renderView1, renderView4, renderView10].forEach(fn=>{ try{ fn(); }catch(e){ console.warn('Re-render tras calibrar:', e); } }); }
+      renderPanelBDPagos(); renderView5(); renderPlanVsReal();
+      await sincronizarFinanzas();
+      renderPanelBDPagos(); renderPlanVsReal();
+    });
+    const fh = document.getElementById('fin_hist_files');
+    if(fh) fh.onchange = ()=>{ if(fh.files.length) cargarMetasHistoricas([...fh.files]); fh.value=''; };
   } catch(err){
     setStatus('error', 'Error: ' + err.message);
     document.getElementById('loadMsg').innerHTML = `⚠ ${err.message}<br><br><button id="retryBtn">Reintentar</button>`;
@@ -4527,7 +4552,7 @@ function buildPedidosNuevosProyectados(M, opts={}){
       fechaPagoSaldo: addDays(fechaZarpe, stats.avgBlPago(prov) ?? 15),
       fechaNac: primeraSemanaSiguienteMes(monthKey(fechaArribo)),
       precioUsdTon, valorUsd, pctAnticipo,
-      montoAnticipoUsd: valorUsd*pctAnticipo, montoSaldoUsd: valorUsd*(1-pctAnticipo), montoNacUsd: valorUsd*arancelPct*(1+ivaPct),
+      montoAnticipoUsd: valorUsd*pctAnticipo, montoSaldoUsd: valorUsd*(1-pctAnticipo), montoNacUsd: valorUsd*supuestoNac(familia, arancelPct, ivaPct).pct,
       leadTimeDias: p.lt, leadTimeEsPropio: p.ltEsPropio, colocarYa, retrasado: false,
       excedeMaxHistorico: isFinite(p.topeTon) && ton > p.topeTon/CRECIMIENTO_MAX_VS_HISTORICO + 1e-6,
       parcial: 1, deParciales: 1 };
@@ -5166,8 +5191,52 @@ function primeraSemanaSiguienteMes(mesArribo){
   return new Date(ny, nm-1, 5);
 }
 
+// ================= SUPUESTO DE NACIONALIZACIÓN — FASE 1 (Tanda 41, 21-oct-2026) =================
+// En vez de arancel × (1+IVA) (que subestimaba ~2.8x), la nacionalización estimada usa el % EFECTIVO pagado
+// sobre el valor factura, por familia: mediana de los proyectos con nacionalización PAGADA en los últimos 12 meses.
+//   % efectivo de un proyecto = Σ (COP pagado de cada línea ÷ TRM oficial del día de ese pago) ÷ valor factura USD del proyecto
+// Incluye todo lo que hoy se paga como "nacionalización" (arancel, IVA, y lo que comex registre en esa hoja).
+// Familia del proyecto = la de mayor COP en sus líneas de la hoja Nacionalización (columna PRODUCTO).
+// Reglas: ≥ 4 proyectos en la familia → su mediana; si no, mediana de todas las familias (≥ 4); si no hay TRM o
+// datos suficientes → fórmula de respaldo arancel × (1+IVA) de Vista 4.7. Se recalcula sola cada vez que abre el Tablero.
+let SUPUESTO_NAC = null;
+const NAC_MIN_PROYECTOS = 4;
+function cuantil(arr, q){ const s = arr.filter(v=>v!==null && isFinite(v)).sort((a,b)=>a-b); if(!s.length) return null; const pos = (s.length-1)*q, b = Math.floor(pos); return s[b] + (s[Math.min(b+1,s.length-1)]-s[b])*(pos-b); }
+function calibrarNacionalizacion(M){
+  if(!M || !FIN.trm) return null;
+  const NP = nacPorProyecto(M), hoyK = monthKey(new Date()), desde = sumarMesK(hoyK, -11);   // 12 meses calendario incluyendo el actual
+  const g = {};
+  M.nac.forEach(n=>{ const k = n.proyectoComex; if(!k) return; const x = g[k] = g[k] || {cop:0, usd:0, pagado:true, ultimo:null, sinTrm:false, copFam:{}};
+    const cop = (n.valorRealCOP || n.valorEstimadoCOP || 0); x.cop += cop;
+    const fam = familiaDeProducto(n.producto); x.copFam[fam] = (x.copFam[fam]||0) + cop;
+    if(String(n.estado||'').toUpperCase()!=='PAGADO' || !n.fechaPago){ x.pagado = false; return; }
+    const T = trmDia(n.fechaPago); if(!T){ x.sinTrm = true; return; } x.usd += cop/T.valor;
+    if(!x.ultimo || n.fechaPago > x.ultimo) x.ultimo = n.fechaPago; });
+  const todos = Object.entries(g).filter(([k,x])=>x.pagado && !x.sinTrm && x.ultimo && x.cop>0 && NP[k] && NP[k].vf>0)
+    .map(([k,x])=>({proyecto:k, familia:Object.entries(x.copFam).sort((a,b)=>b[1]-a[1])[0][0], pct:x.usd/NP[k].vf, mes:monthKey(x.ultimo), vf:NP[k].vf, usd:x.usd, cop:x.cop, trmImplicita:x.cop/x.usd}));
+  const proyectos = todos.filter(p=>p.mes>=desde && p.mes<=hoyK);
+  const resumen = arr=>({n:arr.length, pct:cuantil(arr.map(p=>p.pct),0.5), p25:cuantil(arr.map(p=>p.pct),0.25), p75:cuantil(arr.map(p=>p.pct),0.75)});
+  const porFamilia = {}; [...new Set(proyectos.map(p=>p.familia))].forEach(f=> porFamilia[f] = resumen(proyectos.filter(p=>p.familia===f)));
+  return {proyectos, todos, porFamilia, global: resumen(proyectos), desde, hasta:hoyK};
+}
+// Supuesto a usar para una familia → {pct (decimal), fuente}
+function supuestoNac(familia, arancelPct=0.06, ivaPct=0.19){
+  const S = SUPUESTO_NAC;
+  if(S){
+    const f = S.porFamilia[familia];
+    if(f && f.n>=NAC_MIN_PROYECTOS) return {pct:f.pct, fuente:`% efectivo ${familia}: mediana de ${f.n} proyectos (12 meses)`};
+    if(S.global.n>=NAC_MIN_PROYECTOS) return {pct:S.global.pct, fuente:`% efectivo general: mediana de ${S.global.n} proyectos (12 meses)${familia?' — '+familia+' con pocos datos':''}`};
+  }
+  return {pct:arancelPct*(1+ivaPct), fuente:`Respaldo: ${(arancelPct*100).toFixed(1)}% arancel × (1+${(ivaPct*100).toFixed(0)}% IVA) — sin calibración`};
+}
+// Familia dominante (por Kg pedidos) de un pedido
+function familiaDePedido(M, pedido){
+  if(!M._famPedDom){ const o = {}; M.ton.grupos.forEach(g=>{ const k = M.ton.proformaToPedido[g.proforma]; if(!k) return; o[k] = o[k]||{}; o[k][g.familia] = (o[k][g.familia]||0) + (g.cantidadPedidaKg||0); });
+    M._famPedDom = {}; Object.entries(o).forEach(([k,f])=> M._famPedDom[k] = Object.entries(f).sort((a,b)=>b[1]-a[1])[0][0]); }
+  return M._famPedDom[pedido] || '';
+}
+
 function calcularNacEstimada(M, arancelPct, ivaPct){
-  const factor = arancelPct*(1+ivaPct);
   const nacRegistrados = new Set(M.nac.map(n=>n.proyectoComex));
   const items = [];
 
@@ -5210,13 +5279,15 @@ function calcularNacEstimada(M, arancelPct, ivaPct){
   const porMes = {};
   items.forEach(it=>{
     const m = monthKey(it.fechaArribo); if(!m) return;
-    if(!porMes[m]) porMes[m] = {mesArribo:m, valorBase:0, kg:0, items:[]};
-    porMes[m].valorBase += it.valorBase;
+    it.familia = familiaDePedido(M, it.pedido); const S = supuestoNac(it.familia, arancelPct, ivaPct);
+    it.pct = S.pct; it.fuenteSupuesto = S.fuente; it.valorNac = it.valorBase*S.pct;
+    if(!porMes[m]) porMes[m] = {mesArribo:m, valorBase:0, valorNac:0, kg:0, items:[]};
+    porMes[m].valorBase += it.valorBase; porMes[m].valorNac += it.valorNac;
     porMes[m].kg += (it.kg||0);
     porMes[m].items.push(it);
   });
   const filasMes = Object.values(porMes).map(g=>({
-    mesArribo:g.mesArribo, valorBase:g.valorBase, kg:g.kg, valorNac:g.valorBase*factor,
+    mesArribo:g.mesArribo, valorBase:g.valorBase, kg:g.kg, valorNac:g.valorNac,
     fechaPago: primeraSemanaSiguienteMes(g.mesArribo), items:g.items,
     tieneRetrasados: g.items.some(it=>it.retrasado),
     tienePosibleYaPagado: g.items.some(it=>it.posibleYaPagado)
@@ -5277,8 +5348,14 @@ function construirBDPagos(M, horizonte=12){
       valorPedidoUsd: p.valorPedido ?? null, pagadoPedidoUsd: p.pedido ? (p.anticipoPagado||0)+(p.saldoPagadoDirecto||0)+(p.saldoPagadoFinanciado||0) : null,
       tonPedido: p.pedidoKg ? p.pedidoKg/1000 : null, nota: f.nota||'',
       clave: f.clave||'', fechaZarpe: f.fechaZarpe||null, fuenteFecha: f.fuenteFecha||'',
-      zarpeProveedor: f.zarpeProveedor || (f.pedido ? (zarpeProvPorPedido[f.pedido]||null) : null), fechaArribo: f.fechaArribo||null});
+      zarpeProveedor: f.zarpeProveedor || (f.pedido ? (zarpeProvPorPedido[f.pedido]||null) : null), fechaArribo: f.fechaArribo||null,
+      pctNac: f.pctNac ?? null, cop: f.cop ?? null, trm: f.trm ?? null, fuenteTrm: f.fuenteTrm || ''});
   }
+  // Tanda 40: la nacionalización se paga en COP. COP → USD con la TRM del mes de pago (Sheet de Finanzas: promedio real
+  // si el mes ya cerró; si no, TRM proyectada por Finanzas o la última TRM). USD → COP (referencia) igual.
+  const mesHoyK = monthKey(hoy);
+  const trmPago = fecha => trmMes(fecha && monthKey(fecha) > mesHoyK ? monthKey(fecha) : mesHoyK);
+  const nacCop = (usd, fecha) => { const T = trmPago(fecha); return T ? {cop:usd*T.valor, trm:T.valor, fuenteTrm:T.fuente} : {cop:null, trm:null, fuenteTrm:'Sin TRM (conectar Finanzas)'}; };
   // 1) Saldos a proveedores — REAL (proyecto comex ya facturado, pendiente de pago)
   const tonVisto = new Set();
   M.spAll.filter(s=>s.estadoCalculado==='PENDIENTE POR PAGAR').forEach(s=>{
@@ -5308,7 +5385,7 @@ function construirBDPagos(M, horizonte=12){
     if(g.interesEstimado>0) add({concepto:'2. Giro financiero', detalle:'Interés', tipo:'Real', fecha:g.fechaVencimiento, pedido:g.pedido, clave:`GFINT|${g.pedido||''}|${g.proyectoComex||''}`, referencia:g.proyectoComex, contraparte:g.banco||'', montoUsd:g.interesEstimado, nota:g.codigo||''});
   });
   // 4) Nacionalizaciones — REAL (registradas en la hoja de Nacionalización, sin pagar). Una fila por proyecto comex.
-  //    USD = valor factura × factor × (saldo pendiente ÷ total registrado del proyecto) — sin TRM (ver factorNacUSD).
+  //    Con TRM: USD = saldo COP ÷ TRM del mes de pago. Sin TRM (Finanzas no conectado): valor factura × factor × (saldo ÷ total COP).
   const nacPend = {};
   M.nac.filter(n=> String(n.estado||'').toUpperCase()!=='PAGADO' && (n.saldo||0)>0).forEach(n=>{
     const k = n.proyectoComex; if(!k) return;
@@ -5321,19 +5398,20 @@ function construirBDPagos(M, horizonte=12){
   Object.entries(nacPend).forEach(([k,g])=>{
     const link = proyAPed[k] || {};
     const fecha = g.fechaPago || (g.fechaLevante ? addDays(g.fechaLevante, 7) : null);
-    const usd = nacUsdDeParte(NP, k, g.saldo, FN.factor);
+    const T = trmPago(fecha);
+    const usd = T ? g.saldo/T.valor : nacUsdDeParte(NP, k, g.saldo, FN.factor);
     if(usd===null){ nacSinValor++; return; }
     add({concepto:'3. Nacionalización', detalle:'Registrada sin pagar', tipo:'Real', fecha, pedido:link.pedido, referencia:k, clave:`NAC|${k}`, fuenteFecha: g.fechaPago?'Real (fecha de pago registrada)':'Levante + 7 días', contraparte:'DIAN / agencia de aduanas',
-      valorBase:NP[k].vf, montoUsd:usd,
-      nota: (g.fechaPago?'':'sin fecha de pago: levante + 7 días · ') + `USD estimado: ${(FN.arancel*100).toFixed(0)}% arancel + ${(FN.iva*100).toFixed(0)}% IVA sobre valor factura × parte pendiente`});
+      valorBase:NP[k] ? NP[k].vf : null, montoUsd:usd, cop:g.saldo, trm:T?T.valor:null, fuenteTrm:T?T.fuente:'Sin TRM: supuesto % sobre factura (conectar Finanzas)',
+      nota: (g.fechaPago?'':'sin fecha de pago: levante + 7 días · ') + (T ? 'USD = saldo COP registrado ÷ TRM' : `USD estimado: ${(FN.arancel*100).toFixed(0)}% arancel + ${(FN.iva*100).toFixed(0)}% IVA sobre valor factura × parte pendiente`)});
   });
   // 5) Nacionalizaciones — ESTIMADO (lo que aún no está en la hoja de Nacionalización): una fila por embarque
   const factor = arancel*(1+iva);
   calcularNacEstimada(M, arancel, iva).filasMes.forEach(fm=> fm.items.forEach(it=>{
     add({concepto:'3. Nacionalización', detalle:`Estimada — ${it.origen}`, tipo:'Estimado', fecha:fm.fechaPago, pedido:it.pedido, referencia:it.referencia,
       clave: it.referencia && it.referencia!=='—' ? `NAC|${it.referencia}` : `NAC|*|${it.pedido}`, fechaArribo:it.fechaArribo, fuenteFecha: it.esReal?'Real (arribo registrado)':'Modelo (arribo estimado)',
-      contraparte:'DIAN / agencia de aduanas', kg:it.kg, valorBase:it.valorBase, montoUsd:it.valorBase*factor,
-      nota:`${Math.round(arancel*100)}% arancel + ${Math.round(iva*100)}% IVA sobre el valor factura · se paga la 1.ª semana del mes siguiente al arribo`});
+      contraparte:'DIAN / agencia de aduanas', kg:it.kg, valorBase:it.valorBase, montoUsd:it.valorNac, pctNac:it.pct*100, ...nacCop(it.valorNac, fm.fechaPago), familia:it.familia,
+      nota:`${it.fuenteSupuesto} · se paga la 1.ª semana del mes siguiente al arribo`});
   }));
   // 6) Pedidos nuevos sugeridos (10.3): anticipo, saldo y nacionalización
   const R = buildPedidosNuevosProyectados(M, {horizonteMeses:horizonte, arancelPct:arancel, ivaPct:iva});
@@ -5342,7 +5420,7 @@ function construirBDPagos(M, horizonte=12){
     const extra = {fechaZarpe:p.fechaZarpe, fechaArribo:p.fechaArribo, fuenteFecha:'Modelo (pedido sugerido)'};
     add({...extra, clave:`NUEVO|${p.proveedor}|Anticipo`, concepto:'4. Pedido nuevo (sugerido)', detalle:'Anticipo', tipo:'Estimado', fecha:p.fechaPagoAnticipo, referencia:ref, contraparte:p.proveedor, familia:p.familia, kg:p.kg, valorBase:p.valorUsd, pagado:0, montoUsd:p.montoAnticipoUsd, nota:`${Math.round(p.pctAnticipo*100)}% anticipo · precio ref. ${p.precioUsdTon} USD/Ton`});
     add({...extra, clave:`NUEVO|${p.proveedor}|Saldo`, concepto:'4. Pedido nuevo (sugerido)', detalle:'Saldo', tipo:'Estimado', fecha:p.fechaPagoSaldo, referencia:ref, contraparte:p.proveedor, familia:p.familia, kg:p.kg, valorBase:p.valorUsd, pagado:p.montoAnticipoUsd, montoUsd:p.montoSaldoUsd, nota:'contra BL (zarpe)'});
-    add({...extra, clave:`NUEVO|${p.proveedor}|Nacionalización`, concepto:'4. Pedido nuevo (sugerido)', detalle:'Nacionalización', tipo:'Estimado', fecha:p.fechaNac, referencia:ref, contraparte:'DIAN / agencia de aduanas', familia:p.familia, kg:p.kg, valorBase:p.valorUsd, montoUsd:p.montoNacUsd, nota:''});
+    add({...extra, clave:`NUEVO|${p.proveedor}|Nacionalización`, concepto:'4. Pedido nuevo (sugerido)', detalle:'Nacionalización', tipo:'Estimado', fecha:p.fechaNac, referencia:ref, contraparte:'DIAN / agencia de aduanas', familia:p.familia, kg:p.kg, valorBase:p.valorUsd, montoUsd:p.montoNacUsd, pctNac: p.valorUsd>0 ? p.montoNacUsd/p.valorUsd*100 : null, ...nacCop(p.montoNacUsd, p.fechaNac), nota:supuestoNac(p.familia, arancel, iva).fuente});
   });
   filas.sort((a,b)=> (a.mesPago==='VENCIDO'?'0':a.mesPago).localeCompare(b.mesPago==='VENCIDO'?'0':b.mesPago) || a.concepto.localeCompare(b.concepto) || (a.fechaPago-b.fechaPago));
   const meses = []; for(let i=0;i<horizonte;i++) meses.push(monthKey(new Date(hoy.getFullYear(), hoy.getMonth()+i, 1)));
@@ -5350,13 +5428,15 @@ function construirBDPagos(M, horizonte=12){
 }
 const fechaSimple = d => d ? new Date(d.getFullYear(), d.getMonth(), d.getDate()) : null;
 const num2 = v => (v===null||v===undefined||v==='') ? null : +(+v).toFixed(2);
-const BD_COLUMNAS = [ // mismo orden que ENCABEZADOS_FC del Apps Script (sin "Mes de corte")
+const BD_COLUMNAS = [ // Tanda 40: los encabezados viajan con los datos al Sheet de Finanzas (el Apps Script no los fija)
   ['Fecha de corte', f=>null], ['Mes de pago', f=>f.mesPago], ['Fecha de pago', f=>fechaSimple(f.fechaPago)], ['Concepto', f=>f.concepto], ['Detalle', f=>f.detalle],
   ['Tipo', f=>f.tipo], ['Proveedor / contraparte', f=>f.contraparte], ['Pedido', f=>f.pedido], ['Proyecto comex / parcial', f=>f.referencia], ['Clave de cruce', f=>f.clave], ['Familia', f=>f.familia],
   ['Ton', f=>num2(f.ton)], ['Valor factura / base USD', f=>num2(f.valorBaseUsd)], ['Ya pagado de esta factura USD', f=>num2(f.pagadoUsd)],
   ['Monto a pagar USD', f=>num2(f.montoUsd)],
   ['Fecha zarpe usada', f=>fechaSimple(f.fechaZarpe)], ['Fuente de la fecha', f=>f.fuenteFecha], ['Zarpe estimado por el proveedor', f=>fechaSimple(f.zarpeProveedor)], ['Fecha arribo esperada', f=>fechaSimple(f.fechaArribo)],
-  ['Valor total del pedido USD', f=>num2(f.valorPedidoUsd)], ['Pagado total del pedido USD', f=>num2(f.pagadoPedidoUsd)], ['Ton pedidas del pedido', f=>num2(f.tonPedido)], ['Nota', f=>f.nota]];
+  ['Valor total del pedido USD', f=>num2(f.valorPedidoUsd)], ['Pagado total del pedido USD', f=>num2(f.pagadoPedidoUsd)], ['Ton pedidas del pedido', f=>num2(f.tonPedido)], ['Nota', f=>f.nota],
+  ['Supuesto nacionalización (% s/ factura)', f=>f.pctNac===null||f.pctNac===undefined ? null : +(+f.pctNac).toFixed(2)], ['Monto COP (nacionalización)', f=>f.cop===null||f.cop===undefined ? null : Math.round(f.cop)],
+  ['TRM usada', f=>num2(f.trm)], ['Fuente TRM', f=>f.fuenteTrm||'']];
 // Fecha de zarpe que el PROVEEDOR reporta en Cuadro Pedidos para lo que aún no zarpa (la más tardía por pedido).
 function zarpeProveedorPorPedido(M){
   if(M._zarpeProv) return M._zarpeProv;
@@ -5385,23 +5465,135 @@ function descargarBDPagos(){
   hojaPivot('Por proveedor', 'Proveedor / contraparte (USD)', piv(f=>f.contraparte||'—'));
   XLSX.writeFile(wb, `BD_Pagos_Proyectados_${corte}.xlsx`);
 }
-// Foto mensual de la BD (hoja FOTO_PAGOS): la acepta el Apps Script una sola vez por mes, desde el 1.er día hábil.
-async function enviarFotoPagos(origen){
-  const B = construirBDPagos(MODEL, 12), hoy = B.fechaCorte;
-  const iso = d => d ? monthKey(d)+'-'+String(d.getDate()).padStart(2,'0') : '';
-  const filas = B.filas.map(f=> BD_COLUMNAS.map(([n,fn])=>{ if(n==='Fecha de corte') return iso(hoy); const v = fn(f); return v instanceof Date ? iso(v) : (v===null||v===undefined ? '' : v); }));
-  const r = await fetch(BITACORA_WEBAPP_URL, {method:'POST', body:JSON.stringify({tipo:'foto_pagos', mes:monthKey(hoy), origen, filas})});
-  return await r.json();
+// ================= FINANZAS: sincronización, TRM y Plan vs. real de caja (Tanda 40) =================
+// El Tablero CALCULA (única fuente de lógica) y el Sheet de Finanzas (dueña: CFO) GUARDA, vía su propio Apps Script
+// (Finanzas_FC_AppsScript.gs):
+//   · FC_PROYECCION_12M: proyección de pagos 12 meses en USD, se sobrescribe una vez al mes (1.er día hábil).
+//   · FC_META_MES: meta congelada de cada mes (Vencido + mes + 2 siguientes). Historial: nunca se sobrescribe.
+//   · FC_PAGOS_REAL: pagos realizados en USD (hojas Pagos + Nacionalización), reemplaza los últimos 4 meses.
+//   · TRM_DIARIA / TRM_MENSUAL: TRM oficial (datos.gov.co) y TRM proyectada editable. Solo se usa para pasar a USD
+//     la nacionalización, que se paga en COP. Todo lo demás es USD nativo.
+const FINANZAS_WEBAPP_URL = 'https://script.google.com/macros/s/AKfycbyDRA0hCORxEYN6fXlzAU9611qPTuX7FQyCnR2vBWPLZ1pSYfyYKc3-KY1Io-Npb9Q7vg/exec';   // Sheet de Finanzas (dueña: CFO) · implementación del 20-oct-2026
+const FINANZAS_CLAVE = 'impx-fc-2026';
+const fmt0 = v => (v<0?'-$':'$') + Math.round(Math.abs(v||0)).toLocaleString('en-US');
+let FIN = {cargado:false, meta:[], metaLocal:[], trm:null, estado:null, error:null, sinc:null};
+
+function isoDia(d){ return d ? monthKey(d)+'-'+String(d.getDate()).padStart(2,'0') : ''; }
+function soloDia(d){ return d ? new Date(d.getFullYear(), d.getMonth(), d.getDate()) : null; }
+function sumarMesK(mk, n){ const [y,m] = mk.split('-').map(Number); return monthKey(new Date(y, m-1+n, 1)); }
+function prepararTRM(t){
+  if(!t) return null;
+  const dias = (t.diaria||[]).filter(r=>r && r[0] && Number(r[1])>0).map(r=>[String(r[0]).slice(0,10), Number(r[1])]).sort((a,b)=>a[0]<b[0]?-1:(a[0]>b[0]?1:0));
+  const mensual = {}; (t.mensual||[]).forEach(m=>{ if(m && m.mes) mensual[String(m.mes).slice(0,7)] = m; });
+  return dias.length ? {dias, mensual, ultima: dias[dias.length-1]} : null;
 }
-async function guardarFotoPagosAutomatica(est){
+// TRM oficial de un día (o del último día anterior con dato)
+function trmDia(d){
+  const T = FIN.trm; if(!T || !d) return null;
+  const k = isoDia(d); let lo = 0, hi = T.dias.length-1, r = null;
+  while(lo<=hi){ const mid = (lo+hi)>>1; if(T.dias[mid][0]<=k){ r = T.dias[mid]; lo = mid+1; } else hi = mid-1; }
+  return r ? {valor:r[1], fuente: r[0]===k ? `TRM oficial del ${fmtDate(d)}` : `TRM oficial del ${r[0]} (último dato antes del pago)`} : null;
+}
+// TRM para un mes (pasado: promedio real; en curso o futuro: proyección manual de Finanzas o última TRM)
+function trmMes(mk){
+  const T = FIN.trm; if(!T) return null;
+  const m = T.mensual[mk];
+  if(m && Number(m.usada)>0) return {valor:Number(m.usada), fuente:`${m.fuente||'TRM mensual'} · ${fmtMesLabel(mk)}`};
+  return {valor:T.ultima[1], fuente:`Última TRM conocida (${T.ultima[0]}), tasa constante`};
+}
+
+// ---------- Pagos REALES (USD) de una lista de meses: hoja Pagos + nacionalización pagada ----------
+function construirPagosReales(M, meses){
+  const setM = new Set(meses);
+  const pedProv = {}, pedFecha = {}; M.pedidos.forEach(p=>{ pedProv[p.pedido] = p.proveedor; pedFecha[p.pedido] = p.fechaPedido; });
+  const proyAPed = {}; M.spAll.forEach(s=>{ if(s.proyecto && !proyAPed[s.proyecto]) proyAPed[s.proyecto] = s.pedido; });
+  const NP = nacPorProyecto(M), FN = factorNacUSD();
+  const filas = [];
+  M.pg.filter(p=>p.fecha && setM.has(monthKey(p.fecha))).forEach(p=>{
+    const fin = String(p.formaPago||'').toUpperCase().includes('FINANCIADO') && p.concepto==='SALDO';
+    let comp, clave;
+    if(p.concepto==='SALDO'){ comp='1. Saldo a proveedor'; clave=`SALDO|${p.pedido}|${p.proyectoComex}`; }
+    else if(p.concepto==='GIRO FINANCIADO'){ comp='2. Giro financiero'; clave=`GF|${p.pedido||''}|${p.proyectoComex||''}`; }
+    else if(p.concepto==='ANTICIPO'){ comp='4. Anticipos'; clave=`NUEVO|${pedProv[p.pedido]||''}|Anticipo`; }
+    else { comp='Otros pagos'; clave=`OTRO|${p.pedido||''}`; }
+    filas.push({mes:monthKey(p.fecha), comp, clave, pedido:p.pedido||'', proyecto:p.proyectoComex||'', proveedor: pedProv[p.pedido]||p.banco||'', fecha:p.fecha,
+      usd:p.valor||0, financiado:fin, forma:p.formaPago||'', detalle:`${p.concepto} · ${p.formaPago||''}`, fechaPedido: pedFecha[p.pedido]||null,
+      cop:null, trm:null, fuenteTrm:'', vf:null, pctEf:null});
+  });
+  // nacionalización pagada: una línea por proyecto comex y mes; USD = COP pagado ÷ TRM oficial del día del pago
+  const g = {};
+  M.nac.filter(n=> String(n.estado||'').toUpperCase()==='PAGADO' && n.fechaPago && setM.has(monthKey(n.fechaPago))).forEach(n=>{
+    const k = n.proyectoComex; if(!k) return; const key = k+'|'+monthKey(n.fechaPago);
+    const x = g[key] = g[key] || {proyecto:k, mes:monthKey(n.fechaPago), cop:0, fecha:n.fechaPago};
+    x.cop += (n.valorRealCOP || n.valorEstimadoCOP || 0); if(n.fechaPago < x.fecha) x.fecha = n.fechaPago;
+  });
+  let sinValor = 0, sinTrm = 0;
+  Object.values(g).forEach(x=>{
+    const T = trmDia(x.fecha), np = NP[x.proyecto], vf = np ? np.vf : 0;
+    let usd, fuenteTrm;
+    if(T){ usd = x.cop / T.valor; fuenteTrm = T.fuente; }
+    else { usd = nacUsdDeParte(NP, x.proyecto, x.cop, FN.factor); fuenteTrm = 'Sin TRM: supuesto % sobre factura (conectar Finanzas)'; sinTrm++; if(usd===null){ sinValor++; return; } }
+    const share = np && np.cop>0 ? Math.min(1, x.cop/np.cop) : 1;
+    const pctEf = T && vf>0 ? usd/(vf*share)*100 : null;
+    filas.push({mes:x.mes, comp:'3. Nacionalización', clave:`NAC|${x.proyecto}`, pedido: proyAPed[x.proyecto]||'', proyecto:x.proyecto, proveedor:'DIAN / agencia de aduanas',
+      fecha:x.fecha, usd, financiado:false, forma:'', detalle:'Nacionalización pagada', fechaPedido:null, cop:x.cop, trm: T?T.valor:null, fuenteTrm, vf: vf||null, pctEf});
+  });
+  return {filas, sinValor, sinTrm};
+}
+const REAL_COLUMNAS = [
+  ['Mes de pago', r=>r.mes], ['Fecha de pago', r=>isoDia(r.fecha)], ['Concepto', r=>r.comp], ['Detalle', r=>r.detalle], ['Proveedor / contraparte', r=>r.proveedor],
+  ['Pedido', r=>r.pedido], ['Proyecto comex', r=>r.proyecto], ['Clave de cruce', r=>r.clave], ['Monto pagado USD', r=>num2(r.usd)],
+  ['Salida de caja', r=>r.financiado?'No (saldo financiado con giro)':'Sí'], ['Forma de pago', r=>r.forma],
+  ['Monto COP (nacionalización)', r=>r.cop===null?null:Math.round(r.cop)], ['TRM usada', r=>num2(r.trm)], ['Fuente TRM', r=>r.fuenteTrm],
+  ['Valor factura proyecto USD', r=>num2(r.vf)], ['% efectivo nacionalización s/ factura', r=>r.pctEf===null?null:+r.pctEf.toFixed(2)]];
+
+// ---------- Conexión con el Sheet de Finanzas ----------
+async function cargarFinanzas(){
+  if(!FINANZAS_WEBAPP_URL){ FIN.cargado = true; FIN.error = 'sin URL'; return FIN; }
   try{
-    if(!est || !est.ok || !est.abiertoPagos || est.fotoPagosGuardada) return;
-    const clave = 'foto_pagos_'+est.mes+'_'+est.hoy;
-    try{ if(sessionStorage.getItem(clave)) return; sessionStorage.setItem(clave,'1'); }catch(e){}
-    const r = await enviarFotoPagos('auto');
-    if(r && r.ok){ est.fotoPagosGuardada = true; renderPanelBDPagos(); }
-  }catch(err){ console.warn('BD pagos: la foto mensual no se pudo guardar (no afecta el resto del Tablero):', err); }
+    const r = await fetch(FINANZAS_WEBAPP_URL+'?accion=todo'); const j = await r.json();
+    if(!j.ok) throw new Error(j.error||'sin respuesta');
+    FIN.meta = j.meta||[]; FIN.estado = j.estado||null; FIN.trm = prepararTRM(j.trm); FIN.error = null;
+  }catch(e){ FIN.error = e.message; }
+  FIN.cargado = true; return FIN;
 }
+async function sincronizarFinanzas(){
+  if(!FINANZAS_WEBAPP_URL || !MODEL || FIN.error) return;
+  const hoy = new Date(), clave = 'fin_sinc_'+isoDia(hoy), est = FIN.estado||{};
+  try{ if(localStorage.getItem(clave) && (est.metaCongelada || !est.hoyEsHabilOPosterior)) return; }catch(e){}
+  const B = construirBDPagos(MODEL, 12);
+  const filasP = B.filas.map(f=> BD_COLUMNAS.map(([n,fn])=>{ if(n==='Fecha de corte') return isoDia(B.fechaCorte); const v = fn(f); return v instanceof Date ? isoDia(v) : (v===null||v===undefined ? '' : v); }));
+  const meses = [3,2,1,0].map(i=>monthKey(new Date(hoy.getFullYear(), hoy.getMonth()-i, 1)));
+  const R = construirPagosReales(MODEL, meses);
+  const filasR = R.filas.map(r=> REAL_COLUMNAS.map(([n,fn])=>{ const v = fn(r); return v===null||v===undefined ? '' : v; }));
+  try{
+    const r = await fetch(FINANZAS_WEBAPP_URL, {method:'POST', body:JSON.stringify({clave:FINANZAS_CLAVE, tipo:'sincronizar',
+      proyeccion:{encabezados:BD_COLUMNAS.map(c=>c[0]), filas:filasP}, real:{meses, encabezados:REAL_COLUMNAS.map(c=>c[0]), filas:filasR}})});
+    const j = await r.json();
+    FIN.sinc = j; if(j.estado) FIN.estado = j.estado;
+    if(j.ok){ try{ localStorage.setItem(clave,'1'); }catch(e){} }
+    if(j.ok && j.fotoTomada) await cargarFinanzas();
+  }catch(e){ FIN.sinc = {ok:false, error:e.message}; console.warn('Finanzas: no se pudo sincronizar (no afecta el resto del Tablero):', e); }
+}
+function renderEstadoFinanzas(){
+  const el = document.getElementById('fin_estado'); if(!el) return;
+  if(!FINANZAS_WEBAPP_URL){
+    el.className = 'note';
+    el.innerHTML = '<b>Pendiente conectar el Sheet de Finanzas.</b> La CFO pega el Apps Script <i>Finanzas_FC_AppsScript.gs</i> en el Sheet de Finanzas, ejecuta <i>configurar</i> y lo implementa como aplicación web; con esa URL el Tablero guarda allá la proyección, la meta del mes y los pagos reales, y trae la TRM. Mientras tanto se puede ver el plan vs. real cargando descargas anteriores (botón de abajo); quedan solo en este navegador.';
+    return;
+  }
+  if(FIN.error){ el.className = 'note'; el.innerHTML = `<b>No se pudo leer el Sheet de Finanzas:</b> ${FIN.error}. El resto del Tablero funciona normal.`; return; }
+  const e = FIN.estado||{}, T = FIN.trm, s = FIN.sinc;
+  const meses = [...new Set(FIN.meta.map(f=>String(f['Mes de corte'])))].sort();
+  el.className = '';
+  el.innerHTML = `<div class="mini-kpis">
+    <div class="mini-kpi ${e.metaCongelada?'ok':(e.ventanaVencida?'bad':'warn')}"><span>Meta de ${fmtMesLabel(e.mes||monthKey(new Date()))}</span><b>${e.metaCongelada?'Congelada':(e.ventanaVencida?'Sin meta':'Pendiente')}</b><span>${e.metaCongelada ? (e.origenMeta||'') : (e.ventanaVencida ? 'sin meta automática: nadie abrió el Tablero en los primeros '+(e.ventanaDiasHabiles||5)+' días hábiles (se puede cargar una descarga anterior)' : 'se congela al abrir el Tablero entre el '+(e.primerDiaHabil||'1.er día hábil')+' y el día hábil '+(e.ventanaDiasHabiles||5))}</span></div>
+    <div class="mini-kpi"><span>Metas guardadas</span><b>${meses.length}</b><span>${meses.map(fmtMesLabel).join(' · ')||'—'}</span></div>
+    <div class="mini-kpi ${T?'':'warn'}"><span>TRM oficial más reciente</span><b>${T?Math.round(T.ultima[1]).toLocaleString('en-US'):'—'}</b><span>${T?T.ultima[0]:'sin datos de TRM'}</span></div>
+    <div class="mini-kpi ${s && !s.ok ? 'bad' : 'ok'}"><span>Último envío de este navegador</span><b>${!s ? 'Hoy (ya enviado)' : (s.ok ? (s.fotoTomada ? 'Foto mensual + reales' : 'Pagos reales') : 'Error')}</b><span>${s && !s.ok ? s.error : 'Sheet de Finanzas al día'}</span></div></div>`;
+}
+
+// ---------- Panel BD (resumen) ----------
 function renderPanelBDPagos(){
   const el = document.getElementById('bd_resumen'); if(!el || !MODEL) return;
   const B = construirBDPagos(MODEL, 12);
@@ -5416,88 +5608,164 @@ function renderPanelBDPagos(){
   h += `<tr style="background:var(--paper);font-weight:700;"><td class="txt">TOTAL USD</td>${totCol.map(v=>`<td>${Math.round(v).toLocaleString('en-US')}</td>`).join('')}<td>${Math.round(totCol.reduce((a,b)=>a+b,0)).toLocaleString('en-US')}</td></tr>`;
   el.innerHTML = h;
   const nota = document.getElementById('bd_nota');
-  const est = METAS_ESTADO;
-  const fotoTxt = !est || est.fotoPagosGuardada===undefined ? '' : (est.fotoPagosGuardada ? ` Foto de ${fmtMesLabel(est.mes)} guardada (hojas FC_VIGENTE y FC_PLAN_MES).` : (est.abiertoPagos ? ` Foto de ${fmtMesLabel(est.mes)} pendiente: se guarda sola al abrir el tablero.` : ` La foto de ${fmtMesLabel(est.mes)} se abre el ${est.fechaFotoPagos}.`));
-  if(nota) nota.innerHTML = `${B.filas.length} pagos en la BD.${fotoTxt}` + ' Todo en USD (sin TRM).' + (B.nacSinValor ? ` <b style="color:var(--red);">${B.nacSinValor} nacionalización(es) registradas sin pagar no se pueden valorar en USD: su proyecto comex no tiene valor factura.</b>` : '');
+  const trmTxt = FIN.trm ? ` Nacionalización (se paga en COP) pasada a USD con TRM: registrada = COP ÷ TRM del mes de pago; estimada = factura × supuesto %.` : ' <b>Sin TRM todavía</b> (falta conectar Finanzas): la nacionalización registrada se valora con el supuesto % sobre factura.';
+  if(nota) nota.innerHTML = `${B.filas.length} pagos en la BD. Todo en USD.${trmTxt}` + (B.nacSinValor ? ` <b style="color:var(--red);">${B.nacSinValor} nacionalización(es) registradas sin pagar no se pueden valorar en USD: su proyecto comex no tiene valor factura.</b>` : '');
+  renderEstadoFinanzas();
 }
 
-// ================= PLAN VS. REAL DE CAJA (Tanda 38) =================
-// Meta = FC_PLAN_MES (plan congelado el 1.er día hábil del mes, vía Apps Script). Real = hoja Pagos (USD) + hoja
-// Nacionalización pagada (USD con el mismo supuesto del plan, sin TRM). Cada dólar de diferencia se explica en un árbol:
-// pagado según plan · diferencia de monto · corrido (con causa) · adelantado · no planeado.
-let FC_PLAN = {cargado:false, filas:[], error:null};
-async function cargarPlanCaja(){
-  try{ const r = await fetch(BITACORA_WEBAPP_URL+'?accion=plan'); const j = await r.json(); FC_PLAN = {cargado:true, filas:(j.filas||[]), error: j.ok?null:(j.error||'sin respuesta')}; }
-  catch(e){ FC_PLAN = {cargado:true, filas:[], error:e.message}; }
-  return FC_PLAN;
+// ---------- Cargar metas desde descargas anteriores (Programación de Pagos + Pedidos Nuevos Proyectados) ----------
+// Una descarga del dd-mmm-aa sirve como meta del mes de esa fecha (desde ese día) y como meta PROVISIONAL del mes
+// siguiente (sin vencidos, horizonte +1 mes). Las descargas viejas no tienen clave de cruce completa: el cruce se
+// hace por pedido / proyecto / proveedor y es aproximado.
+function serialAFecha(v){
+  if(v===null || v===undefined || v==='' || v==='—') return null;
+  if(typeof v==='number') return new Date(1899, 11, 30+Math.floor(v));
+  const m = String(v).trim().match(/^(\d{1,2})-([a-zA-Z]{3})-(\d{2,4})$/);
+  if(m){ const mes = MESES_ABR.indexOf(m[2].toLowerCase()); if(mes<0) return null; const y = m[3].length===2 ? 2000+Number(m[3]) : Number(m[3]); return new Date(y, mes, Number(m[1])); }
+  return null;
 }
+async function leerDescargasAnteriores(files){
+  let corte = null; const objs = [], avisos = [];
+  for(const file of files){
+    const mm = file.name.match(/(\d{1,2})-([a-zA-Z]{3})-(\d{2})/); const fc = mm ? serialAFecha(mm[0]) : null; if(fc && !corte) corte = fc;
+    const wb = XLSX.read(await file.arrayBuffer(), {cellDates:false});
+    const prog = wb.Sheets['Programación de Pagos'], nuevos = wb.Sheets['Pedidos Nuevos'];
+    if(prog){
+      XLSX.utils.sheet_to_json(prog, {defval:'', raw:true}).forEach(r=>{
+        const tipo = String(r['Tipo']||''), monto = Number(r['Monto USD'])||0; if(!(monto>0)) return;
+        const pedido = String(r['Pedido']||'').replace('—','').trim(), ref = String(r['Referencia']||'').trim();
+        const fecha = serialAFecha(r['Fecha']), fechaMala = !fecha || fecha.getFullYear()<2020;
+        const o = {fechaPago: fechaMala?null:fecha, fechaMala, pedido, montoUsd:monto, nota: fechaMala ? `fecha inválida en la descarga ("${r['Fecha']}")` : ''};
+        if(tipo==='Proyecto Comex') objs.push({...o, concepto:'1. Saldo a proveedor', detalle:'Facturado (proyecto comex)', tipo:'Real', referencia:ref, clave:`SALDO|${pedido}|${ref}`});
+        else if(tipo.startsWith('Pronóstico')){ const p = ref.match(/\(parcial (\d+\/\d+)\)/); objs.push({...o, concepto:'1. Saldo a proveedor', detalle:`Parcial estimado (${tipo.replace('Pronóstico: ','')})`, tipo:'Estimado', referencia: p ? `Parcial est. ${p[1]}` : ref, clave:`SALDO|${pedido}|*`}); }
+        else if(tipo==='Giro Financiero'){ objs.push({...o, concepto:'2. Giro financiero', detalle:'Capital', tipo:'Real', contraparte:ref, clave:`GF|${pedido}|`});
+          const int = Number(r['Interés Estimado USD'])||0; if(int>0) objs.push({...o, montoUsd:int, concepto:'2. Giro financiero', detalle:'Interés', tipo:'Real', contraparte:ref, clave:`GFINT|${pedido}|`}); }
+        else if(tipo==='Nacionalización') objs.push({...o, concepto:'3. Nacionalización', detalle:`Estimada — ${ref}`, tipo:'Estimado', contraparte:'DIAN / agencia de aduanas', referencia:ref, clave:'NAC|*|*'});
+      });
+    }
+    if(nuevos){
+      const a = XLSX.utils.sheet_to_json(nuevos, {header:1, defval:'', raw:true}); const h = a[0].map(String), ix = n=>h.indexOf(n);
+      a.slice(1).forEach(r=>{
+        const prov = String(r[ix('Proveedor')]||''); if(!prov) return;
+        const ref = `Sugerido · ${r[ix('Familia')]} · cubrir ${r[ix('Mes a cubrir')]} · parcial ${r[ix('Parcial')]}`;
+        const base = {concepto:'4. Pedido nuevo (sugerido)', tipo:'Estimado', pedido:'', referencia:ref, contraparte:prov, familia:String(r[ix('Familia')]||''), ton:Number(r[ix('Ton')])||null, valorBaseUsd:Number(r[ix('Valor Total USD')])||null};
+        [['Anticipo','Pago Anticipo','ANTICIPO'], ['Saldo','Pago Saldo','Monto Saldo USD'], ['Nacionalización','Fecha Nacionalización','Monto Nacionalización USD']].forEach(([det, cf, cm])=>{
+          const f = serialAFecha(r[ix(cf)]), m = Number(r[ix(cm)])||0; if(!f || !(m>0)) return;
+          objs.push({...base, detalle:det, fechaPago:f, montoUsd:m, clave:`NUEVO|${prov}|${det}`, contraparte: det==='Nacionalización'?'DIAN / agencia de aduanas':prov});
+        });
+      });
+    }
+    if(!prog && !nuevos) avisos.push(`${file.name}: no tiene las hojas "Programación de Pagos" ni "Pedidos Nuevos".`);
+  }
+  if(!corte) throw new Error('No se pudo leer la fecha de la descarga en el nombre del archivo (ej. Programacion_Pagos_17-sep-26.xlsx).');
+  const iniMes = new Date(corte.getFullYear(), corte.getMonth(), 1);
+  const filas = objs.map(o=>{
+    const vencido = o.fechaMala || o.fechaPago < iniMes;
+    if(vencido && o.tipo!=='Real') return null;
+    return {mesPago: vencido?'VENCIDO':monthKey(o.fechaPago), fechaPago:o.fechaPago, concepto:o.concepto, detalle:o.detalle, tipo:o.tipo, contraparte:o.contraparte||'', pedido:o.pedido||'',
+      referencia:o.referencia||'', clave:o.clave, familia:o.familia||'', ton:o.ton||null, valorBaseUsd:o.valorBaseUsd??null, pagadoUsd:null, montoUsd:o.montoUsd, fechaZarpe:null,
+      fuenteFecha:'Descarga anterior', zarpeProveedor:null, fechaArribo:null, valorPedidoUsd:null, pagadoPedidoUsd:null, tonPedido:null, nota:o.nota||'', pctNac:null, cop:null, trm:null, fuenteTrm:''};
+  }).filter(Boolean);
+  return {corte, filas, avisos};
+}
+async function cargarMetasHistoricas(files){
+  const btnMsg = document.getElementById('fin_hist_msg');
+  try{
+    btnMsg.textContent = 'Leyendo descargas…';
+    const {corte, filas, avisos} = await leerDescargasAnteriores(files);
+    const enc = BD_COLUMNAS.map(c=>c[0]);
+    const aFila = f=> BD_COLUMNAS.map(([n,fn])=>{ if(n==='Fecha de corte') return isoDia(corte); const v = fn(f); return v instanceof Date ? isoDia(v) : (v===null||v===undefined ? '' : v); });
+    const m0 = monthKey(corte), m1 = sumarMesK(m0,1), hoyK = monthKey(new Date());
+    const lotes = [{mes:m0, origen:`Histórica (descarga ${fmtDate(corte)})`, meses:['VENCIDO', m0, sumarMesK(m0,1), sumarMesK(m0,2)]}];
+    if(m1 <= hoyK) lotes.push({mes:m1, origen:`Histórica provisional (descarga ${fmtDate(corte)}: sin vencidos, horizonte +1 mes)`, meses:[m1, sumarMesK(m1,1), sumarMesK(m1,2)]});
+    const res = [];
+    for(const L of lotes){
+      const fl = filas.filter(f=>L.meses.includes(f.mesPago)).map(aFila);
+      if(FINANZAS_WEBAPP_URL && !FIN.error){
+        const r = await fetch(FINANZAS_WEBAPP_URL, {method:'POST', body:JSON.stringify({clave:FINANZAS_CLAVE, tipo:'meta_historica', mes:L.mes, origen:L.origen, encabezados:enc, filas:fl, reemplazar:true})});
+        const j = await r.json(); res.push(`${fmtMesLabel(L.mes)}: ${j.ok ? fl.length+' líneas guardadas en Finanzas' : j.error}`);
+      } else {
+        FIN.metaLocal = FIN.metaLocal.filter(o=>String(o['Mes de corte'])!==L.mes);
+        fl.forEach(arr=>{ const o = {'Mes de corte':L.mes, 'Origen de la meta':L.origen+' · solo en este navegador'}; enc.forEach((h,i)=>o[h]=arr[i]); FIN.metaLocal.push(o); });
+        res.push(`${fmtMesLabel(L.mes)}: ${fl.length} líneas (solo en este navegador: falta conectar Finanzas)`);
+      }
+    }
+    if(FINANZAS_WEBAPP_URL && !FIN.error) await cargarFinanzas();
+    btnMsg.innerHTML = res.join(' · ') + (avisos.length ? ' · ' + avisos.join(' ') : '');
+    renderPlanVsReal(); renderEstadoFinanzas();
+  }catch(e){ btnMsg.innerHTML = `<b style="color:var(--red);">${e.message}</b>`; }
+}
+
+// ================= PLAN VS. REAL DE CAJA (Tanda 38 → 40) =================
+// Meta = FC_META_MES (Finanzas). Real = hoja Pagos (USD; un saldo "financiado" no es salida de caja) + nacionalización
+// pagada (COP ÷ TRM oficial del día del pago). Cada dólar de diferencia se explica en un árbol de 2 niveles:
+// RESPONSABLE (Proveedor · Imporinox · Modelo · Rezagos) → CAUSA → línea.
 const CAUSAS = {
   segun:'Pagado según plan', difMas:'Diferencia de monto (+)', difMenos:'Diferencia de monto (−)',
-  provAtraso:'Corrido · el proveedor incumplió su fecha de zarpe', modeloSinFecha:'Corrido · error del modelo (sin fecha del proveedor)',
-  modeloIgnoro:'Corrido · error del modelo (el proveedor había dado otra fecha)', zarpoNoPago:'Corrido · zarpó y no se pagó (Tesorería)',
-  facturadoNoPago:'Corrido · facturado y no pagado (Tesorería)', financiado:'Corrido · se financió con giro (sale después como giro)',
-  gfNoPago:'Corrido · giro no pagado / prorrogado (Tesorería)', nacArribo:'Corrido · la mercancía arribó después de lo esperado',
-  nacNoPago:'Corrido · nacionalización no pagada / sin registrar', noColocado:'Corrido · pedido sugerido no colocado',
-  adelantado:'Adelantado (estaba para meses siguientes)', noPlan:'No planeado'};
+  difNac:'Nacionalización: se pagó distinto al supuesto (arancel / IVA / TRM)',
+  provAtraso:'Corrido · el proveedor incumplió su fecha de zarpe', nacArribo:'Corrido · la mercancía arribó después de lo esperado',
+  modeloSinFecha:'Corrido · error del modelo (sin fecha del proveedor)', modeloIgnoro:'Corrido · error del modelo (el proveedor había dado otra fecha)',
+  zarpoNoPago:'Corrido · zarpó y no se pagó (Tesorería)', facturadoNoPago:'Corrido · facturado y no pagado (Tesorería)',
+  financiado:'Corrido · se financió con giro (sale después como giro)', gfNoPago:'Corrido · giro no pagado / prorrogado (Tesorería)',
+  nacNoPago:'Corrido · nacionalización no pagada / sin registrar', noColocado:'Corrido · pedido sugerido no colocado (Compras)',
+  adelantado:'Adelantado (estaba para meses siguientes)', rezago:'Rezago: pago de algo que se corrió del mes anterior', noPlan:'No planeado'};
+const RESP = {ok:'Cumplido', prov:'Proveedor / logística', nos:'Imporinox (Tesorería / Compras)', modelo:'Modelo (asertividad del pronóstico)', otros:'Rezagos y no planeados'};
+const CAUSA_RESP = {
+  [CAUSAS.segun]:RESP.ok, [CAUSAS.provAtraso]:RESP.prov, [CAUSAS.nacArribo]:RESP.prov,
+  [CAUSAS.difMas]:RESP.modelo, [CAUSAS.difMenos]:RESP.modelo, [CAUSAS.difNac]:RESP.modelo, [CAUSAS.modeloSinFecha]:RESP.modelo, [CAUSAS.modeloIgnoro]:RESP.modelo,
+  [CAUSAS.zarpoNoPago]:RESP.nos, [CAUSAS.facturadoNoPago]:RESP.nos, [CAUSAS.financiado]:RESP.nos, [CAUSAS.gfNoPago]:RESP.nos, [CAUSAS.nacNoPago]:RESP.nos,
+  [CAUSAS.noColocado]:RESP.nos, [CAUSAS.adelantado]:RESP.nos, [CAUSAS.rezago]:RESP.otros, [CAUSAS.noPlan]:RESP.otros};
+const RESP_ORDEN = [RESP.prov, RESP.nos, RESP.modelo, RESP.otros];
 function numPlan(v){ if(v===null||v===undefined||v==='') return 0; return typeof v==='number' ? v : (parseFloat(String(v).replace(/,/g,''))||0); }
 function fechaPlan(v){ if(!v) return null; if(v instanceof Date) return v; const m = String(v).match(/^(\d{4})-(\d{2})-(\d{2})/); return m ? new Date(+m[1], +m[2]-1, +m[3]) : null; }
+function filasMeta(mes){ const a = FIN.meta.filter(f=>String(f['Mes de corte'])===mes); return a.length ? a : FIN.metaLocal.filter(f=>String(f['Mes de corte'])===mes); }
+function mesesConMeta(){ return [...new Set([...FIN.meta, ...FIN.metaLocal].map(f=>String(f['Mes de corte'])))].filter(Boolean).sort(); }
+function semaforoRatio(r){ if(r===null||r===undefined||!isFinite(r)) return ''; const d = Math.abs(r-1); return d<=0.05 ? 'ok' : (d<=0.10 ? 'warn' : 'bad'); }
+
 function analizarPlanVsReal(M, mesCorte){
-  const filas = FC_PLAN.filas.filter(f=>String(f['Mes de corte'])===mesCorte);
+  const filas = filasMeta(mesCorte);
+  const origen = filas.length ? String(filas[0]['Origen de la meta']||'') : '';
+  const [y, m] = mesCorte.split('-').map(Number), iniMes = new Date(y, m-1, 1), finMes = new Date(y, m, 0, 23, 59);
+  const corte = filas.length ? fechaPlan(filas[0]['Fecha de corte']) : null;
+  const desde = corte && corte > iniMes ? soloDia(corte) : iniMes;
   const plan = filas.filter(f=>{ const mp = String(f['Mes de pago']); return mp===mesCorte || mp==='VENCIDO'; });
   const despues = filas.filter(f=>{ const mp = String(f['Mes de pago']); return mp!==mesCorte && mp!=='VENCIDO'; });
-  const NP = nacPorProyecto(M), FN = factorNacUSD();
-  const [y, m] = mesCorte.split('-').map(Number), finMes = new Date(y, m, 0, 23, 59);
-  const enMes = d => d && monthKey(d)===mesCorte;
-  const pedProv = {}; M.pedidos.forEach(p=> pedProv[p.pedido] = p.proveedor);
-  // ---- REAL del mes
-  const reales = [];
-  M.pg.filter(p=>enMes(p.fecha)).forEach(p=>{
-    const fin = String(p.formaPago||'').toUpperCase().includes('FINANCIADO') && p.concepto==='SALDO';
-    let comp, clave;
-    if(p.concepto==='SALDO'){ comp='1. Saldo a proveedor'; clave=`SALDO|${p.pedido}|${p.proyectoComex}`; }
-    else if(p.concepto==='GIRO FINANCIADO'){ comp='2. Giro financiero'; clave=`GF|${p.pedido||''}|${p.proyectoComex||''}`; }
-    else if(p.concepto==='ANTICIPO'){ comp='4. Anticipos'; clave=`NUEVO|${pedProv[p.pedido]||''}|Anticipo`; }
-    else { comp='Otros pagos'; clave=`OTRO|${p.pedido||''}`; }
-    reales.push({comp, clave, pedido:p.pedido||'', proyecto:p.proyectoComex||'', proveedor: pedProv[p.pedido]||p.banco||'', fecha:p.fecha, usd:p.valor||0, financiado:fin, detalle:`${p.concepto} · ${p.formaPago||''}`});
-  });
-  // nacionalización pagada en el mes: una línea por proyecto comex, USD = valor factura × factor × (COP pagado en el mes ÷ COP total)
-  const nacMesP = {};
-  M.nac.filter(n=> String(n.estado||'').toUpperCase()==='PAGADO' && enMes(n.fechaPago)).forEach(n=>{
-    const k = n.proyectoComex; if(!k) return; const g = nacMesP[k] = nacMesP[k] || {cop:0, fecha:n.fechaPago};
-    g.cop += (n.valorRealCOP || n.valorEstimadoCOP || 0); if(n.fechaPago < g.fecha) g.fecha = n.fechaPago;
-  });
-  let nacSinValor = 0;
-  Object.entries(nacMesP).forEach(([k,g])=>{
-    const usd = nacUsdDeParte(NP, k, g.cop, FN.factor); if(usd===null){ nacSinValor++; return; }
-    reales.push({comp:'3. Nacionalización', clave:`NAC|${k}`, pedido:'', proyecto:k, proveedor:'DIAN / agencia de aduanas', fecha:g.fecha, usd, financiado:false, detalle:'Nacionalización pagada (USD estimado)'});
-  });
+  const mesAnt = sumarMesK(mesCorte,-1);
+  const planAnt = filasMeta(mesAnt).filter(f=>{ const mp = String(f['Mes de pago']); return mp===mesAnt || mp==='VENCIDO'; });
+  const R = construirPagosReales(M, [mesCorte]);
+  const reales = R.filas.filter(r=> r.fecha >= desde);
   const usado = new Set();
-  const realPorClave = (pred)=> reales.filter((r,i)=>!usado.has(i) && pred(r));
+  const libres = pred => reales.filter((r,i)=>!usado.has(i) && pred(r));
   const lineas = [];
   const zarpeProv = zarpeProveedorPorPedido(M);
   plan.forEach(f=>{
     const montoPlan = numPlan(f['Monto a pagar USD']);
     if(!(montoPlan>0)) return;
-    const clave = String(f['Clave de cruce']||''), pedido = String(f['Pedido']||''), ref = String(f['Proyecto comex / parcial']||''), conc = String(f['Concepto']||'');
-    // cruce: clave exacta; si el plan es por pedido (parcial estimado), cualquier pago del pedido; nacionalización por pedido
-    let cands = realPorClave(r=>r.clave===clave);
-    if(!cands.length && clave.startsWith('SALDO|') && clave.endsWith('|*')) cands = realPorClave(r=>r.comp==='1. Saldo a proveedor' && r.pedido===pedido);
-    if(!cands.length && clave.startsWith('NAC|*|')) cands = realPorClave(r=>r.comp==='3. Nacionalización' && M.spAll.some(s=>s.proyecto===r.proyecto && s.pedido===pedido));
-    if(!cands.length && !clave && conc.startsWith('1.')) cands = realPorClave(r=>r.comp==='1. Saldo a proveedor' && r.pedido===pedido); // planes viejos sin clave
+    const clave = String(f['Clave de cruce']||''), pedido = String(f['Pedido']||''), ref = String(f['Proyecto comex / parcial']||''), conc = String(f['Concepto']||''), det = String(f['Detalle']||'');
+    // cruce: clave exacta → por pedido (parciales estimados, giros, nacionalización) → consolidados de descargas viejas
+    let cands = libres(r=>r.clave===clave);
+    if(!cands.length && clave.startsWith('SALDO|') && clave.endsWith('|*')) cands = libres(r=>r.comp==='1. Saldo a proveedor' && r.pedido===pedido);
+    if(!cands.length && clave.startsWith('GF|')) cands = libres(r=>r.comp==='2. Giro financiero' && pedido && r.pedido===pedido);
+    if(!cands.length && clave==='NAC|*|*') cands = libres(r=>r.comp==='3. Nacionalización');
+    else if(!cands.length && clave.startsWith('NAC|*|')) cands = libres(r=>r.comp==='3. Nacionalización' && pedido && r.pedido===pedido);
+    if(!cands.length && clave.startsWith('NUEVO|') && det==='Saldo'){ const prov = clave.split('|')[1]; cands = libres(r=>r.comp==='1. Saldo a proveedor' && r.proveedor===prov && r.fechaPedido && corte && r.fechaPedido>=corte); }
+    if(!cands.length && !clave && conc.startsWith('1.')) cands = libres(r=>r.comp==='1. Saldo a proveedor' && r.pedido===pedido);
+    if(cands.length>1 && clave.startsWith('NUEVO|')) cands = cands.slice(0,1);   // un pedido sugerido = un pago
     const caja = cands.filter(r=>!r.financiado), fin = cands.filter(r=>r.financiado);
     cands.forEach(r=> usado.add(reales.indexOf(r)));
     const real = caja.reduce((a,r)=>a+r.usd,0);
-    const base = {mes:mesCorte, concepto:conc, detalle:f['Detalle'], tipo:f['Tipo'], proveedor:f['Proveedor / contraparte'], pedido, referencia:ref, plan:montoPlan, real, fechaPlan:fechaPlan(f['Fecha de pago'])};
+    const base = {mes:mesCorte, concepto:conc, detalle:det, tipo:f['Tipo'], proveedor:f['Proveedor / contraparte'], pedido, referencia:ref, plan:montoPlan, real, fechaPlan:fechaPlan(f['Fecha de pago']),
+      fechaReal: caja.length ? caja[0].fecha : null};
     if(real>0){
       const d = real - montoPlan;
-      if(Math.abs(d) <= 0.05*montoPlan){ lineas.push({...base, causa:CAUSAS.segun, impacto:0}); }
-      else lineas.push({...base, causa: d>0?CAUSAS.difMas:CAUSAS.difMenos, impacto:d});
+      if(Math.abs(d) <= 0.05*montoPlan) lineas.push({...base, causa:CAUSAS.segun, impacto:0});
+      else lineas.push({...base, causa: conc.startsWith('3.') ? CAUSAS.difNac : (d>0?CAUSAS.difMas:CAUSAS.difMenos), impacto:d});
       return;
     }
     // ---- corrido: ¿por qué?
     let causa;
     if(fin.length) causa = CAUSAS.financiado;
-    else if(conc.startsWith('4.')) causa = String(f['Detalle'])==='Anticipo' ? CAUSAS.noColocado : CAUSAS.noColocado;
+    else if(conc.startsWith('4.')) causa = CAUSAS.noColocado;
     else if(conc.startsWith('2.')) causa = CAUSAS.gfNoPago;
     else if(conc.startsWith('3.')){
       const arr = fechaPlan(f['Fecha arribo esperada']);
@@ -5509,75 +5777,105 @@ function analizarPlanVsReal(M, mesCorte){
       const zarpoEnMes = M.spAll.some(s=>s.pedido===pedido && s.fechaRealZarpe && s.fechaRealZarpe<=finMes && s.fechaRealZarpe>=new Date(y, m-2, 1));
       if(zarpoEnMes) causa = CAUSAS.zarpoNoPago;
       else {
-        const zp = fechaPlan(f['Zarpe estimado por el proveedor']) || (f['Zarpe estimado por el proveedor']===undefined ? zarpeProv[pedido] : null);
+        const zp = fechaPlan(f['Zarpe estimado por el proveedor']) || (f['Zarpe estimado por el proveedor']===undefined || f['Zarpe estimado por el proveedor']==='' ? zarpeProv[pedido] : null);
         causa = !zp ? CAUSAS.modeloSinFecha : (zp <= finMes ? CAUSAS.provAtraso : CAUSAS.modeloIgnoro);
       }
     }
     lineas.push({...base, causa, impacto:-montoPlan});
   });
-  // reales sin línea en el plan del mes: ¿estaban planeados para después?
+  // reales sin línea en el plan del mes: ¿estaban para después (adelantado), venían corridos del mes anterior (rezago) o no estaban?
+  const coincide = (f, r)=> String(f['Clave de cruce'])===r.clave || (r.pedido && String(f['Pedido'])===r.pedido && String(f['Concepto']).slice(0,2)===r.comp.slice(0,2));
   reales.forEach((r,i)=>{
     if(usado.has(i) || r.financiado || !(r.usd>0)) return;
-    const despuesMatch = despues.some(f=> String(f['Clave de cruce'])===r.clave || (r.comp==='1. Saldo a proveedor' && String(f['Pedido'])===r.pedido && String(f['Concepto']).startsWith('1.')));
-    lineas.push({mes:mesCorte, concepto:r.comp, detalle:r.detalle, tipo:'Real', proveedor:r.proveedor, pedido:r.pedido, referencia:r.proyecto, plan:0, real:r.usd, fechaPlan:null,
-      causa: despuesMatch ? CAUSAS.adelantado : CAUSAS.noPlan, impacto:r.usd});
+    const causa = despues.some(f=>coincide(f,r)) ? CAUSAS.adelantado : (planAnt.some(f=>coincide(f,r)) ? CAUSAS.rezago : CAUSAS.noPlan);
+    lineas.push({mes:mesCorte, concepto:r.comp, detalle:r.detalle, tipo:'Real', proveedor:r.proveedor, pedido:r.pedido, referencia:r.proyecto, plan:0, real:r.usd, fechaPlan:null, fechaReal:r.fecha, causa, impacto:r.usd});
   });
+  lineas.forEach(l=> l.responsable = CAUSA_RESP[l.causa] || RESP.otros);
   const totPlan = lineas.reduce((a,l)=>a+l.plan,0), totReal = lineas.reduce((a,l)=>a+l.real,0);
-  return {lineas, totPlan, totReal, nPlan: plan.length, nacSinValor};
+  const segun = lineas.filter(l=>l.causa===CAUSAS.segun).reduce((a,l)=>a+l.plan,0);
+  return {lineas, totPlan, totReal, segun, nPlan: plan.length, origen, desde, nacSinValor:R.sinValor, nacSinTrm:R.sinTrm};
 }
+
 function renderPlanVsReal(){
   const panel = document.getElementById('pvr_panel'); if(!panel || !MODEL) return;
   const sel = document.getElementById('pvr_mes'), msg = document.getElementById('pvr_estado');
-  const meses = [...new Set(FC_PLAN.filas.map(f=>String(f['Mes de corte'])))].filter(Boolean).sort().reverse();
+  const meses = mesesConMeta().reverse();
   if(!meses.length){
-    msg.innerHTML = FC_PLAN.error ? `No se pudo leer el plan (FC_PLAN_MES): ${FC_PLAN.error}.` : (FC_PLAN.cargado ? 'Todavía no hay ningún plan de caja congelado. El primero se guarda solo el 1.er día hábil del próximo mes (o se puede cargar el de octubre a partir de una descarga anterior).' : 'Cargando el plan de caja…');
-    ['pvr_kpis','pvr_tabla','pvr_detalle'].forEach(id=>{ const e=document.getElementById(id); if(e) e.innerHTML=''; }); destroyChart('c_pvr_cascada'); return;
+    msg.innerHTML = FINANZAS_WEBAPP_URL && FIN.error ? `No se pudo leer la meta de Finanzas: ${FIN.error}.` : (FIN.cargado ? 'Todavía no hay ninguna meta de caja. La primera automática se congela el 1.er día hábil del próximo mes; mientras tanto se pueden cargar las descargas anteriores (botón "Cargar meta desde descargas anteriores").' : 'Cargando la meta de caja…');
+    ['pvr_kpis','pvr_arbol','pvr_tabla','pvr_detalle','pvr_hist'].forEach(id=>{ const e=document.getElementById(id); if(e) e.innerHTML=''; }); destroyChart('c_pvr_cascada'); return;
   }
   const prev = sel.value; sel.innerHTML = meses.map(m=>`<option value="${m}">${fmtMesLabel(m)}${m===monthKey(new Date())?' (en curso)':''}</option>`).join(''); sel.value = meses.includes(prev)?prev:meses[0];
   sel.onchange = renderPlanVsReal;
   const A = analizarPlanVsReal(MODEL, sel.value), enCurso = sel.value===monthKey(new Date());
-  msg.innerHTML = (enCurso ? '<b>Mes en curso:</b> lo "corrido" todavía puede pagarse antes del cierre. ' : '') + `Todo en USD. ${A.nPlan} líneas en el plan.` + (A.nacSinValor ? ` <b style="color:var(--red);">${A.nacSinValor} nacionalización(es) pagadas sin valor factura en Proyectos Comex: no entran al real.</b>` : '');
-  const pct = A.totPlan>0 ? A.totReal/A.totPlan : null;
-  const segun = A.lineas.filter(l=>l.causa===CAUSAS.segun).reduce((a,l)=>a+l.plan,0);
-  const acierto = A.totPlan>0 ? segun/A.totPlan : null;
+  msg.innerHTML = `<b>Meta:</b> ${A.origen||'—'} · real contado desde el ${fmtDate(A.desde)}. ` + (enCurso ? '<b>Mes en curso:</b> lo "corrido" todavía puede pagarse antes del cierre. ' : '') +
+    (A.origen.startsWith('Histórica') ? 'Meta reconstruida de una descarga anterior: el cruce es por pedido / proyecto / proveedor y es aproximado. ' : '') +
+    `Todo en USD. ${A.nPlan} líneas en el plan.` + (A.nacSinTrm ? ` <b style="color:var(--amber);">${A.nacSinTrm} nacionalización(es) pagadas valoradas sin TRM (falta conectar Finanzas).</b>` : '') +
+    (A.nacSinValor ? ` <b style="color:var(--red);">${A.nacSinValor} nacionalización(es) pagadas sin TRM ni valor factura: no entran al real.</b>` : '');
+  const pct = A.totPlan>0 ? A.totReal/A.totPlan : null, acierto = A.totPlan>0 ? A.segun/A.totPlan : null;
   document.getElementById('pvr_kpis').innerHTML =
-    `<div class="mini-kpi"><span>Caja planeada</span><b>${fmt(A.totPlan)}</b></div>`+
-    `<div class="mini-kpi"><span>Caja real pagada</span><b>${fmt(A.totReal)}</b></div>`+
-    `<div class="mini-kpi ${pct===null?'':(Math.abs(pct-1)<=0.05?'ok':'bad')}"><span>Real / plan</span><b>${pct===null?'—':Math.round(pct*100)+'%'}</b><span>verde si ±5%</span></div>`+
-    `<div class="mini-kpi ${acierto===null?'':(acierto>=0.8?'ok':(acierto>=0.6?'warn':'bad'))}"><span>Acierto del plan</span><b>${acierto===null?'—':Math.round(acierto*100)+'%'}</b><span>% del plan pagado como se planeó</span></div>`;
-  // cascada
-  const orden = Object.values(CAUSAS).filter(c=>c!==CAUSAS.segun);
-  const porCausa = {}; A.lineas.forEach(l=>{ if(l.causa!==CAUSAS.segun) porCausa[l.causa] = (porCausa[l.causa]||0) + l.impacto; });
-  const pasos = orden.filter(c=>Math.abs(porCausa[c]||0)>0.5);
-  const labels = ['Plan', ...pasos.map(c=>c.replace('Corrido · ','↘ ')), 'Real'];
+    `<div class="mini-kpi"><span>Caja planeada (meta)</span><b>${fmt0(A.totPlan)}</b></div>`+
+    `<div class="mini-kpi"><span>Caja real pagada</span><b>${fmt0(A.totReal)}</b></div>`+
+    `<div class="mini-kpi ${semaforoRatio(pct)}"><span>Cumplimiento (real / meta)</span><b>${pct===null?'—':Math.round(pct*100)+'%'}</b><span>verde ±5% · ámbar ±10%</span></div>`+
+    `<div class="mini-kpi ${acierto===null?'':(acierto>=0.8?'ok':(acierto>=0.6?'warn':'bad'))}"><span>Acierto del plan</span><b>${acierto===null?'—':Math.round(acierto*100)+'%'}</b><span>% de la meta pagado como se planeó (±5%)</span></div>`;
+  // ---- Árbol: responsable → causa
+  let t = '<tr><th>Responsable / causa</th><th>Líneas</th><th>Impacto USD</th><th>% de la meta</th></tr>';
+  const pctMeta = v => A.totPlan>0 ? (v/A.totPlan*100).toFixed(1)+'%' : '—';
+  t += `<tr style="background:var(--paper);font-weight:700;"><td class="txt">Meta del mes</td><td>${A.nPlan}</td><td>${fmt0(A.totPlan)}</td><td>100%</td></tr>`;
+  const ok = A.lineas.filter(l=>l.causa===CAUSAS.segun);
+  t += `<tr><td class="txt">✓ ${CAUSAS.segun}</td><td>${ok.length}</td><td>${fmt0(A.segun)}</td><td>${pctMeta(A.segun)}</td></tr>`;
+  RESP_ORDEN.forEach(rp=>{
+    const L = A.lineas.filter(l=>l.responsable===rp && l.causa!==CAUSAS.segun); if(!L.length) return;
+    const imp = L.reduce((a,l)=>a+l.impacto,0);
+    t += `<tr style="font-weight:700;"><td class="txt">▸ ${rp}</td><td>${L.length}</td><td style="${imp<0?'color:var(--red);':''}">${fmt0(imp)}</td><td>${pctMeta(imp)}</td></tr>`;
+    [...new Set(L.map(l=>l.causa))].forEach(c=>{ const C = L.filter(l=>l.causa===c), v = C.reduce((a,l)=>a+l.impacto,0);
+      t += `<tr><td class="txt" style="padding-left:26px;">${c}</td><td>${C.length}</td><td style="${v<0?'color:var(--red);':''}">${fmt0(v)}</td><td>${pctMeta(v)}</td></tr>`; });
+  });
+  t += `<tr style="background:var(--paper);font-weight:700;"><td class="txt">Real pagado</td><td></td><td>${fmt0(A.totReal)}</td><td>${pctMeta(A.totReal)}</td></tr>`;
+  document.getElementById('pvr_arbol').innerHTML = t;
+  // ---- cascada por responsable
+  const porResp = {}; A.lineas.forEach(l=>{ if(l.causa!==CAUSAS.segun) porResp[l.responsable] = (porResp[l.responsable]||0) + l.impacto; });
+  const pasos = RESP_ORDEN.filter(r=>Math.abs(porResp[r]||0)>0.5);
+  const labels = ['Meta', ...pasos, 'Real'];
   let acum = A.totPlan; const data = [[0, A.totPlan]]; const colores = [COLORS.navy];
-  pasos.forEach(c=>{ const v = porCausa[c]; data.push([acum, acum+v]); colores.push(v<0?'#C0392B':'#1F8A4C'); acum += v; });
+  pasos.forEach(r=>{ const v = porResp[r]; data.push([acum, acum+v]); colores.push(v<0?'#C0392B':'#1F8A4C'); acum += v; });
   data.push([0, A.totReal]); colores.push(COLORS.steel);
   barChart('c_pvr_cascada', labels, [{label:'USD', data, backgroundColor:colores}],
-    {plugins:{legend:{display:false}, datalabels:{display:false}, tooltip:{callbacks:{label:ctx=>{ const [a,b]=ctx.raw; return `${fmt(b-a)}`; }}}}, scales:{x:{ticks:{autoSkip:false, maxRotation:40, minRotation:20, font:{size:10}}}}}, false, null, false);
-  // tabla componente × causa
+    {plugins:{legend:{display:false}, datalabels:{display:true, anchor:'end', align:'top', color:'#16242F', font:{size:10, weight:600}, formatter:v=>fmt0(v[1]-v[0])},
+      tooltip:{callbacks:{label:ctx=>{ const [a,b]=ctx.raw; return fmt0(b-a); }}}}, scales:{x:{ticks:{autoSkip:false, font:{size:10.5}}}, y:{ticks:{callback:v=>fmt0(v)}}}}, false, null, false);
+  // ---- componente × responsable
   const comps = [...new Set(A.lineas.map(l=>l.concepto))].sort();
-  const causasUsadas = [CAUSAS.segun, ...pasos];
-  let h = `<tr><th>Componente</th><th>Plan</th>${causasUsadas.map(c=>`<th style="white-space:normal;min-width:110px;">${c.replace('Corrido · ','Corrido: ')}</th>`).join('')}<th>Real</th><th>Real / plan</th></tr>`;
+  let h = `<tr><th>Componente</th><th>Meta</th><th>Pagado según plan</th>${pasos.map(r=>`<th style="white-space:normal;min-width:110px;">${r}</th>`).join('')}<th>Real</th><th>Real / meta</th></tr>`;
   comps.forEach(cp=>{
-    const L = A.lineas.filter(l=>l.concepto===cp), p = L.reduce((a,l)=>a+l.plan,0), r = L.reduce((a,l)=>a+l.real,0);
-    h += `<tr><td class="txt">${cp}</td><td>${fmt(p)}</td>${causasUsadas.map(c=>{ const v = c===CAUSAS.segun ? L.filter(l=>l.causa===c).reduce((a,l)=>a+l.plan,0) : L.filter(l=>l.causa===c).reduce((a,l)=>a+l.impacto,0); return `<td style="${v<0?'color:var(--red);':''}">${v?fmt(v):'—'}</td>`; }).join('')}<td>${fmt(r)}</td><td>${p>0?Math.round(r/p*100)+'%':'—'}</td></tr>`;
+    const L = A.lineas.filter(l=>l.concepto===cp), p = L.reduce((a,l)=>a+l.plan,0), r = L.reduce((a,l)=>a+l.real,0), s = L.filter(l=>l.causa===CAUSAS.segun).reduce((a,l)=>a+l.plan,0);
+    const rt = p>0 ? r/p : null;
+    h += `<tr><td class="txt">${cp}</td><td>${fmt0(p)}</td><td>${s?fmt0(s):'—'}</td>${pasos.map(rp=>{ const v = L.filter(l=>l.responsable===rp && l.causa!==CAUSAS.segun).reduce((a,l)=>a+l.impacto,0); return `<td style="${v<0?'color:var(--red);':''}">${v?fmt0(v):'—'}</td>`; }).join('')}<td>${fmt0(r)}</td><td>${rt===null?'—':`<span class="pill ${semaforoRatio(rt)}">${Math.round(rt*100)}%</span>`}</td></tr>`;
   });
   document.getElementById('pvr_tabla').innerHTML = h;
-  // detalle
+  // ---- detalle
   const fc = document.getElementById('pvr_causa'); const prevC = fc.value;
-  fc.innerHTML = '<option value="">Todas las causas</option>' + [...new Set(A.lineas.map(l=>l.causa))].map(c=>`<option>${c}</option>`).join(''); fc.value = prevC; fc.onchange = renderPlanVsReal;
-  const det = A.lineas.filter(l=>!fc.value || l.causa===fc.value).sort((a,b)=>Math.abs(b.impacto)-Math.abs(a.impacto));
-  let d = '<tr><th>Causa</th><th>Componente</th><th>Proveedor / contraparte</th><th>Pedido</th><th>Proyecto / parcial</th><th>Fecha planeada</th><th>Plan USD</th><th>Real USD</th><th>Impacto USD</th></tr>';
-  det.forEach(l=>{ d += `<tr><td class="txt">${l.causa}</td><td class="txt">${l.concepto}</td><td class="txt">${l.proveedor||'—'}</td><td class="txt">${l.pedido||'—'}</td><td class="txt">${l.referencia||'—'}</td><td>${fmtDate(l.fechaPlan)}</td><td>${fmt(l.plan)}</td><td>${fmt(l.real)}</td><td style="color:${l.impacto<0?'var(--red)':(l.impacto>0?'var(--green)':'inherit')};">${l.impacto?fmt(l.impacto):'—'}</td></tr>`; });
+  fc.innerHTML = '<option value="">Todas las causas</option>' + RESP_ORDEN.map(r=>`<option value="R:${r}">▸ ${r} (todas)</option>`).join('') + [...new Set(A.lineas.map(l=>l.causa))].map(c=>`<option value="${c}">${c}</option>`).join('');
+  fc.value = prevC; fc.onchange = renderPlanVsReal;
+  const filtro = fc.value;
+  const det = A.lineas.filter(l=>!filtro || (filtro.startsWith('R:') ? (l.responsable===filtro.slice(2) && l.causa!==CAUSAS.segun) : l.causa===filtro)).sort((a,b)=>Math.abs(b.impacto)-Math.abs(a.impacto));
+  let d = '<tr><th>Responsable</th><th>Causa</th><th>Componente</th><th>Proveedor / contraparte</th><th>Pedido</th><th>Proyecto / parcial</th><th>Fecha planeada</th><th>Fecha real</th><th>Meta USD</th><th>Real USD</th><th>Impacto USD</th></tr>';
+  det.forEach(l=>{ d += `<tr><td class="txt">${l.responsable}</td><td class="txt">${l.causa}</td><td class="txt">${l.concepto}</td><td class="txt">${l.proveedor||'—'}</td><td class="txt">${l.pedido||'—'}</td><td class="txt">${l.referencia||'—'}</td><td>${fmtDate(l.fechaPlan)}</td><td>${fmtDate(l.fechaReal)}</td><td>${fmt0(l.plan)}</td><td>${fmt0(l.real)}</td><td style="color:${l.impacto<0?'var(--red)':(l.impacto>0?'var(--green)':'inherit')};font-weight:600;">${fmt0(l.impacto)}</td></tr>`; });
   document.getElementById('pvr_detalle').innerHTML = d;
+  // ---- seguimiento mensual (todas las metas guardadas)
+  let s = '<tr><th>Mes</th><th>Origen de la meta</th><th>Meta USD</th><th>Real USD</th><th>Cumplimiento</th><th>Acierto</th>' + RESP_ORDEN.map(r=>`<th style="white-space:normal;min-width:100px;">${r}</th>`).join('') + '</tr>';
+  mesesConMeta().forEach(mk=>{
+    const X = mk===sel.value ? A : analizarPlanVsReal(MODEL, mk), rt = X.totPlan>0 ? X.totReal/X.totPlan : null, ac = X.totPlan>0 ? X.segun/X.totPlan : null;
+    s += `<tr><td>${fmtMesLabel(mk)}${mk===monthKey(new Date())?' (en curso)':''}</td><td class="txt" style="font-size:11px;">${X.origen}</td><td>${fmt0(X.totPlan)}</td><td>${fmt0(X.totReal)}</td><td><span class="pill ${semaforoRatio(rt)}">${rt===null?'—':Math.round(rt*100)+'%'}</span></td><td>${ac===null?'—':Math.round(ac*100)+'%'}</td>` +
+      RESP_ORDEN.map(r=>{ const v = X.lineas.filter(l=>l.responsable===r && l.causa!==CAUSAS.segun).reduce((a,l)=>a+l.impacto,0); return `<td style="${v<0?'color:var(--red);':''}">${v?fmt0(v):'—'}</td>`; }).join('') + '</tr>';
+  });
+  document.getElementById('pvr_hist').innerHTML = s;
   document.getElementById('pvr_descargar').onclick = ()=>{
-    const aoa = [['Mes','Causa','Componente','Detalle','Tipo','Proveedor / contraparte','Pedido','Proyecto / parcial','Fecha planeada','Plan USD','Real USD','Impacto USD']];
-    A.lineas.forEach(l=> aoa.push([l.mes, l.causa, l.concepto, l.detalle, l.tipo, l.proveedor, l.pedido, l.referencia, fechaSimple(l.fechaPlan), num2(l.plan), num2(l.real), num2(l.impacto)]));
+    const aoa = [['Mes','Responsable','Causa','Componente','Detalle','Tipo','Proveedor / contraparte','Pedido','Proyecto / parcial','Fecha planeada','Fecha real','Meta USD','Real USD','Impacto USD']];
+    A.lineas.forEach(l=> aoa.push([l.mes, l.responsable, l.causa, l.concepto, l.detalle, l.tipo, l.proveedor, l.pedido, l.referencia, fechaSimple(l.fechaPlan), fechaSimple(l.fechaReal), num2(l.plan), num2(l.real), num2(l.impacto)]));
     const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(aoa, {cellDates:true}), 'Plan vs Real');
     XLSX.writeFile(wb, `Plan_vs_Real_caja_${sel.value}.xlsx`);
   };
 }
+
 
 // ================= VISTA 4 =================
 function totalRow(cols, label, value){
@@ -5738,8 +6036,7 @@ function renderView4(){
     document.getElementById('v4_nacResumen').innerHTML = `
       <div class="mini-kpi"><span>Meses de pago proyectados</span><b>${filasMes.length}</b></div>
       <div class="mini-kpi bad"><span>Total nacionalización estimada</span><b>${fmt(filasMes.reduce((a,f)=>a+f.valorNac,0))}</b></div>
-      <div class="mini-kpi"><span>Arancel aplicado</span><b>${(arancel*100).toFixed(1)}%</b></div>
-      <div class="mini-kpi"><span>IVA aplicado</span><b>${(iva*100).toFixed(1)}%</b></div>
+      <div class="mini-kpi ${SUPUESTO_NAC && SUPUESTO_NAC.global.n>=NAC_MIN_PROYECTOS ? 'ok' : 'warn'}"><span>Supuesto aplicado</span><b>${SUPUESTO_NAC && SUPUESTO_NAC.global.n>=NAC_MIN_PROYECTOS ? '% efectivo calibrado' : 'Arancel × (1+IVA)'}</b><span>${SUPUESTO_NAC && SUPUESTO_NAC.global.n>=NAC_MIN_PROYECTOS ? Object.entries(SUPUESTO_NAC.porFamilia).map(([f,x])=>`${f}: ${(supuestoNac(f).pct*100).toFixed(1)}%`).join(' · ') : 'respaldo: '+(arancel*100).toFixed(1)+'% arancel, '+(iva*100).toFixed(0)+'% IVA'}</span></div>
     `;
     let html6 = '<tr><th>Mes de Arribo (acumulado)</th><th>Ton. Arribadas/Estimadas</th><th>Valor Factura Acumulado</th><th>Nacionalización</th><th>Fecha de Pago (1ra semana mes sig.)</th><th># Items</th><th>Detalle</th></tr>';
     filasMes.forEach(f=>{
@@ -5923,31 +6220,90 @@ function renderProgramacionPagos(M, nacEst){
 }
 
 
+// ================= NACIONALIZACIÓN: estimado vs. real, cumplimiento y calibración del supuesto (Tanda 40) =================
+// (antes Vista 5; ahora dentro de "Flujo de caja y asertividad")
 function renderView5(){
-  const M = MODEL;
+  const M = MODEL; if(!M) return;
   const meses = Object.keys(M.nacMes).sort();
+  const nota = document.getElementById('nac_nota');
   if(meses.length===0){
-    document.getElementById('v5').querySelector('.panel').innerHTML = '<div class="note">No se encontraron registros en la hoja de Nacionalización, o las columnas no coincidieron. Revisa la consola del navegador (F12) para el detalle.</div>';
+    if(nota) nota.innerHTML = 'No se encontraron registros en la hoja de Nacionalización, o las columnas no coincidieron. Revisa la consola del navegador (F12) para el detalle.';
     return;
   }
+  const pesos = v => (v<0?'-$':'$') + Math.round(Math.abs(v||0)).toLocaleString('en-US');
+  const SEM = {ok:COLORS.green, warn:COLORS.amber, bad:COLORS.red};
+  // Cumplimiento = real ÷ estimado, solo en nacionalizaciones que ya tienen ambos valores (pagadas)
+  const cm = {};
+  M.nac.forEach(n=>{ if(!(n.valorRealCOP>0 && n.valorEstimadoCOP>0)) return; const k = monthKey(n.fechaPago||n.fechaLevante); if(!k) return;
+    const g = cm[k] = cm[k] || {e:0, r:0, n:0}; g.e += n.valorEstimadoCOP; g.r += n.valorRealCOP; g.n++; });
+  const ratio = mk => cm[mk] && cm[mk].e>0 ? cm[mk].r/cm[mk].e : null;
   destroyChart('c_nacMes');
   charts['c_nacMes'] = new Chart(document.getElementById('c_nacMes'), {
     type:'bar',
-    data:{labels:meses, datasets:[
-      {label:'Valor Real COP', data:meses.map(m=>M.nacMes[m].valorReal), backgroundColor:COLORS.navy},
-      {label:'Valor Estimado COP', data:meses.map(m=>M.nacMes[m].valorEstimado), backgroundColor:COLORS.amber},
+    data:{labels:meses.map(fmtMesLabel), datasets:[
+      {label:'Valor estimado COP', data:meses.map(m=>M.nacMes[m].valorEstimado), backgroundColor:'#AEB8C2', borderRadius:3, maxBarThickness:34, datalabels:{display:false}},
+      {label:'Valor real COP', data:meses.map(m=>M.nacMes[m].valorReal), backgroundColor:COLORS.navy, borderRadius:3, maxBarThickness:34,
+        datalabels:{display:ctx=>ratio(meses[ctx.dataIndex])!==null, anchor:'end', align:'top', offset:2, font:{size:10, weight:700},
+          color:ctx=>SEM[semaforoRatio(ratio(meses[ctx.dataIndex]))]||'#16242F', formatter:(v,ctx)=>Math.round(ratio(meses[ctx.dataIndex])*100)+'%'}}
     ]},
-    options:{responsive:true, plugins:{legend:{position:'bottom'}, tooltip:{callbacks:{label:ctx=>`${ctx.dataset.label}: ${fmt(Number(ctx.raw||0))}`}}}, scales:{y:{ticks:{callback:v=>'$'+(v/1e6).toFixed(2)+'M'}}}}
+    options:{responsive:true, maintainAspectRatio:false, layout:{padding:{top:24}}, interaction:{mode:'index', intersect:false},
+      plugins:{legend:{position:'bottom', labels:{font:{size:11}, boxWidth:10, boxHeight:10, usePointStyle:true, pointStyle:'rectRounded'}},
+        tooltip:{backgroundColor:'#16242F', padding:10, callbacks:{label:ctx=>`${ctx.dataset.label}: ${pesos(ctx.raw)}`,
+          afterBody:items=>{ const r = ratio(meses[items[0].dataIndex]); return r===null ? 'Sin nacionalizaciones pagadas comparables' : `Cumplimiento (real ÷ estimado de las pagadas): ${Math.round(r*100)}%`; }}}},
+      scales:{x:{grid:{display:false}}, y:{grid:{color:'#EEF1F4'}, ticks:{callback:v=>pesos(v), font:{size:10.5}}}}}
   });
-  document.getElementById('f5_mes').innerHTML = '<option value="">Todos los meses</option>' + meses.map(m=>`<option value="${m}">${fmtMesLabel(m)}</option>`).join('');
+  // KPIs y tabla de cumplimiento
+  const hoyK = monthKey(new Date()), desde12 = sumarMesK(hoyK, -12);
+  const ult = Object.keys(cm).filter(k=>k>=desde12 && k<=hoyK);
+  const e12 = ult.reduce((a,k)=>a+cm[k].e,0), r12 = ult.reduce((a,k)=>a+cm[k].r,0), rt12 = e12>0 ? r12/e12 : null;
+  let t = '<tr><th>Mes</th><th>Nacionalizaciones comparables</th><th>Estimado COP</th><th>Real COP</th><th>Diferencia COP</th><th>Cumplimiento (real ÷ estimado)</th></tr>';
+  meses.slice().reverse().forEach(mk=>{ const g = cm[mk]; if(!g) return; const r = g.r/g.e;
+    t += `<tr><td>${fmtMesLabel(mk)}</td><td>${g.n}</td><td>${pesos(g.e)}</td><td>${pesos(g.r)}</td><td style="${g.r-g.e>0?'color:var(--red);':''}">${pesos(g.r-g.e)}</td><td><span class="pill ${semaforoRatio(r)}">${Math.round(r*100)}%</span></td></tr>`; });
+  document.getElementById('nac_cumpl').innerHTML = t;
+
+  // ---- Supuesto de nacionalización (Fase 1): % efectivo por familia, calibrado con lo pagado (ver calibrarNacionalizacion)
+  const FN = factorNacUSD(), S = SUPUESTO_NAC;
+  const pctTxt = v => v===null||v===undefined ? '—' : (v*100).toFixed(1)+'%';
+  if(!S){
+    document.getElementById('nac_calib_kpis').innerHTML = `<div class="mini-kpi warn"><span>Supuesto aplicado</span><b>Respaldo ${(FN.factor*100).toFixed(2)}%</b><span>falta la TRM del Sheet de Finanzas para calibrar</span></div>`;
+    document.getElementById('nac_calib').innerHTML = '';
+  } else {
+    const G = S.global, medCop = cuantil(S.proyectos.map(p=>p.cop/p.vf), 0.5);
+    const usado = supuestoNac('');
+    document.getElementById('nac_calib_kpis').innerHTML =
+      `<div class="mini-kpi ${G.n>=NAC_MIN_PROYECTOS?'ok':'warn'}"><span>Supuesto vigente (general)</span><b>${pctTxt(usado.pct)}</b><span>${G.n>=NAC_MIN_PROYECTOS ? 'mediana de '+G.n+' proyectos pagados · '+fmtMesLabel(S.desde)+' a '+fmtMesLabel(S.hasta) : 'pocos proyectos: se usa el respaldo'}</span></div>`+
+      `<div class="mini-kpi"><span>Rango típico (p25 – p75)</span><b>${pctTxt(G.p25)} – ${pctTxt(G.p75)}</b><span>la mitad de los proyectos cae aquí</span></div>`+
+      `<div class="mini-kpi bad"><span>Fórmula anterior</span><b>${(FN.factor*100).toFixed(2)}%</b><span>${G.pct ? 'subestimaba '+(G.pct/FN.factor).toFixed(1)+' veces' : ''} · queda solo de respaldo</span></div>`+
+      `<div class="mini-kpi"><span>COP pagados por USD facturado</span><b>${medCop===null?'—':Math.round(medCop).toLocaleString('en-US')}</b><span>mediana · no depende de la TRM</span></div>`;
+    let c = '<tr><th>Familia</th><th>Proyectos pagados (12 meses)</th><th>Mediana % efectivo</th><th>Rango p25 – p75</th><th>Supuesto que usa el modelo</th><th>Por qué</th></tr>';
+    const fams = [...new Set([...Object.keys(S.porFamilia), 'Láminas','Tubos','Perfiles','Otros Productos'])];
+    fams.forEach(f=>{ const x = S.porFamilia[f] || {n:0, pct:null, p25:null, p75:null}, u = supuestoNac(f);
+      c += `<tr><td class="txt">${f}</td><td>${x.n}</td><td>${pctTxt(x.pct)}</td><td>${x.n?pctTxt(x.p25)+' – '+pctTxt(x.p75):'—'}</td><td><b>${pctTxt(u.pct)}</b></td><td class="txt" style="font-size:11px;">${u.fuente}</td></tr>`; });
+    c += `<tr style="background:var(--paper);font-weight:700;"><td class="txt">Todas</td><td>${G.n}</td><td>${pctTxt(G.pct)}</td><td>${G.n?pctTxt(G.p25)+' – '+pctTxt(G.p75):'—'}</td><td></td><td></td></tr>`;
+    // Mes a mes: lo pagado vs. lo que habría estimado el supuesto vigente y la fórmula anterior (referencia: es la misma muestra con la que se calibra)
+    const pm = {};
+    S.todos.forEach(p=>{ const g = pm[p.mes] = pm[p.mes] || {n:0, vf:0, real:0, vig:0, ant:0}; g.n++; g.vf += p.vf; g.real += p.usd; g.vig += p.vf*supuestoNac(p.familia).pct; g.ant += p.vf*FN.factor; });
+    c += '<tr><th colspan="6" style="text-align:left;padding-top:14px;">Mes a mes — real pagado vs. supuesto vigente y fórmula anterior (USD)</th></tr>';
+    c += '<tr><th>Mes de pago</th><th>Proyectos · factura USD</th><th>Real pagado USD (% efectivo)</th><th>Con supuesto vigente</th><th>Real ÷ supuesto vigente</th><th>Con fórmula anterior (real ÷ anterior)</th></tr>';
+    Object.keys(pm).sort().reverse().slice(0,18).forEach(mk=>{ const g = pm[mk], r = g.vig>0 ? g.real/g.vig : null, ra = g.ant>0 ? g.real/g.ant : null;
+      c += `<tr><td>${fmtMesLabel(mk)}</td><td>${g.n} · ${fmt0(g.vf)}</td><td>${fmt0(g.real)} (${pctTxt(g.real/g.vf)})</td><td>${fmt0(g.vig)}</td><td>${r===null?'—':`<span class="pill ${semaforoRatio(r)}">${Math.round(r*100)}%</span>`}</td><td>${fmt0(g.ant)} (${ra===null?'—':Math.round(ra*100)+'%'})</td></tr>`; });
+    document.getElementById('nac_calib').innerHTML = c;
+  }
+  const proyInfo = {}; if(S) S.todos.forEach(p=> proyInfo[p.proyecto] = p);
+  if(nota) nota.innerHTML = '<b>Fase 1 (vigente):</b> el % efectivo incluye todo lo que hoy se registra como nacionalización (arancel, IVA y otros cobros) y se recalcula solo cada vez que se abre el Tablero, con los proyectos pagados de los últimos 12 meses. <b>Fase 2:</b> cuando comex registre por cada DIM las columnas INCOTERM, VALOR ADUANA USD, ARANCEL % DIM, VALOR ARANCEL COP, VALOR IVA COP, OTROS GASTOS COP y TRM DIM en la hoja Nacionalización, el supuesto pasa a calcularse por componente (base CIF según incoterm, arancel por familia, IVA sobre aduana + arancel) y el árbol podrá decir si el desvío vino del arancel, la TRM, el flete o los otros gastos.';
+
+  // ---- detalle
+  document.getElementById('f5_mes').innerHTML = '<option value="">Todos los meses</option>' + meses.slice().reverse().map(m=>`<option value="${m}">${fmtMesLabel(m)}</option>`).join('');
   function go(){
     const fm = document.getElementById('f5_mes').value;
-    let rows = M.nac.filter(n => !fm || monthKey(n.fechaPago||n.fechaLevante)===fm);
-    let html = '<tr><th>Proyecto Comex</th><th>Producto</th><th>Fecha Levante</th><th>Valor Estimado COP</th><th>Valor Real COP</th><th>Fecha Pago</th><th>Saldo</th><th>Estado</th></tr>';
+    const rows = M.nac.filter(n => !fm || monthKey(n.fechaPago||n.fechaLevante)===fm);
+    let html = '<tr><th>Proyecto Comex</th><th>Producto</th><th>Fecha Levante</th><th>Valor Estimado COP</th><th>Valor Real COP</th><th>Cumplimiento</th><th>Fecha Pago</th><th>Saldo</th><th>Estado</th><th>Factura proyecto USD</th><th>TRM de los pagos</th><th>% efectivo proyecto</th></tr>';
     rows.forEach(n=>{
+      const r = n.valorRealCOP>0 && n.valorEstimadoCOP>0 ? n.valorRealCOP/n.valorEstimadoCOP : null, p = proyInfo[n.proyectoComex];
       html += `<tr><td class="txt">${n.proyectoComex}</td><td class="txt">${n.producto||''}</td><td>${fmtDate(n.fechaLevante)}</td>
-        <td>${fmt(n.valorEstimadoCOP)}</td><td>${fmt(n.valorRealCOP)}</td><td>${fmtDate(n.fechaPago)}</td>
-        <td>${fmt(n.saldo)}</td><td><span class="pill ${n.estado==='PAGADO'?'ok':'bad'}">${n.estado||''}</span></td></tr>`;
+        <td>${pesos(n.valorEstimadoCOP)}</td><td>${pesos(n.valorRealCOP)}</td><td>${r===null?'—':`<span class="pill ${semaforoRatio(r)}">${Math.round(r*100)}%</span>`}</td><td>${fmtDate(n.fechaPago)}</td>
+        <td>${pesos(n.saldo)}</td><td><span class="pill ${n.estado==='PAGADO'?'ok':'bad'}">${n.estado||''}</span></td>
+        <td>${p?fmt0(p.vf):'—'}</td><td>${p?Math.round(p.trmImplicita).toLocaleString('en-US'):'—'}</td><td>${p?(p.pct*100).toFixed(2)+'%':'—'}</td></tr>`;
     });
     document.getElementById('tbl_nac').innerHTML = html;
   }
