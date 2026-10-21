@@ -450,12 +450,12 @@
   <div class="view" id="v_fc">
     <div class="panel">
       <h2>Flujo de caja de abastecimiento — información para Finanzas</h2>
-      <div class="desc">El Tablero calcula todos los pagos de abastecimiento en USD (saldos a proveedores, giros financieros, nacionalización y pedidos nuevos sugeridos) y los guarda en el Sheet de Finanzas: la proyección de 12 meses (se sobrescribe cada mes), la meta congelada de cada mes (historial) y los pagos reales. La nacionalización, que se paga en COP, se pasa a USD con la TRM oficial (pagos reales) o con la TRM del mes de pago (proyección); la TRM proyectada la puede ajustar Finanzas en la hoja TRM_MENSUAL.</div>
+      <div class="desc">El Tablero calcula todos los pagos de abastecimiento en USD (saldos a proveedores, giros financieros, nacionalización y pedidos nuevos sugeridos) y los guarda en el Sheet de Finanzas: la proyección de 12 meses con su resumen por rubro y mes (se sobrescribe con la versión vigente cada día que se abre el Tablero), la meta congelada de cada mes (historial) y los pagos reales. La nacionalización, que se paga en COP, se pasa a USD con la TRM oficial (pagos reales) o con la TRM del mes de pago (proyección); la TRM proyectada la puede ajustar Finanzas en la hoja TRM_MENSUAL.</div>
       <div id="fin_estado"></div>
     </div>
     <div class="panel" id="bd_pagos_panel">
       <h2>1 · Base de datos de pagos proyectados — próximos 12 meses (USD)</h2>
-      <div class="desc">Todas las salidas de dinero de abastecimiento, una fila por pago, en USD: saldos a proveedores (reales y estimados), giros financieros, nacionalizaciones (registradas sin pagar y estimadas) y pedidos nuevos sugeridos (anticipo, saldo y nacionalización). Cada fila trae proveedor, pedido, proyecto comex, Ton, valor factura, lo ya pagado y la clave de cruce para el análisis meta vs. real. Nacionalización: registrada = saldo COP ÷ TRM del mes de pago; estimada = valor factura × supuesto % (arancel × (1+IVA), Vista 4.7), con el COP equivalente y la TRM usada como referencia. "Vencido" = pagos reales con fecha pasada que siguen sin registrarse como pagados. El 1.er día hábil de cada mes esta BD se guarda en el Sheet de Finanzas (FC_PROYECCION_12M se sobrescribe; FC_META_MES guarda la meta del mes).</div>
+      <div class="desc">Todas las salidas de dinero de abastecimiento, una fila por pago, en USD: saldos a proveedores (reales y estimados), giros financieros, nacionalizaciones (registradas sin pagar y estimadas) y pedidos nuevos sugeridos (anticipo, saldo y nacionalización). Cada fila trae proveedor, pedido, proyecto comex, Ton, valor factura, lo ya pagado y la clave de cruce para el análisis meta vs. real. Nacionalización: registrada = saldo COP ÷ TRM del mes de pago; estimada = valor factura × supuesto % (arancel × (1+IVA), Vista 4.7), con el COP equivalente y la TRM usada como referencia. "Vencido" = pagos reales con fecha pasada que siguen sin registrarse como pagados. Esta BD se guarda sola en el Sheet de Finanzas cada día que alguien abre el Tablero: FC_PROYECCION_12M (detalle, igual a la hoja BD_Pagos de la descarga), FC_RESUMEN_MENSUAL (mes × concepto × subconcepto, para conectar el FC maestro) y FC_RESUMEN_TABLA (rubro × mes); las tres se sobrescriben con la versión vigente. Entre el 1.er y el 5.º día hábil además se congela la meta del mes en FC_META_MES.</div>
       <div class="filters">
         <button id="bd_descargar" type="button" style="background:var(--navy);color:#fff;border:none;border-radius:6px;padding:8px 14px;font-size:12px;cursor:pointer;">⬇ Descargar BD de pagos (Excel)</button>
         <label style="background:#fff;color:var(--navy);border:1px solid var(--navy);border-radius:6px;padding:7px 14px;font-size:12px;cursor:pointer;">⬆ Cargar meta desde descargas anteriores
@@ -5562,7 +5562,7 @@ async function cargarFinanzas(){
 }
 async function sincronizarFinanzas(){
   if(!FINANZAS_WEBAPP_URL || !MODEL || FIN.error) return;
-  const hoy = new Date(), clave = 'fin_sinc_'+isoDia(hoy), est = FIN.estado||{};
+  const hoy = new Date(), clave = 'fin_sinc_v12_'+isoDia(hoy), est = FIN.estado||{};   // v1.2: la proyección se sobrescribe en cada envío (1 vez al día por navegador)
   try{ if(localStorage.getItem(clave) && (est.metaCongelada || !est.hoyEsHabilOPosterior)) return; }catch(e){}
   const B = construirBDPagos(MODEL, 12);
   const filasP = B.filas.map(f=> BD_COLUMNAS.map(([n,fn])=>{ if(n==='Fecha de corte') return isoDia(B.fechaCorte); const v = fn(f); return v instanceof Date ? isoDia(v) : (v===null||v===undefined ? '' : v); }));
@@ -5593,7 +5593,7 @@ function renderEstadoFinanzas(){
     <div class="mini-kpi ${e.metaCongelada?'ok':(e.ventanaVencida?'bad':'warn')}"><span>Meta de ${fmtMesLabel(e.mes||monthKey(new Date()))}</span><b>${e.metaCongelada?'Congelada':(e.ventanaVencida?'Sin meta':'Pendiente')}</b><span>${e.metaCongelada ? (e.origenMeta||'') : (e.ventanaVencida ? 'sin meta automática: nadie abrió el Tablero en los primeros '+(e.ventanaDiasHabiles||5)+' días hábiles (se puede cargar una descarga anterior)' : 'se congela al abrir el Tablero entre el '+(e.primerDiaHabil||'1.er día hábil')+' y el día hábil '+(e.ventanaDiasHabiles||5))}</span></div>
     <div class="mini-kpi"><span>Metas guardadas</span><b>${meses.length}</b><span>${meses.map(fmtMesLabel).join(' · ')||'—'}</span></div>
     <div class="mini-kpi ${T?'':'warn'}"><span>TRM oficial más reciente</span><b>${T?Math.round(T.ultima[1]).toLocaleString('en-US'):'—'}</b><span>${T?T.ultima[0]:'sin datos de TRM'}</span></div>
-    <div class="mini-kpi ${s && !s.ok ? 'bad' : 'ok'}"><span>Último envío de este navegador</span><b>${!s ? 'Hoy (ya enviado)' : (s.ok ? (s.fotoTomada ? 'Foto mensual + reales' : 'Pagos reales') : 'Error')}</b><span>${s && !s.ok ? s.error : 'Sheet de Finanzas al día'}</span></div></div>`;
+    <div class="mini-kpi ${s && !s.ok ? 'bad' : 'ok'}"><span>Último envío de este navegador</span><b>${!s ? 'Hoy (ya enviado)' : (s.ok ? (s.fotoTomada ? 'Proyección + meta del mes + reales' : 'Proyección + reales') : 'Error')}</b><span>${s && !s.ok ? s.error : 'Sheet de Finanzas al día'}</span></div></div>`;
 }
 
 // ---------- Panel BD (resumen) ----------
