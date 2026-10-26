@@ -1,0 +1,643 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Flujo de Caja — Real vs Plan</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js"></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&display=swap');
+  :root{
+    --navy:#0E3552; --navy-deep:#081F30; --steel:#3D6A88; --slate:#7488A0; --mist:#C7D2DA; --paper:#F5F7F9;
+    --card:#FFFFFF; --ink:#16242F; --ink-soft:#5C7284; --line:#E2E8EC;
+    --gold:#A9852E; --amber:#C9862E; --red:#B23A2E; --green:#2E7D5B;
+    --mono:'IBM Plex Mono', ui-monospace, Menlo, monospace;
+    --sans:'Montserrat', -apple-system, 'Segoe UI', sans-serif;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0;background:var(--paper);color:var(--ink);font-family:var(--sans);font-size:13px;}
+  header{background:linear-gradient(135deg,var(--navy-deep),var(--navy) 60%,var(--steel));color:#fff;padding:10px 20px 8px;}
+  .eyebrow{font-family:var(--mono);font-size:10.5px;letter-spacing:.12em;text-transform:uppercase;opacity:.75;display:flex;align-items:center;gap:8px;}
+  .dot{width:7px;height:7px;border-radius:50%;background:#8ee6a8;box-shadow:0 0 8px #8ee6a8;}
+  .dot.loading{background:#f5c26b;box-shadow:0 0 8px #f5c26b;animation:pulse 1s infinite;}
+  .dot.error{background:#e57373;box-shadow:0 0 8px #e57373;}
+  @keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
+  h1{margin:2px 0 0;font-size:17px;font-weight:800;}
+  #statusMsg{font-size:10.5px;opacity:.85;margin-top:3px;}
+  .filtros{display:flex;flex-wrap:wrap;gap:10px 14px;align-items:flex-end;padding:8px 20px;background:#fff;border-bottom:1px solid var(--line);}
+  .filtros label{display:flex;flex-direction:column;gap:3px;font-size:9.5px;font-weight:700;color:var(--ink-soft);text-transform:uppercase;letter-spacing:.03em;}
+  .filtros select,.filtros input{font-family:var(--sans);font-size:12.5px;padding:5px 8px;border:1px solid var(--line);border-radius:6px;background:#fff;color:var(--navy);font-weight:600;}
+  .btn{border:1px solid var(--navy);background:var(--navy);color:#fff;border-radius:6px;padding:7px 12px;font-weight:700;font-family:var(--sans);font-size:12px;cursor:pointer;}
+  .btn.sec{background:#fff;color:var(--navy);}
+  .btn:disabled{opacity:.5;cursor:wait;}
+  nav{display:flex;gap:0;padding:0 20px;background:#fff;border-bottom:1px solid var(--line);flex-wrap:wrap;}
+  nav button{border:none;background:none;padding:11px 13px;font-family:var(--sans);font-size:12.5px;font-weight:600;color:var(--ink-soft);cursor:pointer;border-bottom:3px solid transparent;}
+  nav button.active{color:var(--navy);border-bottom-color:var(--amber);}
+  main{padding:14px 20px 40px;}
+  .vista{display:none;} .vista.activa{display:block;}
+  .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:8px;margin-bottom:12px;}
+  .kpi{background:#fff;border:1px solid var(--line);border-left:3px solid var(--navy);border-radius:8px;padding:8px 10px;}
+  .kpi.ok{border-left-color:var(--green);} .kpi.ok .val{color:var(--green);}
+  .kpi.warn{border-left-color:var(--amber);} .kpi.warn .val{color:var(--amber);}
+  .kpi.bad{border-left-color:var(--red);} .kpi.bad .val{color:var(--red);}
+  .kpi .lab{font-size:9px;color:var(--ink-soft);text-transform:uppercase;letter-spacing:.035em;font-weight:700;}
+  .kpi .val{font-family:var(--mono);font-size:18px;font-weight:700;color:var(--navy);margin-top:4px;}
+  .kpi .sub{font-size:10px;color:var(--ink-soft);margin-top:3px;}
+  .card{background:#fff;border:1px solid var(--line);border-radius:8px;padding:12px 14px;margin-bottom:12px;}
+  .card h3{margin:0 0 4px;font-size:13px;color:var(--navy);}
+  .card .nota{font-size:11px;color:var(--ink-soft);margin:0 0 8px;}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
+  @media(max-width:1000px){.grid2{grid-template-columns:1fr;}}
+  .chartbox{position:relative;height:300px;}
+  .tabla-wrap{overflow:auto;max-height:70vh;border:1px solid var(--line);border-radius:6px;}
+  table.t{border-collapse:separate;border-spacing:0;font-size:11.5px;width:max-content;min-width:100%;}
+  table.t th,table.t td{padding:4px 8px;border-bottom:1px solid var(--line);white-space:nowrap;}
+  table.t thead th{position:sticky;top:0;background:var(--navy);color:#fff;font-weight:700;z-index:2;text-align:right;}
+  table.t thead tr:nth-child(2) th{top:24px;background:var(--steel);font-weight:600;font-size:10.5px;}
+  table.t th:first-child,table.t td:first-child{position:sticky;left:0;background:#fff;text-align:left;z-index:1;min-width:260px;}
+  table.t thead th:first-child{background:var(--navy);z-index:3;}
+  table.t td.n{text-align:right;font-family:var(--mono);}
+  table.t td.neg{color:var(--red);}
+  table.t tr.sec td{background:#e8eef5;font-weight:700;color:var(--navy);}
+  table.t tr.sub td{background:#fbf6e9;font-weight:700;}
+  table.t tr.tot td{background:var(--navy);color:#fff;font-weight:800;}
+  table.t tr.tot td.neg{color:#ffb4ab;}
+  table.t tr.sal td{background:#e6f2ea;font-weight:700;}
+  table.t tr.sec td:first-child{background:#e8eef5;} table.t tr.sub td:first-child{background:#fbf6e9;}
+  table.t tr.tot td:first-child{background:var(--navy);} table.t tr.sal td:first-child{background:#e6f2ea;}
+  table.t td.ind{padding-left:22px;}
+  table.t td.sep{border-left:2px solid var(--mist);}
+  .chip{display:inline-block;border-radius:10px;padding:1px 8px;font-size:10.5px;font-weight:700;}
+  .chip.ok{background:#e1f2e9;color:var(--green);} .chip.warn{background:#fbefdc;color:var(--amber);} .chip.bad{background:#f8e1de;color:var(--red);} .chip.neu{background:#eef1f4;color:var(--slate);}
+  .aviso{background:#fff8e6;border:1px solid #f0d9a6;border-radius:8px;padding:9px 12px;font-size:12px;margin-bottom:12px;}
+  .aviso.err{background:#fdecea;border-color:#f3c1bb;}
+  .cargar{max-width:760px;margin:30px auto;}
+  .muted{color:var(--ink-soft);}
+  .checks{display:flex;gap:10px;align-items:center;font-size:11.5px;margin:0 0 8px;flex-wrap:wrap;}
+  .checks label{display:flex;gap:4px;align-items:center;font-weight:600;color:var(--ink);}
+</style>
+</head>
+<body>
+<header>
+  <div class="eyebrow"><span id="dot" class="dot loading"></span>Imporinox · Flujo de caja completo</div>
+  <h1>Flujo de Caja — Real vs Forecast vs Presupuesto</h1>
+  <div id="statusMsg">Cargando…</div>
+</header>
+
+<div class="filtros" id="filtros" style="display:none">
+  <label>Desde<select id="fDesde"></select></label>
+  <label>Hasta<select id="fHasta"></select></label>
+  <label>Comparar real contra<select id="fModo"></select></label>
+  <label>Nivel<select id="fNivel"><option value="rubro">Rubro</option><option value="grupo">Grupo (entradas/salidas por sección)</option></select></label>
+  <label>Materialidad desvíos (M COP)<input id="fMat" type="number" value="100" min="0" step="50" style="width:110px"></label>
+  <div style="flex:1"></div>
+  <button class="btn sec" id="btnRecargar" title="Volver a leer el Sheet">↻ Actualizar datos</button>
+  <button class="btn" id="btnExcel">⬇ Descargar Excel</button>
+</div>
+<nav id="nav" style="display:none">
+  <button data-v="resumen" class="active">Resumen</button>
+  <button data-v="tabla">Tabla FC</button>
+  <button data-v="cascada">Cascada</button>
+  <button data-v="asert">Asertividad</button>
+  <button data-v="desvios">Desvíos</button>
+  <button data-v="caja">Caja proyectada</button>
+  <button data-v="datos">Datos y cuadre</button>
+</nav>
+<main>
+  <div id="cargar" class="cargar" style="display:none"></div>
+  <section class="vista activa" id="v-resumen"></section>
+  <section class="vista" id="v-tabla"></section>
+  <section class="vista" id="v-cascada"></section>
+  <section class="vista" id="v-asert"></section>
+  <section class="vista" id="v-desvios"></section>
+  <section class="vista" id="v-caja"></section>
+  <section class="vista" id="v-datos"></section>
+</main>
+
+<script>
+/* ======================================================================
+   CONFIGURACIÓN — Sheet BD_FC_ABASTECIMIENTO (publicado en la web)
+   Para cada hoja: abrirla en el Sheet, copiar el número que aparece en la
+   URL después de "#gid=" y pegarlo aquí.
+   ====================================================================== */
+const CONFIG = {
+  PUB_KEY: '2PACX-1vRCheKxYPEjZIHuzhFRMUMwrTqfr520EL7x47CNC5VgVtzqraMyHILPctfwRCbJcShV97etvscM9MX0',
+  GID_DATOS: '976676293',    // hoja FCC_DATOS
+  GID_SALDOS: '1454376095',   // hoja FCC_SALDOS
+  GID_RUBROS: '386047465'    // hoja FCC_RUBROS
+};
+const CORS_PROXY = 'https://api.allorigins.win/raw?url=';
+/*__DEMO__*/
+
+// ============================== UTILIDADES ==============================
+const $ = id => document.getElementById(id);
+const MESES = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
+const mesTxt = m => MESES[+m.slice(5,7)-1] + '-' + m.slice(2,4);
+function mesAdd(m, k){ let a=+m.slice(0,4), n=+m.slice(5,7)+k; while(n<1){n+=12;a--;} while(n>12){n-=12;a++;} return a+'-'+String(n).padStart(2,'0'); }
+function parseNum(v){
+  if (v==null || v==='') return 0;
+  if (typeof v==='number') return v;
+  let s=String(v).trim().replace(/\$|\s/g,''); if(!s||s==='-') return 0;
+  let neg=false; if(/^\(.*\)$/.test(s)){neg=true;s=s.slice(1,-1);}
+  if (/^-?\d{1,3}(\.\d{3})+(,\d+)?$/.test(s)) s=s.replace(/\./g,'').replace(',','.');       // 1.234.567,89
+  else if (/^-?\d{1,3}(,\d{3})+(\.\d+)?$/.test(s)) s=s.replace(/,/g,'');                 // 1,234,567.89
+  else if (/^-?\d+,\d+$/.test(s)) s=s.replace(',','.');                                    // 1234,5
+  const n=parseFloat(s); return isFinite(n)?(neg?-n:n):0;
+}
+const M = v => v/1e6;
+function fmt(v, dec=0){ if(v===''||v==null||!isFinite(v)) return '—'; let x=v/1e6; if(Math.abs(x)<0.5*Math.pow(10,-dec)) x=0; return x.toLocaleString('es-CO',{minimumFractionDigits:dec,maximumFractionDigits:dec}); }
+function fmtPct(v){ if(v==null||!isFinite(v)) return '—'; return (v*100).toLocaleString('es-CO',{maximumFractionDigits:1})+'%'; }
+const esc = s => String(s).replace(/[&<>"]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+function td(v, cls=''){ const neg = typeof v==='number' && v <= -5e5; return `<td class="n ${cls} ${neg?'neg':''}">${typeof v==='number'?fmt(v):v}</td>`; }
+function chipAsert(a){ if(a==null) return '<span class="chip neu">—</span>'; const c=a>=0.9?'ok':a>=0.75?'warn':'bad'; return `<span class="chip ${c}">${fmtPct(a)}</span>`; }
+
+// ============================== CARGA DE DATOS ==============================
+const csvUrl = gid => `https://docs.google.com/spreadsheets/d/e/${CONFIG.PUB_KEY}/pub?gid=${gid}&single=true&output=csv`;
+async function fetchCsv(gid){
+  const url = csvUrl(gid) + '&t=' + Date.now();
+  try { const r = await fetch(url); if(!r.ok) throw 0; return await r.text(); }
+  catch(e){ const r2 = await fetch(CORS_PROXY + encodeURIComponent(url)); if(!r2.ok) throw new Error('No se pudo leer gid '+gid); return await r2.text(); }
+}
+const parseCsv = txt => Papa.parse(txt, {skipEmptyLines:true}).data;
+
+let DB = null, charts = {};
+async function cargar(){
+  $('dot').className='dot loading'; $('statusMsg').textContent='Cargando datos…';
+  try{
+    let raw;
+    if (window.FCC_DEMO) raw = window.FCC_DEMO;
+    else if (CONFIG.GID_DATOS && CONFIG.GID_SALDOS && CONFIG.GID_RUBROS){
+      const [d,s,r] = await Promise.all([fetchCsv(CONFIG.GID_DATOS), fetchCsv(CONFIG.GID_SALDOS), fetchCsv(CONFIG.GID_RUBROS)]);
+      raw = {datos:parseCsv(d), saldos:parseCsv(s), rubros:parseCsv(r)};
+    } else if (window.__CARGADOS__) raw = window.__CARGADOS__;
+    else { pantallaCargar(); return; }
+    DB = construirDB(raw);
+    $('cargar').style.display='none'; $('filtros').style.display='flex'; $('nav').style.display='flex';
+    prepararFiltros();
+    $('dot').className='dot';
+    $('statusMsg').textContent = `${DB.mesesReal.length} meses de real (${mesTxt(DB.mesesReal[0])} a ${mesTxt(DB.mesesReal[DB.mesesReal.length-1])}) · ${DB.versiones.filter(v=>v.tipo==='FCST').length} versiones de forecast · ${DB.versiones.filter(v=>v.tipo==='PPTO').length} presupuestos · Cifras en millones de COP · entradas +, salidas − · actualizado ${new Date().toLocaleString('es-CO')}` + (window.FCC_DEMO?' · DATOS DE DEMOSTRACIÓN':'');
+    render();
+  } catch(e){
+    console.error(e); $('dot').className='dot error'; $('statusMsg').textContent='Error al cargar: '+e.message;
+    pantallaCargar(e.message);
+  }
+}
+function pantallaCargar(err){
+  $('cargar').style.display='block';
+  $('cargar').innerHTML = `<div class="card">${err?`<div class="aviso err">${esc(err)}</div>`:''}
+    <h3>Conectar los datos</h3>
+    <p class="nota">Opción A (permanente): en el código, sección CONFIG, pon el número <b>gid</b> de las hojas FCC_DATOS, FCC_SALDOS y FCC_RUBROS del Sheet publicado.</p>
+    <p class="nota">Opción B (rápida): en el Sheet, abre cada hoja → Archivo → Descargar → CSV, y sube aquí los 3 archivos.</p>
+    <input type="file" id="archivos" multiple accept=".csv,text/csv"></div>`;
+  $('statusMsg').textContent='Faltan los datos';
+  $('archivos').onchange = async ev => {
+    const out = {};
+    for (const f of ev.target.files){
+      const rows = parseCsv(await f.text()); const h = (rows[0]||[]).join('|');
+      if (/Versi/.test(h) && /Rubro/.test(h)) out.datos = rows;
+      else if (/Saldo inicial/.test(h)) out.saldos = rows;
+      else if (/Orden/.test(h) && /Rubro/.test(h)) out.rubros = rows;
+    }
+    if (out.datos && out.saldos && out.rubros){ window.__CARGADOS__ = out; cargar(); }
+    else alert('Faltan archivos: necesito FCC_DATOS, FCC_SALDOS y FCC_RUBROS.');
+  };
+}
+
+function construirDB(raw){
+  const db = {cat:[], catIdx:{}, real:{}, realOrigen:{}, ver:{}, verSaldo:{}, versiones:[], saldos:[], filas:[]};
+  // catálogo
+  (raw.rubros||[]).slice(1).forEach(r=>{
+    if(!r[3]) return;
+    const c = {orden:parseNum(r[0]), seccion:r[1], flujo:r[2], rubro:String(r[3]).trim(), esCaja:String(r[4]).toUpperCase()!=='NO'};
+    if (!db.catIdx[c.rubro]){ db.cat.push(c); db.catIdx[c.rubro]=c; }
+  });
+  const verMeta = {};
+  (raw.datos||[]).slice(1).forEach(r=>{
+    const tipo=String(r[0]).trim(), version=String(r[1]).trim(), mes=String(r[3]).trim().slice(0,7), seccion=String(r[4]).trim(), rubro=String(r[6]).trim(), valor=parseNum(r[7]), origen=String(r[8]||'');
+    if(!tipo||!/^\d{4}-\d{2}$/.test(mes)) return;
+    db.filas.push({tipo,version,fecha:r[2],mes,seccion,flujo:r[5],rubro,valor,origen});
+    if (seccion==='Saldo'){ ((db.verSaldo[version]=db.verSaldo[version]||{})[mes]=db.verSaldo[version][mes]||{})[rubro]=valor; }
+    else if (tipo==='REAL'){
+      (db.real[mes]=db.real[mes]||{})[rubro]=(db.real[mes][rubro]||0)+valor;
+      (db.realOrigen[mes]=db.realOrigen[mes]||{})[origen]=true;
+      if(!db.catIdx[rubro]){ const c={orden:999,seccion:seccion||'Operación',flujo:r[5]||'Salida',rubro,esCaja:true}; db.cat.push(c); db.catIdx[rubro]=c; }
+    } else {
+      ((db.ver[version]=db.ver[version]||{})[mes]=db.ver[version][mes]||{})[rubro]=(db.ver[version][mes][rubro]||0)+valor;
+      if(!db.catIdx[rubro]){ const c={orden:999,seccion:seccion||'Operación',flujo:r[5]||'Salida',rubro,esCaja:true}; db.cat.push(c); db.catIdx[rubro]=c; }
+    }
+    if (tipo!=='REAL'){ const vm = verMeta[version] = verMeta[version] || {tipo,version,meses:{},fecha:'',origen}; vm.meses[mes]=true; if(String(r[2])>vm.fecha) vm.fecha=String(r[2]); }
+  });
+  db.cat.sort((a,b)=>a.orden-b.orden);
+  db.versiones = Object.values(verMeta).map(v=>({...v, meses:Object.keys(v.meses).sort()})).sort((a,b)=>a.version.localeCompare(b.version));
+  db.mesesReal = Object.keys(db.real).sort();
+  db.todosMeses = [...new Set([...db.mesesReal, ...db.versiones.flatMap(v=>v.meses)])].sort();
+  (raw.saldos||[]).slice(1).forEach(r=>{
+    const mes=String(r[0]).trim().slice(0,7); if(!/^\d{4}-\d{2}$/.test(mes)) return;
+    const bancos = r[4]===''||r[4]==null ? null : parseNum(r[4]);
+    db.saldos.push({mes, ini:parseNum(r[1]), flujo:parseNum(r[2]), finCalc:parseNum(r[3]), bancos, dif:r[5]===''?null:parseNum(r[5]), estado:r[6]||'', origen:r[7]||''});
+  });
+  db.saldoReal = {}; db.saldos.forEach(s=>db.saldoReal[s.mes]=s);
+  return db;
+}
+
+// ============================== LÓGICA DE COMPARACIÓN ==============================
+function prepararFiltros(){
+  const opts = DB.todosMeses.map(m=>`<option value="${m}">${mesTxt(m)}</option>`).join('');
+  $('fDesde').innerHTML = opts; $('fHasta').innerHTML = opts;
+  const mr = DB.mesesReal;
+  $('fDesde').value = mr[0] || DB.todosMeses[0];
+  $('fHasta').value = mr[mr.length-1] || DB.todosMeses[DB.todosMeses.length-1];
+  const fc = DB.versiones.filter(v=>v.tipo==='FCST'), pp = DB.versiones.filter(v=>v.tipo==='PPTO');
+  $('fModo').innerHTML =
+    `<optgroup label="Forecast móvil"><option value="lag0">Forecast hecho al inicio de cada mes</option>
+      <option value="lag1">Forecast hecho 1 mes antes</option><option value="lag2">Forecast hecho 2 meses antes</option><option value="lag3">Forecast hecho 3 meses antes</option></optgroup>` +
+    `<optgroup label="Presupuesto anual"><option value="ppto">Presupuesto del año (PPTO)</option></optgroup>` +
+    (fc.length||pp.length ? `<optgroup label="Una versión fija">${[...pp,...fc].map(v=>`<option value="ver:${esc(v.version)}">${esc(v.version)}</option>`).join('')}</optgroup>` : '');
+  ['fDesde','fHasta','fModo','fNivel','fMat'].forEach(id=>$(id).onchange = render);
+}
+const F = () => ({desde:$('fDesde').value, hasta:$('fHasta').value, modo:$('fModo').value, nivel:$('fNivel').value, mat:parseNum($('fMat').value)*1e6});
+function versionPlan(mes, modo){
+  if (modo.startsWith('lag')){ const k=+modo.slice(3); const v='FCST-'+mesAdd(mes,-k); return DB.ver[v] && DB.ver[v][mes] ? v : null; }
+  if (modo==='ppto'){ const v='PPTO-'+mes.slice(0,4); return DB.ver[v] && DB.ver[v][mes] ? v : null; }
+  if (modo.startsWith('ver:')){ const v=modo.slice(4); return DB.ver[v] && DB.ver[v][mes] ? v : null; }
+  return null;
+}
+function nombreModo(modo){
+  return {lag0:'forecast del inicio de mes', lag1:'forecast de 1 mes antes', lag2:'forecast de 2 meses antes', lag3:'forecast de 3 meses antes', ppto:'presupuesto anual'}[modo] || modo.slice(4);
+}
+function grupoDe(c){ return (c.flujo==='Entrada'?'Entradas':'Salidas')+' de '+String(c.seccion).toLowerCase(); }
+function claveDe(rubro, nivel){ const c=DB.catIdx[rubro]; return nivel==='grupo' ? grupoDe(c) : rubro; }
+function agrupar(mapa, nivel){ const o={}; if(!mapa) return null; for (const r in mapa){ if(!DB.catIdx[r]) continue; const k=claveDe(r,nivel); o[k]=(o[k]||0)+mapa[r]; } return o; }
+function mesesRango(f){ return DB.todosMeses.filter(m=>m>=f.desde && m<=f.hasta); }
+/** Estructura de filas (claves ordenadas por sección) para un nivel */
+function estructura(nivel){
+  const secs = ['Operación','Financiación','Inversión'], out=[];
+  secs.forEach(s=>{
+    const ent=[], sal=[];
+    DB.cat.filter(c=>c.seccion===s).forEach(c=>{ const k=claveDe(c.rubro,nivel); const arr=c.flujo==='Entrada'?ent:sal; if(!arr.includes(k)) arr.push(k); });
+    if (nivel==='rubro' && s==='Operación' && !ent.includes(R_JUNTO)) ent.push(R_JUNTO);
+    out.push({seccion:s, ent, sal});
+  });
+  return out;
+}
+/** Ene–ago 2026 se migraron con "Recaudo total" (sin apertura contado/cartera). Si en un mes un lado trae el total
+ *  y el otro la apertura, se comparan los dos agregados en "Recaudo (contado + cartera)" para no inventar desvíos. */
+const R_TOTAL='Recaudo total (histórico sin apertura)', R_PARTES=['Recaudo de contado','Recaudo de cartera'], R_JUNTO='Recaudo (contado + cartera)';
+function unirRecaudo(o){ if(!o) return o; const x={...o}; let t=0, hay=false; [R_TOTAL,...R_PARTES].forEach(k=>{ if(k in x){ t+=x[k]; hay=true; delete x[k]; } }); if(hay) x[R_JUNTO]=t; return x; }
+/** Comparación por mes: {mes, version, real:{k}, plan:{k}|null} */
+function comparar(f){
+  return mesesRango(f).map(m=>{
+    const v = versionPlan(m, f.modo);
+    let real = agrupar(DB.real[m]||{}, f.nivel), plan = v ? agrupar(DB.ver[v][m], f.nivel) : null;
+    if (f.nivel==='rubro' && plan && DB.real[m] && ((R_TOTAL in real) !== (R_TOTAL in plan))){ real = unirRecaudo(real); plan = unirRecaudo(plan); }
+    return {mes:m, version:v, hayReal:!!DB.real[m], real, plan};
+  });
+}
+function asertividad(pares){ // pares: [{r,p}]
+  let sAbs=0, sR=0, sD=0;
+  pares.forEach(x=>{ sAbs+=Math.abs(x.r-x.p); sR+=Math.abs(x.r); sD+=x.r-x.p; });
+  if (!sR) return {a:null, sesgo:null, sAbs, sR};
+  return {a:Math.max(0,1-sAbs/sR), sesgo:sD/sR, sAbs, sR};
+}
+function paresDe(comp){ const out=[]; comp.forEach(c=>{ if(!c.hayReal||!c.plan) return; const ks=new Set([...Object.keys(c.real),...Object.keys(c.plan)]); ks.forEach(k=>out.push({mes:c.mes,k,r:c.real[k]||0,p:c.plan[k]||0})); }); return out; }
+const sumObj = o => o ? Object.values(o).reduce((a,b)=>a+b,0) : null;
+
+// ============================== RENDER ==============================
+let vistaActiva = 'resumen';
+document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>mostrar(b.dataset.v));
+function mostrar(v){
+  vistaActiva=v;
+  document.querySelectorAll('nav button').forEach(b=>b.classList.toggle('active', b.dataset.v===v));
+  document.querySelectorAll('.vista').forEach(s=>s.classList.toggle('activa', s.id==='v-'+v));
+  render();
+}
+function render(){
+  if(!DB) return;
+  const f = F();
+  if (f.desde > f.hasta){ $('fHasta').value=f.desde; f.hasta=f.desde; }
+  ({resumen:vResumen, tabla:vTabla, cascada:vCascada, asert:vAsert, desvios:vDesvios, caja:vCaja, datos:vDatos})[vistaActiva](f);
+}
+function chart(id, cfg){ if(charts[id]) charts[id].destroy(); const el=$(id); if(!el) return; charts[id]=new Chart(el, cfg); return charts[id]; }
+const fmtTick = v => (v/1e6).toLocaleString('es-CO',{maximumFractionDigits:0});
+const baseOpts = (extra={}) => ({responsive:true, maintainAspectRatio:false, animation:false, interaction:{mode:'index',intersect:false},
+  plugins:{legend:{position:'bottom',labels:{boxWidth:12,font:{size:11}}}, tooltip:{callbacks:{label:c=>`${c.dataset.label}: ${fmt(Array.isArray(c.raw)?c.raw[1]-c.raw[0]:c.raw)} M`}}},
+  scales:{y:{ticks:{callback:fmtTick,font:{size:10}},grid:{color:'#eef1f4'}},x:{ticks:{font:{size:10}},grid:{display:false}}}, ...extra});
+
+// ---------- RESUMEN ----------
+function vResumen(f){
+  const comp = comparar(f), pares = paresDe(comp), as = asertividad(pares);
+  const conPlan = comp.filter(c=>c.hayReal && c.plan);
+  const rTot = comp.filter(c=>c.hayReal).reduce((a,c)=>a+sumObj(c.real),0);
+  const rComp = conPlan.reduce((a,c)=>a+sumObj(c.real),0), pComp = conPlan.reduce((a,c)=>a+sumObj(c.plan),0);
+  const ultimo = DB.mesesReal.filter(m=>m<=f.hasta).slice(-1)[0], sr = ultimo && DB.saldoReal[ultimo];
+  const saldoUlt = sr ? (sr.bancos!=null?sr.bancos:sr.finCalc) : null;
+  const fcVers = DB.versiones.filter(v=>v.tipo==='FCST'), vig = fcVers[fcVers.length-1];
+  let minProj=null, mesMin=null, minObj=null, necFin=0;
+  if (vig){ vig.meses.forEach(m=>{ const s=(DB.verSaldo[vig.version]||{})[m]||{}; if(s['Saldo final']!=null && (minProj==null||s['Saldo final']<minProj)){minProj=s['Saldo final'];mesMin=m;} if(s['Nivel mínimo de caja']!=null) minObj=s['Nivel mínimo de caja']; necFin += ((DB.ver[vig.version][m]||{})['Giros recibidos (financiación)']||0); }); }
+  const dif = rComp-pComp;
+  $('v-resumen').innerHTML = `
+    ${conPlan.length? '' : `<div class="aviso">En el rango elegido no hay meses con real y ${esc(nombreModo(f.modo))} a la vez. Cambia el rango o el tipo de comparación (por ejemplo, "Forecast hecho al inicio de cada mes").</div>`}
+    <div class="kpis">
+      <div class="kpi"><div class="lab">Flujo neto real del rango</div><div class="val">${fmt(rTot)}</div><div class="sub">${comp.filter(c=>c.hayReal).length} meses con real</div></div>
+      <div class="kpi ${dif>=0?'ok':'bad'}"><div class="lab">Real − plan (meses comparables)</div><div class="val">${conPlan.length?fmt(dif):'—'}</div><div class="sub">Real ${fmt(rComp)} vs plan ${fmt(pComp)} · ${conPlan.length} meses</div></div>
+      <div class="kpi ${as.a==null?'':as.a>=0.9?'ok':as.a>=0.75?'warn':'bad'}"><div class="lab">Asertividad (${f.nivel})</div><div class="val">${fmtPct(as.a)}</div><div class="sub">1 − Σ|real−plan| / Σ|real|</div></div>
+      <div class="kpi ${as.sesgo==null?'':Math.abs(as.sesgo)<0.05?'ok':'warn'}"><div class="lab">Sesgo de caja</div><div class="val">${fmtPct(as.sesgo)}</div><div class="sub">+ el real dejó más caja que el plan</div></div>
+      <div class="kpi ${saldoUlt!=null&&minObj!=null&&saldoUlt<minObj?'bad':''}"><div class="lab">Saldo de caja real ${ultimo?mesTxt(ultimo):''}</div><div class="val">${fmt(saldoUlt)}</div><div class="sub">${sr?(sr.bancos!=null?'según bancos · '+esc(sr.estado):'calculado (falta saldo de bancos)'):'sin saldo'}</div></div>
+      <div class="kpi ${minProj!=null&&minObj!=null&&minProj<minObj*1.001?'warn':''}"><div class="lab">Saldo mínimo proyectado</div><div class="val">${fmt(minProj)}</div><div class="sub">${vig?esc(vig.version)+' · '+(mesMin?mesTxt(mesMin):'')+' · objetivo '+fmt(minObj):'sin forecast'}</div></div>
+      <div class="kpi ${necFin>0?'warn':'ok'}"><div class="lab">Financiación nueva proyectada</div><div class="val">${vig?fmt(necFin):'—'}</div><div class="sub">${vig?'giros a tomar en '+esc(vig.version):''}</div></div>
+    </div>
+    <div class="grid2">
+      <div class="card"><h3>Flujo neto mensual: real vs ${esc(nombreModo(f.modo))}</h3><p class="nota">Barras = real · línea = plan del mes</p><div class="chartbox"><canvas id="cResFlujo"></canvas></div></div>
+      <div class="card"><h3>Saldo de caja: real y proyectado</h3><p class="nota">Real (fin de mes, según bancos si está digitado) · proyección de ${vig?esc(vig.version):'—'} · nivel mínimo</p><div class="chartbox"><canvas id="cResSaldo"></canvas></div></div>
+    </div>
+    <div class="card"><h3>Asertividad mensual</h3><p class="nota">Por mes, al nivel elegido. Verde ≥ 90% · ámbar 75–90% · rojo &lt; 75%.</p><div class="chartbox" style="height:220px"><canvas id="cResAsert"></canvas></div></div>`;
+  const ms = comp.map(c=>c.mes);
+  chart('cResFlujo',{type:'bar',data:{labels:ms.map(mesTxt),datasets:[
+    {type:'bar',label:'Real',data:comp.map(c=>c.hayReal?sumObj(c.real):null),backgroundColor:'#0E3552',order:2},
+    {type:'line',label:'Plan',data:comp.map(c=>c.plan?sumObj(c.plan):null),borderColor:'#C9862E',backgroundColor:'#C9862E',pointRadius:4,spanGaps:false,order:1}]},options:baseOpts()});
+  const mesesS = [...new Set([...DB.mesesReal, ...(vig?vig.meses:[])])].sort();
+  chart('cResSaldo',{type:'line',data:{labels:mesesS.map(mesTxt),datasets:[
+    {label:'Saldo real',data:mesesS.map(m=>{const s=DB.saldoReal[m]; return s?(s.bancos!=null?s.bancos:s.finCalc):null;}),borderColor:'#0E3552',backgroundColor:'#0E3552',pointRadius:3},
+    {label:'Saldo proyectado'+(vig?' ('+vig.version+')':''),data:mesesS.map(m=>vig&&(DB.verSaldo[vig.version]||{})[m]?(DB.verSaldo[vig.version][m]['Saldo final']??null):null),borderColor:'#3D6A88',borderDash:[6,4],pointRadius:3},
+    {label:'Nivel mínimo',data:mesesS.map(()=>minObj),borderColor:'#B23A2E',borderWidth:1,pointRadius:0}]},options:baseOpts()});
+  chart('cResAsert',{type:'bar',data:{labels:ms.map(mesTxt),datasets:[{label:'Asertividad',data:comp.map(c=>{ const a=asertividad(paresDe([c])).a; return a==null?null:a*1e8; }),
+    backgroundColor:comp.map(c=>{const a=asertividad(paresDe([c])).a; return a==null?'#ccc':a>=0.9?'#2E7D5B':a>=0.75?'#C9862E':'#B23A2E';})}]},
+    options:baseOpts({plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>'Asertividad: '+fmtPct(c.raw/1e8)}}},scales:{y:{min:0,max:1e8,ticks:{callback:v=>(v/1e6).toFixed(0)+'%'}}}})});
+}
+
+// ---------- TABLA FC ----------
+let colsTabla = {r:true,p:true,d:true};
+function filasTabla(f, comp){
+  const est = estructura(f.nivel), filas=[];
+  const val = (src,k) => src ? (src[k]||0) : null;
+  const sumK = (src, ks) => src ? ks.reduce((a,k)=>a+(src[k]||0),0) : null;
+  const totSec=[];
+  est.forEach(s=>{
+    const ks=[...s.ent,...s.sal];
+    if (!ks.some(k=>comp.some(c=>(c.real&&c.real[k])||(c.plan&&c.plan[k])))) return;
+    filas.push({tipo:'sec', label:'ACTIVIDADES DE '+s.seccion.toUpperCase()});
+    [['Entradas',s.ent],['Salidas',s.sal]].forEach(([lab,lista])=>{
+      const vis = lista.filter(k=>comp.some(c=>(c.real&&c.real[k])||(c.plan&&c.plan[k])));
+      if(!vis.length) return;
+      if (f.nivel==='rubro') vis.forEach(k=>filas.push({tipo:'rub', label:k, get:(c,w)=> w==='r'?(c.hayReal?val(c.real,k):null):val(c.plan,k)}));
+      filas.push({tipo:'sub', label:'Total '+lab.toLowerCase()+' de '+s.seccion.toLowerCase(), get:(c,w)=> w==='r'?(c.hayReal?sumK(c.real,vis):null):sumK(c.plan,vis)});
+    });
+    filas.push({tipo:'tot', label:'FLUJO DE '+s.seccion.toUpperCase(), get:(c,w)=> w==='r'?(c.hayReal?sumK(c.real,ks):null):sumK(c.plan,ks)});
+    totSec.push(ks);
+  });
+  const all = totSec.flat();
+  filas.push({tipo:'tot', label:'FLUJO NETO', get:(c,w)=> w==='r'?(c.hayReal?sumK(c.real,all):null):sumK(c.plan,all)});
+  filas.push({tipo:'sal', label:'Saldo final de caja', get:(c,w)=>{ if(w==='r'){const s=DB.saldoReal[c.mes]; return s?(s.bancos!=null?s.bancos:s.finCalc):null;} return c.version&&(DB.verSaldo[c.version]||{})[c.mes]?(DB.verSaldo[c.version][c.mes]['Saldo final']??null):null; }});
+  return filas;
+}
+function vTabla(f){
+  const comp = comparar(f), filas = filasTabla(f, comp);
+  const conPlan = comp.filter(c=>c.hayReal&&c.plan);
+  const cols = ['r','p','d'].filter(x=>colsTabla[x]);
+  const nomCol = {r:'Real',p:'Plan',d:'Real−Plan'};
+  let h1 = `<tr><th rowspan="2">Concepto</th>${comp.map(c=>`<th colspan="${cols.length}" class="sep" style="text-align:center">${mesTxt(c.mes)}${c.version?'<br><span style="font-weight:400;font-size:9.5px;opacity:.8">'+esc(c.version)+'</span>':''}</th>`).join('')}<th colspan="5" class="sep" style="text-align:center">TOTAL meses comparables (${conPlan.length})</th></tr>`;
+  let h2 = `<tr>${comp.map(()=>cols.map((x,i)=>`<th class="${i===0?'sep':''}">${nomCol[x]}</th>`).join('')).join('')}<th class="sep">Real</th><th>Plan</th><th>Real−Plan</th><th>Var %</th><th>Asertividad</th></tr>`;
+  const body = filas.map(fl=>{
+    if (fl.tipo==='sec') return `<tr class="sec"><td>${esc(fl.label)}</td>${comp.map(()=>cols.map(()=>'<td></td>').join('')).join('')}<td colspan="5"></td></tr>`;
+    let tr=0,tp=0,sAbs=0,sR=0;
+    const celdas = comp.map(c=>{
+      const r=fl.get(c,'r'), p=c.plan||fl.tipo==='sal'?fl.get(c,'p'):null;
+      if (c.hayReal && c.plan && r!=null && p!=null && fl.tipo!=='sal'){ tr+=r; tp+=p; sAbs+=Math.abs(r-p); sR+=Math.abs(r); }
+      return cols.map((x,i)=>{ const v = x==='r'?r : x==='p'?p : (r!=null&&p!=null?r-p:null); return td(v==null?'—':v, i===0?'sep':''); }).join('');
+    }).join('');
+    const tot = fl.tipo==='sal' ? '<td class="sep" colspan="5"></td>' :
+      td(conPlan.length?tr:'—','sep')+td(conPlan.length?tp:'—')+td(conPlan.length?tr-tp:'—')+`<td class="n">${conPlan.length&&tp?fmtPct((tr-tp)/Math.abs(tp)):'—'}</td><td class="n">${fl.tipo==='rub'||fl.tipo==='sub'?chipAsert(sR?Math.max(0,1-sAbs/sR):null):''}</td>`;
+    return `<tr class="${fl.tipo==='rub'?'':fl.tipo}"><td class="${fl.tipo==='rub'?'ind':''}">${esc(fl.label)}</td>${celdas}${tot}</tr>`;
+  }).join('');
+  $('v-tabla').innerHTML = `<div class="card"><h3>Flujo de caja: real vs ${esc(nombreModo(f.modo))}</h3>
+    <p class="nota">Millones de COP. Entradas +, salidas −. "Real−Plan" positivo = más caja que lo planeado. El saldo final real es el de bancos cuando está digitado en FCC_SALDOS.</p>
+    <div class="checks">Columnas por mes: ${['r','p','d'].map(x=>`<label><input type="checkbox" data-c="${x}" ${colsTabla[x]?'checked':''}>${nomCol[x]}</label>`).join('')}</div>
+    <div class="tabla-wrap"><table class="t" id="tablaFC"><thead>${h1}${h2}</thead><tbody>${body}</tbody></table></div></div>`;
+  document.querySelectorAll('#v-tabla .checks input').forEach(i=>i.onchange=()=>{ colsTabla[i.dataset.c]=i.checked; if(!Object.values(colsTabla).some(Boolean)) colsTabla.r=true; vTabla(F()); });
+}
+
+// ---------- CASCADA ----------
+function datosCascada(f){
+  const comp = comparar(f), pares = paresDe(comp);
+  const meses = [...new Set(pares.map(p=>p.mes))];
+  const porK = {}; pares.forEach(p=>{ porK[p.k]=(porK[p.k]||0)+(p.r-p.p); });
+  const P = pares.reduce((a,p)=>a+p.p,0), R = pares.reduce((a,p)=>a+p.r,0);
+  const items = Object.entries(porK).filter(([,v])=>Math.abs(v)>0.5).sort((a,b)=>Math.abs(b[1])-Math.abs(a[1]));
+  const top = items.slice(0,12), resto = items.slice(12).reduce((a,[,v])=>a+v,0);
+  if (Math.abs(resto)>0.5) top.push(['Otros ('+(items.length-12)+')', resto]);
+  return {P, R, top, meses, comp};
+}
+function vCascada(f){
+  const d = datosCascada(f);
+  const labels = ['Plan: flujo neto', ...d.top.map(x=>x[0]), 'Real: flujo neto'];
+  let acc = d.P; const data=[[0,d.P]], colors=['#3D6A88'];
+  d.top.forEach(([,v])=>{ data.push([acc, acc+v]); colors.push(v>=0?'#2E7D5B':'#B23A2E'); acc+=v; });
+  data.push([0,d.R]); colors.push('#0E3552');
+  $('v-cascada').innerHTML = d.meses.length ? `<div class="card"><h3>Cascada: del plan al real (${d.meses.length} meses: ${d.meses.map(mesTxt).join(', ')})</h3>
+      <p class="nota">Cada barra es la diferencia real − plan del ${f.nivel==='rubro'?'rubro':'grupo'}. Verde = más caja que lo planeado (entró más o salió menos); rojo = menos caja.</p>
+      <div class="chartbox" style="height:420px"><canvas id="cCasc"></canvas></div></div>
+    <div class="card"><h3>Detalle de la cascada</h3><div class="tabla-wrap"><table class="t"><thead><tr><th>Concepto</th><th>Real − Plan (M COP)</th><th>% del desvío total</th></tr></thead><tbody>
+      <tr class="sal"><td>Plan: flujo neto</td>${td(d.P)}<td></td></tr>
+      ${d.top.map(([k,v])=>`<tr><td>${esc(k)}</td>${td(v)}<td class="n">${fmtPct(Math.abs(v)/d.top.reduce((a,x)=>a+Math.abs(x[1]),0))}</td></tr>`).join('')}
+      <tr class="tot"><td>Real: flujo neto</td>${td(d.R)}<td></td></tr></tbody></table></div></div>`
+    : `<div class="aviso">No hay meses con real y ${esc(nombreModo(f.modo))} en el rango elegido.</div>`;
+  if (!d.meses.length) return;
+  chart('cCasc',{type:'bar',data:{labels,datasets:[{label:'Cascada',data,backgroundColor:colors,borderSkipped:false}]},
+    options:baseOpts({plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>fmt(c.raw[1]-c.raw[0])+' M'}}},scales:{y:{ticks:{callback:fmtTick}},x:{ticks:{autoSkip:false,maxRotation:50,minRotation:30,font:{size:10}}}}})});
+}
+
+// ---------- ASERTIVIDAD ----------
+function vAsert(f){
+  const comp = comparar(f), pares = paresDe(comp), tot = asertividad(pares);
+  const porK = {}; pares.forEach(p=>(porK[p.k]=porK[p.k]||[]).push(p));
+  const filas = Object.entries(porK).map(([k,ps])=>({k, n:new Set(ps.map(p=>p.mes)).size, ...asertividad(ps), r:ps.reduce((a,p)=>a+p.r,0), p:ps.reduce((a,p)=>a+p.p,0)}))
+    .sort((a,b)=>b.sAbs-a.sAbs);
+  const horizontes = [0,1,2,3,4,5,6].map(k=>{ const c=comparar({...f,modo:'lag'+k}); const ps=paresDe(c); return {k, n:new Set(ps.map(p=>p.mes)).size, ...asertividad(ps)}; });
+  $('v-asert').innerHTML = `
+    <div class="kpis"><div class="kpi ${tot.a==null?'':tot.a>=0.9?'ok':tot.a>=0.75?'warn':'bad'}"><div class="lab">Asertividad total</div><div class="val">${fmtPct(tot.a)}</div><div class="sub">${esc(nombreModo(f.modo))} · nivel ${f.nivel}</div></div>
+      <div class="kpi"><div class="lab">Desvío absoluto acumulado</div><div class="val">${fmt(tot.sAbs)}</div><div class="sub">Σ |real − plan|</div></div>
+      <div class="kpi"><div class="lab">Sesgo</div><div class="val">${fmtPct(tot.sesgo)}</div><div class="sub">+ = el real dejó más caja</div></div></div>
+    <div class="grid2">
+      <div class="card"><h3>Asertividad por horizonte</h3><p class="nota">¿Qué tan bien acierta el forecast según cuántos meses antes se hizo? (rango y nivel elegidos)</p>
+        <div class="tabla-wrap"><table class="t"><thead><tr><th>Forecast hecho…</th><th>Meses medidos</th><th>Asertividad</th><th>Sesgo</th></tr></thead><tbody>
+        ${horizontes.map(h=>`<tr><td>${h.k===0?'al inicio del mes':h.k+' mes(es) antes'}</td><td class="n">${h.n}</td><td class="n">${chipAsert(h.a)}</td><td class="n">${fmtPct(h.sesgo)}</td></tr>`).join('')}
+        </tbody></table></div></div>
+      <div class="card"><h3>Asertividad mensual por horizonte</h3><div class="chartbox"><canvas id="cAsertH"></canvas></div></div>
+    </div>
+    <div class="card"><h3>Asertividad por ${f.nivel==='rubro'?'rubro':'grupo'} (${esc(nombreModo(f.modo))})</h3><p class="nota">Ordenado por desvío absoluto: arriba están los que más afectan la asertividad.</p>
+      <div class="tabla-wrap"><table class="t" id="tablaAsert"><thead><tr><th>${f.nivel==='rubro'?'Rubro':'Grupo'}</th><th>Meses</th><th>Real</th><th>Plan</th><th>Real−Plan</th><th>Σ|Real−Plan|</th><th>Asertividad</th><th>Sesgo</th></tr></thead><tbody>
+      ${filas.map(x=>`<tr><td>${esc(x.k)}</td><td class="n">${x.n}</td>${td(x.r)}${td(x.p)}${td(x.r-x.p)}${td(x.sAbs)}<td class="n">${chipAsert(x.a)}</td><td class="n">${fmtPct(x.sesgo)}</td></tr>`).join('')}
+      </tbody></table></div></div>`;
+  const ms = mesesRango(f);
+  const colores=['#0E3552','#3D6A88','#7488A0','#C9862E','#A9852E','#2E7D5B','#B23A2E'];
+  chart('cAsertH',{type:'line',data:{labels:ms.map(mesTxt),datasets:[0,1,2,3].map(k=>({label:k===0?'Inicio de mes':k+' mes(es) antes',borderColor:colores[k],backgroundColor:colores[k],spanGaps:false,pointRadius:3,
+    data:ms.map(m=>{ const c=comparar({...f,desde:m,hasta:m,modo:'lag'+k}); const a=asertividad(paresDe(c)).a; return a==null?null:a*1e8; })}))},
+    options:baseOpts({plugins:{legend:{position:'bottom'},tooltip:{callbacks:{label:c=>c.dataset.label+': '+fmtPct(c.raw/1e8)}}},scales:{y:{min:0,max:1e8,ticks:{callback:v=>(v/1e6).toFixed(0)+'%'}}}})});
+}
+
+// ---------- DESVÍOS ----------
+function datosDesvios(f){
+  const comp = comparar({...f, hasta: DB.todosMeses[DB.todosMeses.length-1]}); // se necesitan meses posteriores para clasificar
+  const enRango = new Set(mesesRango(f));
+  const porMes = {}; comp.forEach(c=>{ if(c.hayReal&&c.plan) porMes[c.mes]=c; });
+  const out=[];
+  Object.values(porMes).forEach(c=>{
+    if(!enRango.has(c.mes)) return;
+    const ks=new Set([...Object.keys(c.real),...Object.keys(c.plan)]);
+    ks.forEach(k=>{
+      const d=(c.real[k]||0)-(c.plan[k]||0); if(Math.abs(d)<f.mat) return;
+      const sig=[mesAdd(c.mes,1),mesAdd(c.mes,2)].map(m=>porMes[m]);
+      let clase, acum=null;
+      if (sig.every(Boolean)){ acum = d + sig.reduce((a,s)=>a+((s.real[k]||0)-(s.plan[k]||0)),0); clase = Math.abs(acum) <= 0.3*Math.abs(d) ? 'Desfase (se compensó)' : 'Permanente'; }
+      else clase='Pendiente (faltan 2 meses para saber)';
+      out.push({mes:c.mes,k,r:c.real[k]||0,p:c.plan[k]||0,d,acum,clase});
+    });
+  });
+  return out.sort((a,b)=>Math.abs(b.d)-Math.abs(a.d));
+}
+function vDesvios(f){
+  const ds = datosDesvios(f);
+  const res = {}; ds.forEach(x=>{ const o=res[x.k]=res[x.k]||{perm:0,desf:0,pend:0}; if(x.clase.startsWith('Perm')) o.perm+=x.d; else if(x.clase.startsWith('Desf')) o.desf+=x.d; else o.pend+=x.d; });
+  const chipC = c => c.startsWith('Perm')?'bad':c.startsWith('Desf')?'warn':'neu';
+  $('v-desvios').innerHTML = `
+    <div class="card"><h3>Desvíos materiales (≥ ${fmt(f.mat)} M) — real vs ${esc(nombreModo(f.modo))}</h3>
+      <p class="nota"><b>Desfase</b>: el desvío del mes se compensó en los 2 meses siguientes (quedó ≤ 30% en el acumulado de 3 meses) → fue un tema de fecha, no de monto. <b>Permanente</b>: no se compensó → hay un cambio real de caja que optimizar o un supuesto que corregir. <b>Pendiente</b>: aún no hay 2 meses posteriores con real y plan.</p>
+      <div class="tabla-wrap"><table class="t" id="tablaDesv"><thead><tr><th>${f.nivel==='rubro'?'Rubro':'Grupo'}</th><th>Mes</th><th>Real</th><th>Plan</th><th>Real−Plan</th><th>Acumulado 3 meses</th><th>Clasificación</th></tr></thead><tbody>
+      ${ds.length?ds.map(x=>`<tr><td>${esc(x.k)}</td><td>${mesTxt(x.mes)}</td>${td(x.r)}${td(x.p)}${td(x.d)}${td(x.acum==null?'—':x.acum)}<td><span class="chip ${chipC(x.clase)}">${esc(x.clase)}</span></td></tr>`).join(''):'<tr><td colspan="7" class="muted">Sin desvíos sobre la materialidad en el rango.</td></tr>'}
+      </tbody></table></div></div>
+    <div class="card"><h3>Resumen por ${f.nivel==='rubro'?'rubro':'grupo'}</h3><div class="tabla-wrap"><table class="t"><thead><tr><th>${f.nivel==='rubro'?'Rubro':'Grupo'}</th><th>Permanente</th><th>Desfase</th><th>Pendiente</th></tr></thead><tbody>
+      ${Object.entries(res).sort((a,b)=>Math.abs(b[1].perm)-Math.abs(a[1].perm)).map(([k,o])=>`<tr><td>${esc(k)}</td>${td(o.perm)}${td(o.desf)}${td(o.pend)}</tr>`).join('')}
+      </tbody></table></div></div>`;
+}
+
+// ---------- CAJA PROYECTADA ----------
+let verCaja = null;
+function vCaja(f){
+  const fc = DB.versiones.filter(v=>v.tipo!=='REAL');
+  if (!fc.length){ $('v-caja').innerHTML='<div class="aviso">Aún no hay forecast publicado.</div>'; return; }
+  const multi = DB.versiones.filter(v=>v.tipo==='FCST' && v.meses.length>1);
+  if (!verCaja || !DB.ver[verCaja]) verCaja = (multi[multi.length-1]||fc[fc.length-1]).version;
+  const v = DB.versiones.find(x=>x.version===verCaja), ms = v.meses;
+  const sal = DB.verSaldo[verCaja]||{};
+  const fv = {desde:ms[0],hasta:ms[ms.length-1],modo:'ver:'+verCaja,nivel:f.nivel};
+  const comp = ms.map(m=>({mes:m,version:verCaja,hayReal:false,real:{},plan:agrupar(DB.ver[verCaja][m],f.nivel)}));
+  const filas = filasTabla(fv, comp);
+  const necesidad = ms.map(m=>(DB.ver[verCaja][m]||{})['Giros recibidos (financiación)']||0);
+  const minObj = ms.map(m=>(sal[m]||{})['Nivel mínimo de caja']).find(x=>x!=null);
+  $('v-caja').innerHTML = `
+    <div class="filtros" style="padding:0 0 10px;background:none;border:none"><label>Versión<select id="selVer">${fc.map(x=>`<option ${x.version===verCaja?'selected':''}>${esc(x.version)}</option>`).join('')}</select></label>
+      <span class="muted" style="font-size:11px">Publicada ${esc(String(v.fecha).slice(0,10))} · ${ms.length} meses</span></div>
+    <div class="grid2">
+      <div class="card"><h3>Caja proyectada (${esc(verCaja)})</h3><p class="nota">Saldo final proyectado vs nivel mínimo · barras = flujo neto · naranja = financiación nueva necesaria</p><div class="chartbox"><canvas id="cCaja"></canvas></div></div>
+      <div class="card"><h3>Evolución del pronóstico de saldo</h3><p class="nota">Saldo final que proyectó cada versión de forecast para cada mes (muestra cómo cambia la expectativa)</p><div class="chartbox"><canvas id="cEvol"></canvas></div></div>
+    </div>
+    <div class="card"><h3>Flujo proyectado por mes (${esc(verCaja)})</h3><div class="tabla-wrap"><table class="t" id="tablaCaja"><thead><tr><th>Concepto</th>${ms.map(m=>`<th>${mesTxt(m)}</th>`).join('')}<th class="sep">Total</th></tr></thead><tbody>
+      ${filas.map(fl=>{ if(fl.tipo==='sec') return `<tr class="sec"><td>${esc(fl.label)}</td>${ms.map(()=>'<td></td>').join('')}<td></td></tr>`;
+        const vals = comp.map(c=>fl.get(c,'p')); const t = fl.tipo==='sal'?'':vals.reduce((a,b)=>a+(b||0),0);
+        return `<tr class="${fl.tipo==='rub'?'':fl.tipo}"><td class="${fl.tipo==='rub'?'ind':''}">${esc(fl.label)}</td>${vals.map(x=>td(x==null?'—':x)).join('')}${t===''?'<td class="sep"></td>':td(t,'sep')}</tr>`; }).join('')}
+      <tr><td>Nivel mínimo de caja</td>${ms.map(m=>td((sal[m]||{})['Nivel mínimo de caja']??'—')).join('')}<td class="sep"></td></tr>
+      </tbody></table></div></div>`;
+  $('selVer').onchange = e => { verCaja = e.target.value; vCaja(F()); };
+  chart('cCaja',{type:'bar',data:{labels:ms.map(mesTxt),datasets:[
+    {type:'line',label:'Saldo final proyectado',data:ms.map(m=>(sal[m]||{})['Saldo final']??null),borderColor:'#0E3552',backgroundColor:'#0E3552',pointRadius:3,order:1},
+    {type:'line',label:'Nivel mínimo',data:ms.map(()=>minObj??null),borderColor:'#B23A2E',borderWidth:1,pointRadius:0,order:1},
+    {type:'bar',label:'Flujo neto',data:ms.map(m=>sumObj(DB.ver[verCaja][m])),backgroundColor:'#C7D2DA',order:3},
+    {type:'bar',label:'Financiación nueva',data:necesidad,backgroundColor:'#C9862E',order:2}]},options:baseOpts()});
+  const versF = DB.versiones.filter(x=>x.tipo==='FCST'); const mesesE = [...new Set(versF.flatMap(x=>x.meses))].sort();
+  const pal=['#0E3552','#3D6A88','#7488A0','#C9862E','#A9852E','#2E7D5B','#B23A2E','#5C7284','#16242F','#8ee6a8','#f5c26b','#e57373'];
+  chart('cEvol',{type:'line',data:{labels:mesesE.map(mesTxt),datasets:[
+    ...versF.slice(-8).map((x,i)=>({label:x.version,data:mesesE.map(m=>((DB.verSaldo[x.version]||{})[m]||{})['Saldo final']??null),borderColor:pal[i%pal.length],backgroundColor:pal[i%pal.length],pointRadius:2,spanGaps:true})),
+    {label:'Real',data:mesesE.map(m=>{const s=DB.saldoReal[m]; return s?(s.bancos!=null?s.bancos:s.finCalc):null;}),borderColor:'#000',borderWidth:3,pointRadius:3}]},options:baseOpts()});
+}
+
+// ---------- DATOS ----------
+function vDatos(f){
+  const vs = DB.versiones;
+  $('v-datos').innerHTML = `
+    <div class="grid2">
+    <div class="card"><h3>Versiones de plan disponibles</h3><div class="tabla-wrap"><table class="t"><thead><tr><th>Versión</th><th>Tipo</th><th>Publicada</th><th>Meses</th><th>Origen</th></tr></thead><tbody>
+      ${vs.map(v=>`<tr><td>${esc(v.version)}</td><td>${v.tipo}</td><td>${esc(String(v.fecha).slice(0,10))}</td><td>${v.meses.length===1?mesTxt(v.meses[0]):mesTxt(v.meses[0])+' a '+mesTxt(v.meses[v.meses.length-1])}</td><td class="muted">${esc(v.origen)}</td></tr>`).join('')}
+    </tbody></table></div></div>
+    <div class="card"><h3>Real cargado y cuadre con bancos</h3><div class="tabla-wrap"><table class="t"><thead><tr><th>Mes</th><th>Origen</th><th>Saldo inicial</th><th>Flujo neto</th><th>Saldo final calc.</th><th>Saldo bancos</th><th>Diferencia</th><th>Estado</th></tr></thead><tbody>
+      ${DB.saldos.map(s=>`<tr><td>${mesTxt(s.mes)}</td><td class="muted">${esc(Object.keys(DB.realOrigen[s.mes]||{}).join(' + '))}</td>${td(s.ini)}${td(s.flujo)}${td(s.finCalc)}${td(s.bancos==null?'—':s.bancos)}${td(s.dif==null?'—':s.dif)}<td><span class="chip ${/^Cuadra/.test(s.estado)?'ok':/NO/.test(s.estado)?'bad':'warn'}">${esc(s.estado||'—')}</span></td></tr>`).join('')}
+    </tbody></table></div></div></div>
+    <div class="card"><h3>Notas de método</h3><p class="nota">
+      • Asertividad = 1 − Σ|real − plan| / Σ|real| (WAPE): los desvíos de distintos rubros no se compensan entre sí.<br>
+      • "Forecast hecho al inicio de cada mes" compara cada mes contra la versión FCST-aaaa-mm de ese mismo mes; "1 mes antes" contra la del mes anterior, etc.<br>
+      • Ene–ago 2026 se migraron de ejecucionfc sin apertura contado/cartera ("Recaudo total"). Cuando un mes tiene el total de un lado y la apertura del otro, se comparan juntos como "Recaudo (contado + cartera)".<br>
+      • Todo viene de la hoja FCC_DATOS del Sheet BD_FC_ABASTECIMIENTO; este tablero no modifica datos.</p></div>`;
+}
+
+// ============================== EXPORTAR A EXCEL ==============================
+async function exportar(){
+  const btn=$('btnExcel'); btn.disabled=true; btn.textContent='Generando…';
+  try{
+    const f = F(), wb = new ExcelJS.Workbook(); wb.creator='Tablero FC Imporinox';
+    const numFmt = '#,##0;[Red]-#,##0;"-"';
+    const head = (ws, row, cols) => { const r=ws.addRow(row); r.font={bold:true,color:{argb:'FFFFFFFF'}}; r.fill={type:'pattern',pattern:'solid',fgColor:{argb:'FF0E3552'}}; if(cols) ws.columns=cols; return r; };
+    const info = `Rango ${mesTxt(f.desde)} a ${mesTxt(f.hasta)} · comparado contra ${nombreModo(f.modo)} · nivel ${f.nivel} · millones de COP · generado ${new Date().toLocaleString('es-CO')}`;
+    // Tabla FC
+    const comp = comparar(f), filas = filasTabla(f, comp);
+    let ws = wb.addWorksheet('Tabla FC', {views:[{state:'frozen',xSplit:1,ySplit:3}]});
+    ws.addRow(['Flujo de caja — real vs plan']).font={bold:true,size:14}; ws.addRow([info]).font={italic:true,size:9};
+    head(ws, ['Concepto', ...comp.flatMap(c=>[mesTxt(c.mes)+' Real', mesTxt(c.mes)+' Plan', mesTxt(c.mes)+' Real−Plan'])]);
+    filas.forEach(fl=>{
+      if (fl.tipo==='sec'){ const r=ws.addRow([fl.label]); r.font={bold:true}; r.fill={type:'pattern',pattern:'solid',fgColor:{argb:'FFE8EEF5'}}; return; }
+      const vals = comp.flatMap(c=>{ const r=fl.get(c,'r'), p=c.plan||fl.tipo==='sal'?fl.get(c,'p'):null; return [r==null?null:M(r), p==null?null:M(p), r!=null&&p!=null?M(r-p):null]; });
+      const r = ws.addRow([fl.tipo==='rub'?'   '+fl.label:fl.label, ...vals]);
+      if (fl.tipo!=='rub') r.font={bold:true};
+      if (fl.tipo==='tot') r.fill={type:'pattern',pattern:'solid',fgColor:{argb:'FFDDE4EC'}};
+    });
+    ws.getColumn(1).width=42; for(let i=2;i<=1+comp.length*3;i++){ ws.getColumn(i).width=13; ws.getColumn(i).numFmt='#,##0;[Red]-#,##0'; }
+    // Cascada
+    const dc = datosCascada(f); ws = wb.addWorksheet('Cascada');
+    ws.addRow(['Cascada plan → real ('+dc.meses.map(mesTxt).join(', ')+')']).font={bold:true,size:13}; ws.addRow([info]).font={italic:true,size:9};
+    head(ws,['Concepto','M COP']); ws.addRow(['Plan: flujo neto', M(dc.P)]); dc.top.forEach(([k,v])=>ws.addRow([k,M(v)])); ws.addRow(['Real: flujo neto',M(dc.R)]).font={bold:true};
+    ws.getColumn(1).width=42; ws.getColumn(2).width=16; ws.getColumn(2).numFmt='#,##0;[Red]-#,##0';
+    // Asertividad
+    const pares = paresDe(comp), porK={}; pares.forEach(p=>(porK[p.k]=porK[p.k]||[]).push(p));
+    ws = wb.addWorksheet('Asertividad'); ws.addRow(['Asertividad — '+nombreModo(f.modo)]).font={bold:true,size:13}; ws.addRow([info]).font={italic:true,size:9};
+    head(ws,['Rubro/Grupo','Meses','Real','Plan','Real−Plan','Σ|Real−Plan|','Asertividad','Sesgo']);
+    Object.entries(porK).map(([k,ps])=>({k,ps,...asertividad(ps)})).sort((a,b)=>b.sAbs-a.sAbs).forEach(x=>{
+      const r=x.ps.reduce((a,p)=>a+p.r,0), p=x.ps.reduce((a,p2)=>a+p2.p,0);
+      ws.addRow([x.k,new Set(x.ps.map(q=>q.mes)).size,M(r),M(p),M(r-p),M(x.sAbs),x.a,x.sesgo]); });
+    const tt=asertividad(pares); ws.addRow(['TOTAL','', '', '', '', M(tt.sAbs), tt.a, tt.sesgo]).font={bold:true};
+    ws.getColumn(1).width=40; [3,4,5,6].forEach(i=>ws.getColumn(i).numFmt='#,##0;[Red]-#,##0'); [7,8].forEach(i=>ws.getColumn(i).numFmt='0.0%');
+    // Desvíos
+    ws = wb.addWorksheet('Desvíos'); ws.addRow(['Desvíos materiales ≥ '+fmt(f.mat)+' M']).font={bold:true,size:13}; ws.addRow([info]).font={italic:true,size:9};
+    head(ws,['Rubro/Grupo','Mes','Real','Plan','Real−Plan','Acumulado 3 meses','Clasificación']);
+    datosDesvios(f).forEach(x=>ws.addRow([x.k,mesTxt(x.mes),M(x.r),M(x.p),M(x.d),x.acum==null?null:M(x.acum),x.clase]));
+    ws.getColumn(1).width=40; ws.getColumn(7).width=34; [3,4,5,6].forEach(i=>ws.getColumn(i).numFmt='#,##0;[Red]-#,##0');
+    // Datos filtrados
+    ws = wb.addWorksheet('Datos'); head(ws,['Tipo','Versión','Mes','Sección','Flujo','Rubro','Valor COP','Origen']);
+    DB.filas.filter(r=>r.mes>=f.desde&&r.mes<=f.hasta).forEach(r=>ws.addRow([r.tipo,r.version,r.mes,r.seccion,r.flujo,r.rubro,r.valor,r.origen]));
+    ws.getColumn(6).width=36; ws.getColumn(7).width=18; ws.getColumn(7).numFmt='#,##0;[Red]-#,##0';
+    // Gráficos: se renderiza cada vista para capturar sus gráficos
+    const wsG = wb.addWorksheet('Gráficos'); let fila=1; const vistaPrev = vistaActiva;
+    for (const v of ['resumen','cascada','asert','caja']){
+      mostrar(v); await new Promise(r=>setTimeout(r,120));
+      for (const cv of document.querySelectorAll('#v-'+v+' canvas')){
+        const ch = charts[cv.id]; if(!ch) continue;
+        const titulo = cv.closest('.card')?.querySelector('h3')?.textContent || cv.id;
+        wsG.getCell('A'+fila).value = titulo; wsG.getCell('A'+fila).font={bold:true};
+        const img = wb.addImage({base64: ch.toBase64Image('image/png',1), extension:'png'});
+        wsG.addImage(img, {tl:{col:0,row:fila}, ext:{width:Math.min(cv.width,900), height:Math.min(cv.height,380)}});
+        fila += 22;
+      }
+    }
+    mostrar(vistaPrev);
+    const buf = await wb.xlsx.writeBuffer();
+    const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([buf],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}));
+    a.download = `FC_real_vs_plan_${f.desde}_a_${f.hasta}.xlsx`; document.body.appendChild(a); a.click(); a.remove();
+  } catch(e){ console.error(e); alert('No se pudo generar el Excel: '+e.message); }
+  finally { btn.disabled=false; btn.textContent='⬇ Descargar Excel'; }
+}
+$('btnExcel').onclick = exportar;
+$('btnRecargar').onclick = cargar;
+if (window.Chart) Chart.defaults.font.family = "'Montserrat', sans-serif";
+cargar();
+</script>
+</body>
+</html>
