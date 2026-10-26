@@ -58,6 +58,16 @@
   table.t thead tr:nth-child(2) th{top:24px;background:var(--steel);font-weight:600;font-size:10.5px;}
   table.t th:first-child,table.t td:first-child{position:sticky;left:0;background:#fff;text-align:left;z-index:1;min-width:260px;}
   table.t thead th:first-child{background:var(--navy);z-index:3;}
+  /* la 2.ª fila del encabezado no tiene columna "Concepto" (rowspan): su primera celda es "Real" del primer mes, no debe ser ancha ni fija a la izquierda */
+  table.t thead tr:nth-child(2) th:first-child{left:auto;min-width:0;text-align:right;background:var(--steel);z-index:2;}
+  td.sem-verde{background:#e6f4ea !important;} td.sem-ambar{background:#fef7e0 !important;} td.sem-rojo{background:#fce8e6 !important;}
+  tr.tot td.sem-verde,tr.tot td.sem-ambar,tr.tot td.sem-rojo{background:var(--navy) !important;}
+  .sd{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:5px;vertical-align:middle;}
+  .sd.verde{background:#1e8e3e;} .sd.ambar{background:#e8a33d;} .sd.rojo{background:#c5221f;}
+  .leyenda{display:flex;gap:14px;align-items:center;font-size:11px;color:var(--ink-soft);margin:0 0 8px;flex-wrap:wrap;}
+  .seg{display:inline-flex;border:1px solid var(--line);border-radius:6px;overflow:hidden;margin:0 0 10px;}
+  .seg button{border:none;background:#fff;padding:6px 12px;font-family:var(--sans);font-size:12px;font-weight:600;color:var(--ink-soft);cursor:pointer;}
+  .seg button.on{background:var(--navy);color:#fff;}
   table.t td.n{text-align:right;font-family:var(--mono);}
   table.t td.neg{color:var(--red);}
   table.t tr.sec td{background:#e8eef5;font-weight:700;color:var(--navy);}
@@ -151,6 +161,15 @@ function fmt(v, dec=0){ if(v===''||v==null||!isFinite(v)) return '—'; let x=v/
 function fmtPct(v){ if(v==null||!isFinite(v)) return '—'; return (v*100).toLocaleString('es-CO',{maximumFractionDigits:1})+'%'; }
 const esc = s => String(s).replace(/[&<>"]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 function td(v, cls=''){ const neg = typeof v==='number' && v <= -5e5; return `<td class="n ${cls} ${neg?'neg':''}">${typeof v==='number'?fmt(v):v}</td>`; }
+/** Semáforo de desvío (misma regla del Sheet): verde si |real−plan| < materialidad o ≤ 10% del plan; ámbar 10–25%; rojo > 25%. */
+function semaforo(r, p, mat){
+  if (r==null || p==null) return '';
+  const d=Math.abs(r-p); if (d < mat) return 'verde';
+  const b=Math.abs(p); if(!b) return 'rojo';
+  const x=d/b; return x<=0.10?'verde':x<=0.25?'ambar':'rojo';
+}
+const SEM_HEX = {verde:'#1e8e3e', ambar:'#e8a33d', rojo:'#c5221f'};
+const leyendaSem = mat => `<div class="leyenda">Semáforo del desvío (Real − Plan): <span><span class="sd verde"></span>verde ≤ 10% del plan o menor a ${fmt(mat)} M</span><span><span class="sd ambar"></span>ámbar 10–25%</span><span><span class="sd rojo"></span>rojo &gt; 25%</span><span>· la materialidad se cambia arriba</span></div>`;
 function chipAsert(a){ if(a==null) return '<span class="chip neu">—</span>'; const c=a>=0.9?'ok':a>=0.75?'warn':'bad'; return `<span class="chip ${c}">${fmtPct(a)}</span>`; }
 
 // ============================== CARGA DE DATOS ==============================
@@ -277,7 +296,7 @@ function estructura(nivel){
   secs.forEach(s=>{
     const ent=[], sal=[];
     DB.cat.filter(c=>c.seccion===s).forEach(c=>{ const k=claveDe(c.rubro,nivel); const arr=c.flujo==='Entrada'?ent:sal; if(!arr.includes(k)) arr.push(k); });
-    if (nivel==='rubro' && s==='Operación' && !ent.includes(R_JUNTO)) ent.push(R_JUNTO);
+    if (nivel==='rubro' && s==='Operación' && !ent.includes(R_JUNTO)) ent.unshift(R_JUNTO);
     out.push({seccion:s, ent, sal});
   });
   return out;
@@ -285,7 +304,7 @@ function estructura(nivel){
 /** Ene–ago 2026 se migraron con "Recaudo total" (sin apertura contado/cartera). Si en un mes un lado trae el total
  *  y el otro la apertura, se comparan los dos agregados en "Recaudo (contado + cartera)" para no inventar desvíos. */
 const R_TOTAL='Recaudo total (histórico sin apertura)', R_PARTES=['Recaudo de contado','Recaudo de cartera'], R_JUNTO='Recaudo (contado + cartera)';
-function unirRecaudo(o){ if(!o) return o; const x={...o}; let t=0, hay=false; [R_TOTAL,...R_PARTES].forEach(k=>{ if(k in x){ t+=x[k]; hay=true; delete x[k]; } }); if(hay) x[R_JUNTO]=t; return x; }
+function unirRecaudo(o){ if(!o) return o; const x={...o}; let t=0, hay=false; [R_TOTAL,...R_PARTES,R_JUNTO].forEach(k=>{ if(k in x){ t+=x[k]; hay=true; delete x[k]; } }); if(hay) x[R_JUNTO]=t; return x; }
 /** Comparación por mes: {mes, version, real:{k}, plan:{k}|null} */
 function comparar(f){
   return mesesRango(f).map(m=>{
@@ -337,11 +356,16 @@ function vResumen(f){
   let minProj=null, mesMin=null, minObj=null, necFin=0;
   if (vig){ vig.meses.forEach(m=>{ const s=(DB.verSaldo[vig.version]||{})[m]||{}; if(s['Saldo final']!=null && (minProj==null||s['Saldo final']<minProj)){minProj=s['Saldo final'];mesMin=m;} if(s['Nivel mínimo de caja']!=null) minObj=s['Nivel mínimo de caja']; necFin += ((DB.ver[vig.version][m]||{})['Giros recibidos (financiación)']||0); }); }
   const dif = rComp-pComp;
+  let kpiPpto = '';
+  if (hayPpto() && f.modo!=='ppto'){ const cp = comparar({...f,modo:'ppto'}).filter(c=>c.hayReal&&c.plan); const rr=cp.reduce((a,c)=>a+sumObj(c.real),0), pp=cp.reduce((a,c)=>a+sumObj(c.plan),0);
+    kpiPpto = `<div class="kpi ${cp.length?(rr-pp>=0?'ok':'bad'):''}"><div class="lab">Real − presupuesto anual</div><div class="val">${cp.length?fmt(rr-pp):'—'}</div><div class="sub">${cp.length?'Real '+fmt(rr)+' vs ppto '+fmt(pp)+' · '+cp.length+' meses':'sin meses comparables'}</div></div>`; }
   $('v-resumen').innerHTML = `
+    ${hayPpto()?'':`<div class="aviso">Aún no está cargado el presupuesto anual (flujo inicial del año). Cuando se publique (menú 4 del Sheet) aparece aquí y en la Tabla FC la comparación real vs presupuesto.</div>`}
     ${conPlan.length? '' : `<div class="aviso">En el rango elegido no hay meses con real y ${esc(nombreModo(f.modo))} a la vez. Cambia el rango o el tipo de comparación (por ejemplo, "Forecast hecho al inicio de cada mes").</div>`}
     <div class="kpis">
       <div class="kpi"><div class="lab">Flujo neto real del rango</div><div class="val">${fmt(rTot)}</div><div class="sub">${comp.filter(c=>c.hayReal).length} meses con real</div></div>
       <div class="kpi ${dif>=0?'ok':'bad'}"><div class="lab">Real − plan (meses comparables)</div><div class="val">${conPlan.length?fmt(dif):'—'}</div><div class="sub">Real ${fmt(rComp)} vs plan ${fmt(pComp)} · ${conPlan.length} meses</div></div>
+      ${kpiPpto}
       <div class="kpi ${as.a==null?'':as.a>=0.9?'ok':as.a>=0.75?'warn':'bad'}"><div class="lab">Asertividad (${f.nivel})</div><div class="val">${fmtPct(as.a)}</div><div class="sub">1 − Σ|real−plan| / Σ|real|</div></div>
       <div class="kpi ${as.sesgo==null?'':Math.abs(as.sesgo)<0.05?'ok':'warn'}"><div class="lab">Sesgo de caja</div><div class="val">${fmtPct(as.sesgo)}</div><div class="sub">+ el real dejó más caja que el plan</div></div>
       <div class="kpi ${saldoUlt!=null&&minObj!=null&&saldoUlt<minObj?'bad':''}"><div class="lab">Saldo de caja real ${ultimo?mesTxt(ultimo):''}</div><div class="val">${fmt(saldoUlt)}</div><div class="sub">${sr?(sr.bancos!=null?'según bancos · '+esc(sr.estado):'calculado (falta saldo de bancos)'):'sin saldo'}</div></div>
@@ -368,7 +392,8 @@ function vResumen(f){
 }
 
 // ---------- TABLA FC ----------
-let colsTabla = {r:true,p:true,d:true};
+let colsTabla = {r:true,p:true,d:true,pp:false,dpp:false};
+const hayPpto = () => DB.versiones.some(v=>v.tipo==='PPTO');
 function filasTabla(f, comp){
   const est = estructura(f.nivel), filas=[];
   const val = (src,k) => src ? (src[k]||0) : null;
@@ -395,57 +420,120 @@ function filasTabla(f, comp){
 function vTabla(f){
   const comp = comparar(f), filas = filasTabla(f, comp);
   const conPlan = comp.filter(c=>c.hayReal&&c.plan);
-  const cols = ['r','p','d'].filter(x=>colsTabla[x]);
-  const nomCol = {r:'Real',p:'Plan',d:'Real−Plan'};
-  let h1 = `<tr><th rowspan="2">Concepto</th>${comp.map(c=>`<th colspan="${cols.length}" class="sep" style="text-align:center">${mesTxt(c.mes)}${c.version?'<br><span style="font-weight:400;font-size:9.5px;opacity:.8">'+esc(c.version)+'</span>':''}</th>`).join('')}<th colspan="5" class="sep" style="text-align:center">TOTAL meses comparables (${conPlan.length})</th></tr>`;
+  const pptoDisp = hayPpto() && f.modo!=='ppto';
+  const compP = pptoDisp ? comparar({...f, modo:'ppto'}) : null;
+  const cols = ['r','p','d','pp','dpp'].filter(x=>colsTabla[x] && (pptoDisp || (x!=='pp'&&x!=='dpp')));
+  const nomCol = {r:'Real',p:'Plan',d:'Real−Plan',pp:'Ppto',dpp:'Real−Ppto'};
+  let h1 = `<tr><th rowspan="2">Concepto</th>${comp.map(c=>`<th colspan="${cols.length}" class="sep" style="text-align:center">${mesTxt(c.mes)}${c.version?'<br><span style="font-weight:400;font-size:9.5px;opacity:.8">'+esc(c.version)+(/tarde/.test(DB.versiones.find(v=>v.version===c.version)?.origen||'')?' · tarde':'')+'</span>':''}</th>`).join('')}<th colspan="5" class="sep" style="text-align:center">TOTAL meses comparables (${conPlan.length})</th></tr>`;
   let h2 = `<tr>${comp.map(()=>cols.map((x,i)=>`<th class="${i===0?'sep':''}">${nomCol[x]}</th>`).join('')).join('')}<th class="sep">Real</th><th>Plan</th><th>Real−Plan</th><th>Var %</th><th>Asertividad</th></tr>`;
+  const celda = (v, cls, sem) => { if (v==null) return `<td class="n ${cls}">—</td>`; const neg = v <= -5e5; return `<td class="n ${cls} ${neg?'neg':''} ${sem?'sem-'+sem:''}">${sem?`<span class="sd ${sem}"></span>`:''}${fmt(v)}</td>`; };
   const body = filas.map(fl=>{
     if (fl.tipo==='sec') return `<tr class="sec"><td>${esc(fl.label)}</td>${comp.map(()=>cols.map(()=>'<td></td>').join('')).join('')}<td colspan="5"></td></tr>`;
     let tr=0,tp=0,sAbs=0,sR=0;
-    const celdas = comp.map(c=>{
+    const celdas = comp.map((c,ic)=>{
       const r=fl.get(c,'r'), p=c.plan||fl.tipo==='sal'?fl.get(c,'p'):null;
-      if (c.hayReal && c.plan && r!=null && p!=null && fl.tipo!=='sal'){ tr+=r; tp+=p; sAbs+=Math.abs(r-p); sR+=Math.abs(r); }
-      return cols.map((x,i)=>{ const v = x==='r'?r : x==='p'?p : (r!=null&&p!=null?r-p:null); return td(v==null?'—':v, i===0?'sep':''); }).join('');
+      const cP = compP && compP[ic]; const pp = cP && cP.plan ? fl.get(cP,'p') : null;
+      const comparable = c.hayReal && c.plan && r!=null && p!=null && fl.tipo!=='sal';
+      const relevante = r!=null && p!=null && (Math.abs(r)>=5e5 || Math.abs(p)>=5e5);
+      if (comparable){ tr+=r; tp+=p; sAbs+=Math.abs(r-p); sR+=Math.abs(r); }
+      const sem = comparable && relevante ? semaforo(r,p,f.mat) : '';
+      const semP = (c.hayReal && pp!=null && r!=null && fl.tipo!=='sal' && (Math.abs(r)>=5e5||Math.abs(pp)>=5e5)) ? semaforo(r,pp,f.mat) : '';
+      const dondeSem = cols.includes('d') ? 'd' : 'r';
+      return cols.map((x,i)=>{
+        const v = x==='r'?r : x==='p'?p : x==='d'?(r!=null&&p!=null?r-p:null) : x==='pp'?pp : (r!=null&&pp!=null&&c.hayReal?r-pp:null);
+        const s2 = x===dondeSem ? sem : x==='dpp' ? semP : '';
+        return celda(v, i===0?'sep':'', s2);
+      }).join('');
     }).join('');
     const tot = fl.tipo==='sal' ? '<td class="sep" colspan="5"></td>' :
-      td(conPlan.length?tr:'—','sep')+td(conPlan.length?tp:'—')+td(conPlan.length?tr-tp:'—')+`<td class="n">${conPlan.length&&tp?fmtPct((tr-tp)/Math.abs(tp)):'—'}</td><td class="n">${fl.tipo==='rub'||fl.tipo==='sub'?chipAsert(sR?Math.max(0,1-sAbs/sR):null):''}</td>`;
+      td(conPlan.length?tr:'—','sep')+td(conPlan.length?tp:'—')+celda(conPlan.length?tr-tp:null,'',conPlan.length?semaforo(tr,tp,f.mat*conPlan.length):'')+`<td class="n">${conPlan.length&&tp?fmtPct((tr-tp)/Math.abs(tp)):'—'}</td><td class="n">${fl.tipo==='rub'||fl.tipo==='sub'?chipAsert(sR?Math.max(0,1-sAbs/sR):null):''}</td>`;
     return `<tr class="${fl.tipo==='rub'?'':fl.tipo}"><td class="${fl.tipo==='rub'?'ind':''}">${esc(fl.label)}</td>${celdas}${tot}</tr>`;
   }).join('');
-  $('v-tabla').innerHTML = `<div class="card"><h3>Flujo de caja: real vs ${esc(nombreModo(f.modo))}</h3>
+  const avisoPpto = !hayPpto() ? `<div class="aviso">No hay presupuesto anual cargado, por eso no aparece la comparación contra el flujo anual inicial. Se carga una vez (menú 4 del Sheet, versión PPTO-aaaa) con el Excel del flujo anual que quedó en diciembre.</div>` : '';
+  $('v-tabla').innerHTML = `${avisoPpto}<div class="card"><h3>Flujo de caja: real vs ${esc(nombreModo(f.modo))}${pptoDisp&&(colsTabla.pp||colsTabla.dpp)?' y presupuesto anual':''}</h3>
     <p class="nota">Millones de COP. Entradas +, salidas −. "Real−Plan" positivo = más caja que lo planeado. El saldo final real es el de bancos cuando está digitado en FCC_SALDOS.</p>
-    <div class="checks">Columnas por mes: ${['r','p','d'].map(x=>`<label><input type="checkbox" data-c="${x}" ${colsTabla[x]?'checked':''}>${nomCol[x]}</label>`).join('')}</div>
+    ${leyendaSem(f.mat)}
+    <div class="checks">Columnas por mes: ${['r','p','d','pp','dpp'].map(x=>`<label style="${(x==='pp'||x==='dpp')&&!pptoDisp?'opacity:.45':''}"><input type="checkbox" data-c="${x}" ${colsTabla[x]?'checked':''} ${(x==='pp'||x==='dpp')&&!pptoDisp?'disabled title="No hay presupuesto anual cargado"':''}>${nomCol[x]}${x==='pp'||x==='dpp'?' (anual)':''}</label>`).join('')}</div>
     <div class="tabla-wrap"><table class="t" id="tablaFC"><thead>${h1}${h2}</thead><tbody>${body}</tbody></table></div></div>`;
-  document.querySelectorAll('#v-tabla .checks input').forEach(i=>i.onchange=()=>{ colsTabla[i.dataset.c]=i.checked; if(!Object.values(colsTabla).some(Boolean)) colsTabla.r=true; vTabla(F()); });
+  document.querySelectorAll('#v-tabla .checks input').forEach(i=>i.onchange=()=>{ colsTabla[i.dataset.c]=i.checked; if(!['r','p','d','pp','dpp'].some(k=>colsTabla[k])) colsTabla.r=true; vTabla(F()); });
 }
 
 // ---------- CASCADA ----------
+let modoCasc = 'real';
+/** Claves en el orden del flujo de caja (operación: entradas, salidas; financiación; inversión). */
+function ordenClaves(nivel){ return estructura(nivel).flatMap(s=>[...s.ent, ...s.sal]); }
+/** Composición del flujo: saldo inicial → cada rubro → saldo final (real o plan). */
+function datosComposicion(f, cual){
+  const comp = comparar(f).filter(c=> cual==='real' ? c.hayReal : !!c.plan);
+  const meses = comp.map(c=>c.mes);
+  let tot = {}; comp.forEach(c=>{ const o = cual==='real'?c.real:c.plan; for(const k in o) tot[k]=(tot[k]||0)+o[k]; });
+  if (f.nivel==='rubro' && Math.abs(tot[R_TOTAL]||0)>0.5 && [...R_PARTES,R_JUNTO].some(k=>Math.abs(tot[k]||0)>0.5))tot = unirRecaudo(tot);
+  const orden = ordenClaves(f.nivel); Object.keys(tot).forEach(k=>{ if(!orden.includes(k)) orden.push(k); });
+  const items = orden.filter(k=>Math.abs(tot[k]||0)>=5e5).map(k=>[k, tot[k]]);
+  let ini = null;
+  if (meses.length){
+    const m0 = meses[0];
+    if (cual==='real'){ const s0 = DB.saldoReal[m0]; ini = s0 ? s0.ini : null; }
+    else { const v0 = comp[0].version; ini = ((DB.verSaldo[v0]||{})[m0]||{})['Saldo inicial'] ?? null; }
+  }
+  const flujo = items.reduce((a,x)=>a+x[1],0);
+  return {meses, items, ini, flujo, fin: ini==null?null:ini+flujo, versiones:[...new Set(comp.map(c=>c.version).filter(Boolean))]};
+}
+/** Puente del plan al real: diferencia por rubro, en el orden del flujo, sin agrupar en "Otros". */
 function datosCascada(f){
   const comp = comparar(f), pares = paresDe(comp);
   const meses = [...new Set(pares.map(p=>p.mes))];
-  const porK = {}; pares.forEach(p=>{ porK[p.k]=(porK[p.k]||0)+(p.r-p.p); });
+  const hayTot = pares.some(p=>p.k===R_TOTAL), hayJ = pares.some(p=>p.k===R_JUNTO||R_PARTES.includes(p.k));
+  const kk = k => f.nivel==='rubro' && hayTot && hayJ && (k===R_TOTAL||k===R_JUNTO||R_PARTES.includes(k)) ? R_JUNTO : k;   // recaudo con y sin apertura en el mismo rango → una sola barra
+  const porK = {}, absK = {}; pares.forEach(p=>{ const k=kk(p.k); porK[k]=(porK[k]||0)+(p.r-p.p); absK[k]=(absK[k]||0)+Math.abs(p.r-p.p); });
   const P = pares.reduce((a,p)=>a+p.p,0), R = pares.reduce((a,p)=>a+p.r,0);
-  const items = Object.entries(porK).filter(([,v])=>Math.abs(v)>0.5).sort((a,b)=>Math.abs(b[1])-Math.abs(a[1]));
-  const top = items.slice(0,12), resto = items.slice(12).reduce((a,[,v])=>a+v,0);
-  if (Math.abs(resto)>0.5) top.push(['Otros ('+(items.length-12)+')', resto]);
+  const orden = ordenClaves(f.nivel); Object.keys(porK).forEach(k=>{ if(!orden.includes(k)) orden.push(k); });
+  const top = orden.filter(k=>Math.abs(porK[k]||0)>0.5 || (absK[k]||0)>0.5).map(k=>[k, porK[k]||0, absK[k]||0]);
   return {P, R, top, meses, comp};
 }
+function graficoCascada(id, ini, items, fin, labIni, labFin){
+  const labels = [labIni, ...items.map(x=>x[0]), labFin];
+  let acc = ini||0; const data=[[0,ini||0]], colors=['#3D6A88'];
+  items.forEach(([,v])=>{ data.push([acc, acc+v]); colors.push(v>=0?'#2E7D5B':'#B23A2E'); acc+=v; });
+  data.push([0, fin==null?acc:fin]); colors.push('#0E3552');
+  chart(id,{type:'bar',data:{labels,datasets:[{label:'Cascada',data,backgroundColor:colors,borderSkipped:false}]},
+    options:baseOpts({plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>{ const i=c.dataIndex; return fmt(i===0||i===labels.length-1?c.raw[1]:c.raw[1]-c.raw[0])+' M'; }}}},
+      scales:{y:{ticks:{callback:fmtTick}},x:{ticks:{autoSkip:false,maxRotation:60,minRotation:35,font:{size:10}}}}})});
+}
 function vCascada(f){
-  const d = datosCascada(f);
-  const labels = ['Plan: flujo neto', ...d.top.map(x=>x[0]), 'Real: flujo neto'];
-  let acc = d.P; const data=[[0,d.P]], colors=['#3D6A88'];
-  d.top.forEach(([,v])=>{ data.push([acc, acc+v]); colors.push(v>=0?'#2E7D5B':'#B23A2E'); acc+=v; });
-  data.push([0,d.R]); colors.push('#0E3552');
-  $('v-cascada').innerHTML = d.meses.length ? `<div class="card"><h3>Cascada: del plan al real (${d.meses.length} meses: ${d.meses.map(mesTxt).join(', ')})</h3>
-      <p class="nota">Cada barra es la diferencia real − plan del ${f.nivel==='rubro'?'rubro':'grupo'}. Verde = más caja que lo planeado (entró más o salió menos); rojo = menos caja.</p>
-      <div class="chartbox" style="height:420px"><canvas id="cCasc"></canvas></div></div>
-    <div class="card"><h3>Detalle de la cascada</h3><div class="tabla-wrap"><table class="t"><thead><tr><th>Concepto</th><th>Real − Plan (M COP)</th><th>% del desvío total</th></tr></thead><tbody>
-      <tr class="sal"><td>Plan: flujo neto</td>${td(d.P)}<td></td></tr>
-      ${d.top.map(([k,v])=>`<tr><td>${esc(k)}</td>${td(v)}<td class="n">${fmtPct(Math.abs(v)/d.top.reduce((a,x)=>a+Math.abs(x[1]),0))}</td></tr>`).join('')}
-      <tr class="tot"><td>Real: flujo neto</td>${td(d.R)}<td></td></tr></tbody></table></div></div>`
-    : `<div class="aviso">No hay meses con real y ${esc(nombreModo(f.modo))} en el rango elegido.</div>`;
-  if (!d.meses.length) return;
-  chart('cCasc',{type:'bar',data:{labels,datasets:[{label:'Cascada',data,backgroundColor:colors,borderSkipped:false}]},
-    options:baseOpts({plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>fmt(c.raw[1]-c.raw[0])+' M'}}},scales:{y:{ticks:{callback:fmtTick}},x:{ticks:{autoSkip:false,maxRotation:50,minRotation:30,font:{size:10}}}}})});
+  const seg = `<div class="seg">${[['real','Flujo real'],['plan','Flujo planeado'],['desvio','Del plan al real (desvíos)']].map(([k,t])=>`<button data-m="${k}" class="${modoCasc===k?'on':''}">${t}</button>`).join('')}</div>`;
+  let html = '';
+  if (modoCasc==='desvio'){
+    const d = datosCascada(f);
+    html = d.meses.length ? `<div class="card"><h3>Del plan al real (${d.meses.length} meses: ${d.meses.map(mesTxt).join(', ')})</h3>
+      <p class="nota">Empieza en el flujo neto planeado y termina en el real. Cada barra es la diferencia real − plan del ${f.nivel==='rubro'?'rubro':'grupo'}, sumada en los meses del rango, en el orden del flujo de caja. Verde = más caja que lo planeado; rojo = menos caja.
+      Ojo: si un mes un rubro se pasa y al siguiente se queda corto, en el rango se compensa y la barra sale pequeña aunque mes a mes haya desvíos grandes — por eso la tabla muestra también la suma de los desvíos mes a mes.</p>
+      <div class="chartbox" style="height:440px"><canvas id="cCasc"></canvas></div></div>
+      <div class="card"><h3>Detalle</h3><div class="tabla-wrap" style="max-height:none"><table class="t"><thead><tr><th>Concepto</th><th>Real − Plan del rango</th><th>Σ |desvío| mes a mes</th><th>% del desvío total</th></tr></thead><tbody>
+        <tr class="sal"><td>Plan: flujo neto</td>${td(d.P)}<td></td><td></td></tr>
+        ${d.top.map(([k,v,ab])=>`<tr><td>${esc(k)}</td>${td(v)}${td(ab)}<td class="n">${fmtPct(ab/d.top.reduce((a,x)=>a+x[2],0))}</td></tr>`).join('')}
+        <tr class="tot"><td>Real: flujo neto</td>${td(d.R)}<td></td><td></td></tr></tbody></table></div></div>`
+      : `<div class="aviso">No hay meses con real y ${esc(nombreModo(f.modo))} en el rango elegido.</div>`;
+    $('v-cascada').innerHTML = seg + html;
+    if (d.meses.length) graficoCascada('cCasc', d.P, d.top.map(x=>[x[0],x[1]]), d.R, 'Plan: flujo neto', 'Real: flujo neto');
+  } else {
+    const d = datosComposicion(f, modoCasc), esReal = modoCasc==='real';
+    const titulo = esReal ? 'Flujo real' : 'Flujo planeado ('+esc(nombreModo(f.modo))+')';
+    html = d.meses.length ? `<div class="card"><h3>${titulo}: del saldo inicial al saldo final (${d.meses.length} meses: ${mesTxt(d.meses[0])} a ${mesTxt(d.meses[d.meses.length-1])})</h3>
+      <p class="nota">Saldo inicial de caja → cada ${f.nivel==='rubro'?'rubro':'grupo'} del rango (verde entra, rojo sale), en el orden del flujo → saldo final. ${esReal?'Saldo inicial real según FCC_SALDOS.':'Saldo inicial del plan del primer mes ('+esc(d.versiones[0]||'')+').'}</p>
+      <div class="chartbox" style="height:440px"><canvas id="cCasc"></canvas></div></div>
+      <div class="card"><h3>Detalle</h3><div class="tabla-wrap" style="max-height:none"><table class="t"><thead><tr><th>Concepto</th><th>M COP</th><th>% del total de entradas / salidas</th></tr></thead><tbody>
+        <tr class="sal"><td>Saldo inicial</td>${td(d.ini==null?'—':d.ini)}<td></td></tr>
+        ${(()=>{ const E=d.items.filter(x=>x[1]>0).reduce((a,x)=>a+x[1],0), S=d.items.filter(x=>x[1]<0).reduce((a,x)=>a+x[1],0);
+          return d.items.map(([k,v])=>`<tr><td class="ind">${esc(k)}</td>${td(v)}<td class="n">${fmtPct(v>0?v/E:v/S)}</td></tr>`).join('') +
+            `<tr class="sub"><td>Total entradas</td>${td(E)}<td></td></tr><tr class="sub"><td>Total salidas</td>${td(S)}<td></td></tr>`; })()}
+        <tr class="tot"><td>Flujo neto del rango</td>${td(d.flujo)}<td></td></tr>
+        <tr class="sal"><td>Saldo final</td>${td(d.fin==null?'—':d.fin)}<td></td></tr></tbody></table></div></div>`
+      : `<div class="aviso">No hay meses ${esReal?'con real':'con '+esc(nombreModo(f.modo))} en el rango elegido.</div>`;
+    $('v-cascada').innerHTML = seg + html;
+    if (d.meses.length) graficoCascada('cCasc', d.ini, d.items, d.fin, 'Saldo inicial', 'Saldo final');
+  }
+  document.querySelectorAll('#v-cascada .seg button').forEach(b=>b.onclick=()=>{ modoCasc=b.dataset.m; vCascada(F()); });
 }
 
 // ---------- ASERTIVIDAD ----------
@@ -453,7 +541,7 @@ function vAsert(f){
   const comp = comparar(f), pares = paresDe(comp), tot = asertividad(pares);
   const porK = {}; pares.forEach(p=>(porK[p.k]=porK[p.k]||[]).push(p));
   const filas = Object.entries(porK).map(([k,ps])=>({k, n:new Set(ps.map(p=>p.mes)).size, ...asertividad(ps), r:ps.reduce((a,p)=>a+p.r,0), p:ps.reduce((a,p)=>a+p.p,0)}))
-    .sort((a,b)=>b.sAbs-a.sAbs);
+    .filter(x=>x.sAbs>0.5||Math.abs(x.r)>0.5).sort((a,b)=>b.sAbs-a.sAbs);
   const horizontes = [0,1,2,3,4,5,6].map(k=>{ const c=comparar({...f,modo:'lag'+k}); const ps=paresDe(c); return {k, n:new Set(ps.map(p=>p.mes)).size, ...asertividad(ps)}; });
   $('v-asert').innerHTML = `
     <div class="kpis"><div class="kpi ${tot.a==null?'':tot.a>=0.9?'ok':tot.a>=0.75?'warn':'bad'}"><div class="lab">Asertividad total</div><div class="val">${fmtPct(tot.a)}</div><div class="sub">${esc(nombreModo(f.modo))} · nivel ${f.nivel}</div></div>
@@ -462,17 +550,19 @@ function vAsert(f){
     <div class="grid2">
       <div class="card"><h3>Asertividad por horizonte</h3><p class="nota">¿Qué tan bien acierta el forecast según cuántos meses antes se hizo? (rango y nivel elegidos)</p>
         <div class="tabla-wrap"><table class="t"><thead><tr><th>Forecast hecho…</th><th>Meses medidos</th><th>Asertividad</th><th>Sesgo</th></tr></thead><tbody>
-        ${horizontes.map(h=>`<tr><td>${h.k===0?'al inicio del mes':h.k+' mes(es) antes'}</td><td class="n">${h.n}</td><td class="n">${chipAsert(h.a)}</td><td class="n">${fmtPct(h.sesgo)}</td></tr>`).join('')}
-        </tbody></table></div></div>
+        ${horizontes.filter(h=>h.n>0).map(h=>`<tr><td>${h.k===0?'al inicio del mes':h.k+' mes(es) antes'}</td><td class="n">${h.n}</td><td class="n">${chipAsert(h.a)}</td><td class="n">${fmtPct(h.sesgo)}</td></tr>`).join('')}
+        </tbody></table></div>
+        ${horizontes.some(h=>h.k>0&&h.n===0)?`<p class="nota" style="margin-top:8px">Sin datos todavía para ${horizontes.filter(h=>h.k>0&&h.n===0).map(h=>h.k).join(', ')} mes(es) antes: los planes históricos (ene–sep 2026) solo traen el mes en curso. Desde FCST-2026-10 cada versión trae 12 meses, así que "1 mes antes" empieza a medirse con el real de nov-26, "2 meses antes" con dic-26, y así sucesivamente.</p>`:''}</div>
       <div class="card"><h3>Asertividad mensual por horizonte</h3><div class="chartbox"><canvas id="cAsertH"></canvas></div></div>
     </div>
     <div class="card"><h3>Asertividad por ${f.nivel==='rubro'?'rubro':'grupo'} (${esc(nombreModo(f.modo))})</h3><p class="nota">Ordenado por desvío absoluto: arriba están los que más afectan la asertividad.</p>
-      <div class="tabla-wrap"><table class="t" id="tablaAsert"><thead><tr><th>${f.nivel==='rubro'?'Rubro':'Grupo'}</th><th>Meses</th><th>Real</th><th>Plan</th><th>Real−Plan</th><th>Σ|Real−Plan|</th><th>Asertividad</th><th>Sesgo</th></tr></thead><tbody>
+      <div class="tabla-wrap" style="max-height:none"><table class="t" id="tablaAsert"><thead><tr><th>${f.nivel==='rubro'?'Rubro':'Grupo'}</th><th>Meses</th><th>Real</th><th>Plan</th><th>Real−Plan</th><th>Σ|Real−Plan|</th><th>Asertividad</th><th>Sesgo</th></tr></thead><tbody>
       ${filas.map(x=>`<tr><td>${esc(x.k)}</td><td class="n">${x.n}</td>${td(x.r)}${td(x.p)}${td(x.r-x.p)}${td(x.sAbs)}<td class="n">${chipAsert(x.a)}</td><td class="n">${fmtPct(x.sesgo)}</td></tr>`).join('')}
+      <tr class="tot"><td>TOTAL (${filas.length} ${f.nivel==='rubro'?'rubros':'grupos'})</td><td class="n">${new Set(pares.map(p=>p.mes)).size}</td>${td(filas.reduce((a,x)=>a+x.r,0))}${td(filas.reduce((a,x)=>a+x.p,0))}${td(filas.reduce((a,x)=>a+x.r-x.p,0))}${td(tot.sAbs)}<td class="n">${chipAsert(tot.a)}</td><td class="n">${fmtPct(tot.sesgo)}</td></tr>
       </tbody></table></div></div>`;
   const ms = mesesRango(f);
   const colores=['#0E3552','#3D6A88','#7488A0','#C9862E','#A9852E','#2E7D5B','#B23A2E'];
-  chart('cAsertH',{type:'line',data:{labels:ms.map(mesTxt),datasets:[0,1,2,3].map(k=>({label:k===0?'Inicio de mes':k+' mes(es) antes',borderColor:colores[k],backgroundColor:colores[k],spanGaps:false,pointRadius:3,
+  chart('cAsertH',{type:'line',data:{labels:ms.map(mesTxt),datasets:[0,1,2,3].filter(k=>horizontes[k].n>0).map(k=>({label:k===0?'Inicio de mes':k+' mes(es) antes',borderColor:colores[k],backgroundColor:colores[k],spanGaps:false,pointRadius:3,
     data:ms.map(m=>{ const c=comparar({...f,desde:m,hasta:m,modo:'lag'+k}); const a=asertividad(paresDe(c)).a; return a==null?null:a*1e8; })}))},
     options:baseOpts({plugins:{legend:{position:'bottom'},tooltip:{callbacks:{label:c=>c.dataset.label+': '+fmtPct(c.raw/1e8)}}},scales:{y:{min:0,max:1e8,ticks:{callback:v=>(v/1e6).toFixed(0)+'%'}}}})});
 }
@@ -513,6 +603,8 @@ function vDesvios(f){
 }
 
 // ---------- CAJA PROYECTADA ----------
+/** Semáforo del saldo vs nivel mínimo: rojo por debajo del mínimo, ámbar hasta 15% por encima, verde holgado. */
+const semSaldo = (v, min) => v==null||min==null ? '#7488A0' : v < min ? SEM_HEX.rojo : v < min*1.15 ? SEM_HEX.ambar : SEM_HEX.verde;
 let verCaja = null;
 function vCaja(f){
   const fc = DB.versiones.filter(v=>v.tipo!=='REAL');
@@ -530,8 +622,8 @@ function vCaja(f){
     <div class="filtros" style="padding:0 0 10px;background:none;border:none"><label>Versión<select id="selVer">${fc.map(x=>`<option ${x.version===verCaja?'selected':''}>${esc(x.version)}</option>`).join('')}</select></label>
       <span class="muted" style="font-size:11px">Publicada ${esc(String(v.fecha).slice(0,10))} · ${ms.length} meses</span></div>
     <div class="grid2">
-      <div class="card"><h3>Caja proyectada (${esc(verCaja)})</h3><p class="nota">Saldo final proyectado vs nivel mínimo · barras = flujo neto · naranja = financiación nueva necesaria</p><div class="chartbox"><canvas id="cCaja"></canvas></div></div>
-      <div class="card"><h3>Evolución del pronóstico de saldo</h3><p class="nota">Saldo final que proyectó cada versión de forecast para cada mes (muestra cómo cambia la expectativa)</p><div class="chartbox"><canvas id="cEvol"></canvas></div></div>
+      <div class="card"><h3>Caja proyectada (${esc(verCaja)})</h3><p class="nota">Línea = saldo final proyectado; cada punto con semáforo vs el nivel mínimo (<span class="sd rojo"></span>debajo del mínimo · <span class="sd ambar"></span>hasta 15% por encima · <span class="sd verde"></span>holgado). Barras grises = flujo neto; naranja = financiación nueva necesaria.</p><div class="chartbox"><canvas id="cCaja"></canvas></div></div>
+      <div class="card"><h3>Evolución del pronóstico de saldo</h3><p class="nota">Cada línea gris es una versión de forecast (pasa el mouse para ver cuál); la línea azul es ${esc(verCaja)} y la negra el saldo real. Puntos con el mismo semáforo vs el nivel mínimo.</p><div class="chartbox"><canvas id="cEvol"></canvas></div></div>
     </div>
     <div class="card"><h3>Flujo proyectado por mes (${esc(verCaja)})</h3><div class="tabla-wrap"><table class="t" id="tablaCaja"><thead><tr><th>Concepto</th>${ms.map(m=>`<th>${mesTxt(m)}</th>`).join('')}<th class="sep">Total</th></tr></thead><tbody>
       ${filas.map(fl=>{ if(fl.tipo==='sec') return `<tr class="sec"><td>${esc(fl.label)}</td>${ms.map(()=>'<td></td>').join('')}<td></td></tr>`;
@@ -541,15 +633,20 @@ function vCaja(f){
       </tbody></table></div></div>`;
   $('selVer').onchange = e => { verCaja = e.target.value; vCaja(F()); };
   chart('cCaja',{type:'bar',data:{labels:ms.map(mesTxt),datasets:[
-    {type:'line',label:'Saldo final proyectado',data:ms.map(m=>(sal[m]||{})['Saldo final']??null),borderColor:'#0E3552',backgroundColor:'#0E3552',pointRadius:3,order:1},
+    {type:'line',label:'Saldo final proyectado',data:ms.map(m=>(sal[m]||{})['Saldo final']??null),borderColor:'#0E3552',backgroundColor:'#0E3552',pointRadius:5,order:1,
+      pointBackgroundColor:ms.map(m=>semSaldo((sal[m]||{})['Saldo final'], (sal[m]||{})['Nivel mínimo de caja']??minObj)),pointBorderColor:'#fff'},
     {type:'line',label:'Nivel mínimo',data:ms.map(()=>minObj??null),borderColor:'#B23A2E',borderWidth:1,pointRadius:0,order:1},
     {type:'bar',label:'Flujo neto',data:ms.map(m=>sumObj(DB.ver[verCaja][m])),backgroundColor:'#C7D2DA',order:3},
     {type:'bar',label:'Financiación nueva',data:necesidad,backgroundColor:'#C9862E',order:2}]},options:baseOpts()});
-  const versF = DB.versiones.filter(x=>x.tipo==='FCST'); const mesesE = [...new Set(versF.flatMap(x=>x.meses))].sort();
-  const pal=['#0E3552','#3D6A88','#7488A0','#C9862E','#A9852E','#2E7D5B','#B23A2E','#5C7284','#16242F','#8ee6a8','#f5c26b','#e57373'];
+  const versF = DB.versiones.filter(x=>x.tipo==='FCST' && x.meses.length>1); const mesesE = [...new Set([...versF.flatMap(x=>x.meses), ...DB.mesesReal.slice(-6)])].sort();
+  const minDe = (v,m) => ((DB.verSaldo[v]||{})[m]||{})['Nivel mínimo de caja'] ?? minObj;
   chart('cEvol',{type:'line',data:{labels:mesesE.map(mesTxt),datasets:[
-    ...versF.slice(-8).map((x,i)=>({label:x.version,data:mesesE.map(m=>((DB.verSaldo[x.version]||{})[m]||{})['Saldo final']??null),borderColor:pal[i%pal.length],backgroundColor:pal[i%pal.length],pointRadius:2,spanGaps:true})),
-    {label:'Real',data:mesesE.map(m=>{const s=DB.saldoReal[m]; return s?(s.bancos!=null?s.bancos:s.finCalc):null;}),borderColor:'#000',borderWidth:3,pointRadius:3}]},options:baseOpts()});
+    ...versF.map(x=>{ const sel = x.version===verCaja; const vals = mesesE.map(m=>((DB.verSaldo[x.version]||{})[m]||{})['Saldo final']??null);
+      return {label:x.version,data:vals,borderColor:sel?'#0B7DB0':'#C7D2DA',borderWidth:sel?2.5:1.5,order:sel?1:3,spanGaps:false,
+        pointRadius:sel?4:2.5,pointBackgroundColor:mesesE.map((m,i)=>semSaldo(vals[i],minDe(x.version,m))),pointBorderColor:mesesE.map(()=>'rgba(0,0,0,0)')}; }),
+    {label:'Real',data:mesesE.map(m=>{const s=DB.saldoReal[m]; return s?(s.bancos!=null?s.bancos:s.finCalc):null;}),borderColor:'#16242F',backgroundColor:'#16242F',borderWidth:2.5,pointRadius:3,order:0},
+    {label:'Nivel mínimo',data:mesesE.map(()=>minObj??null),borderColor:'#B23A2E',borderWidth:1,borderDash:[4,4],pointRadius:0,order:4}]},
+    options:baseOpts({plugins:{legend:{display:false},tooltip:{mode:'nearest',intersect:false,callbacks:{label:c=>`${c.dataset.label}: ${fmt(c.raw)} M`}}}})});
 }
 
 // ---------- DATOS ----------
@@ -589,13 +686,17 @@ async function exportar(){
       const r = ws.addRow([fl.tipo==='rub'?'   '+fl.label:fl.label, ...vals]);
       if (fl.tipo!=='rub') r.font={bold:true};
       if (fl.tipo==='tot') r.fill={type:'pattern',pattern:'solid',fgColor:{argb:'FFDDE4EC'}};
+      if (fl.tipo!=='sal') comp.forEach((c,i)=>{ const rr=fl.get(c,'r'), pp=c.plan?fl.get(c,'p'):null; if(!c.hayReal||rr==null||pp==null) return;
+        const sm=semaforo(rr,pp,f.mat); if(sm) r.getCell(2+i*3+2).fill={type:'pattern',pattern:'solid',fgColor:{argb:{verde:'FFE6F4EA',ambar:'FFFEF7E0',rojo:'FFFCE8E6'}[sm]}}; });
     });
     ws.getColumn(1).width=42; for(let i=2;i<=1+comp.length*3;i++){ ws.getColumn(i).width=13; ws.getColumn(i).numFmt='#,##0;[Red]-#,##0'; }
     // Cascada
-    const dc = datosCascada(f); ws = wb.addWorksheet('Cascada');
-    ws.addRow(['Cascada plan → real ('+dc.meses.map(mesTxt).join(', ')+')']).font={bold:true,size:13}; ws.addRow([info]).font={italic:true,size:9};
-    head(ws,['Concepto','M COP']); ws.addRow(['Plan: flujo neto', M(dc.P)]); dc.top.forEach(([k,v])=>ws.addRow([k,M(v)])); ws.addRow(['Real: flujo neto',M(dc.R)]).font={bold:true};
-    ws.getColumn(1).width=42; ws.getColumn(2).width=16; ws.getColumn(2).numFmt='#,##0;[Red]-#,##0';
+    const dc = datosCascada(f), dr = datosComposicion(f,'real'); ws = wb.addWorksheet('Cascada');
+    ws.addRow(['Flujo real: saldo inicial → saldo final']).font={bold:true,size:13}; ws.addRow([info]).font={italic:true,size:9};
+    head(ws,['Concepto','M COP']); ws.addRow(['Saldo inicial', dr.ini==null?null:M(dr.ini)]); dr.items.forEach(([k,v])=>ws.addRow([k,M(v)])); ws.addRow(['Saldo final',dr.fin==null?null:M(dr.fin)]).font={bold:true};
+    ws.addRow([]); ws.addRow(['Del plan al real ('+dc.meses.map(mesTxt).join(', ')+')']).font={bold:true,size:13};
+    head(ws,['Concepto','Real − Plan (M COP)','Σ |desvío| mes a mes']); ws.addRow(['Plan: flujo neto', M(dc.P)]); dc.top.forEach(([k,v,ab])=>ws.addRow([k,M(v),M(ab)])); ws.addRow(['Real: flujo neto',M(dc.R)]).font={bold:true};
+    ws.getColumn(1).width=42; [2,3].forEach(i=>{ ws.getColumn(i).width=18; ws.getColumn(i).numFmt='#,##0;[Red]-#,##0'; });
     // Asertividad
     const pares = paresDe(comp), porK={}; pares.forEach(p=>(porK[p.k]=porK[p.k]||[]).push(p));
     ws = wb.addWorksheet('Asertividad'); ws.addRow(['Asertividad — '+nombreModo(f.modo)]).font={bold:true,size:13}; ws.addRow([info]).font={italic:true,size:9};
