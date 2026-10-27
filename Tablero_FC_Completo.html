@@ -161,15 +161,18 @@ function fmt(v, dec=0){ if(v===''||v==null||!isFinite(v)) return '—'; let x=v/
 function fmtPct(v){ if(v==null||!isFinite(v)) return '—'; return (v*100).toLocaleString('es-CO',{maximumFractionDigits:1})+'%'; }
 const esc = s => String(s).replace(/[&<>"]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 function td(v, cls=''){ const neg = typeof v==='number' && v <= -5e5; return `<td class="n ${cls} ${neg?'neg':''}">${typeof v==='number'?fmt(v):v}</td>`; }
-/** Semáforo de desvío (misma regla del Sheet): verde si |real−plan| < materialidad o ≤ 10% del plan; ámbar 10–25%; rojo > 25%. */
+/** Semáforo de cumplimiento (misma regla del Sheet). Mira el efecto en CAJA: Real − Plan ≥ 0 = entró más o salió menos de lo planeado.
+ *  verde: cumplió (o desfavorable ≤ 2% del plan) · ámbar: desfavorable ≤ 10% del plan o menor a la materialidad · rojo: desfavorable mayor. */
 function semaforo(r, p, mat){
   if (r==null || p==null) return '';
-  const d=Math.abs(r-p); if (d < mat) return 'verde';
-  const b=Math.abs(p); if(!b) return 'rojo';
-  const x=d/b; return x<=0.10?'verde':x<=0.25?'ambar':'rojo';
+  const d = r - p; if (d >= 0) return 'verde';
+  const a = -d, b = Math.abs(p);
+  if (b && a/b <= 0.02) return 'verde';
+  if ((b && a/b <= 0.10) || a < mat) return 'ambar';
+  return 'rojo';
 }
 const SEM_HEX = {verde:'#1e8e3e', ambar:'#e8a33d', rojo:'#c5221f'};
-const leyendaSem = mat => `<div class="leyenda">Semáforo del desvío (Real − Plan): <span><span class="sd verde"></span>verde ≤ 10% del plan o menor a ${fmt(mat)} M</span><span><span class="sd ambar"></span>ámbar 10–25%</span><span><span class="sd rojo"></span>rojo &gt; 25%</span><span>· la materialidad se cambia arriba</span></div>`;
+const leyendaSem = mat => `<div class="leyenda">Semáforo de cumplimiento (efecto en caja, igual para entradas y salidas): <span><span class="sd verde"></span>cumplió: entró más o salió menos (tolerancia 2%)</span><span><span class="sd ambar"></span>peor que el plan hasta 10% o menos de ${fmt(mat)} M</span><span><span class="sd rojo"></span>peor que el plan en más de 10%</span><span>· la precisión del pronóstico (en ambos sentidos) está en Asertividad</span></div>`;
 function chipAsert(a){ if(a==null) return '<span class="chip neu">—</span>'; const c=a>=0.9?'ok':a>=0.75?'warn':'bad'; return `<span class="chip ${c}">${fmtPct(a)}</span>`; }
 
 // ============================== CARGA DE DATOS ==============================
@@ -267,7 +270,9 @@ function prepararFiltros(){
   $('fDesde').innerHTML = opts; $('fHasta').innerHTML = opts;
   const mr = DB.mesesReal;
   $('fDesde').value = mr[0] || DB.todosMeses[0];
-  $('fHasta').value = mr[mr.length-1] || DB.todosMeses[DB.todosMeses.length-1];
+  const finAnio = mr.length ? mr[mr.length-1].slice(0,4)+'-12' : null;
+  const hastaDef = finAnio ? DB.todosMeses.filter(m=>m<=finAnio).slice(-1)[0] : null;
+  $('fHasta').value = hastaDef || mr[mr.length-1] || DB.todosMeses[DB.todosMeses.length-1];
   const fc = DB.versiones.filter(v=>v.tipo==='FCST'), pp = DB.versiones.filter(v=>v.tipo==='PPTO');
   $('fModo').innerHTML =
     `<optgroup label="Forecast móvil"><option value="lag0">Forecast hecho al inicio de cada mes</option>
@@ -278,11 +283,15 @@ function prepararFiltros(){
 }
 const F = () => ({desde:$('fDesde').value, hasta:$('fHasta').value, modo:$('fModo').value, nivel:$('fNivel').value, mat:parseNum($('fMat').value)*1e6});
 function versionPlan(mes, modo){
-  if (modo.startsWith('lag')){ const k=+modo.slice(3); const v='FCST-'+mesAdd(mes,-k); return DB.ver[v] && DB.ver[v][mes] ? v : null; }
+  if (modo.startsWith('lag')){ const k=+modo.slice(3); const v='FCST-'+mesAdd(mes,-k); if (DB.ver[v] && DB.ver[v][mes]) return v;
+    if (k===0 && !DB.real[mes]) return versionVigente(mes);   // meses sin real: la proyección más reciente que los incluya
+    return null; }
   if (modo==='ppto'){ const v='PPTO-'+mes.slice(0,4); return DB.ver[v] && DB.ver[v][mes] ? v : null; }
   if (modo.startsWith('ver:')){ const v=modo.slice(4); return DB.ver[v] && DB.ver[v][mes] ? v : null; }
   return null;
 }
+/** Versión de forecast más reciente que incluye el mes (para meses que aún no tienen real). */
+function versionVigente(mes){ const vs = DB.versiones.filter(v=>v.tipo==='FCST' && DB.ver[v.version] && DB.ver[v.version][mes]).map(v=>v.version).sort(); return vs.length ? vs[vs.length-1] : null; }
 function nombreModo(modo){
   return {lag0:'forecast del inicio de mes', lag1:'forecast de 1 mes antes', lag2:'forecast de 2 meses antes', lag3:'forecast de 3 meses antes', ppto:'presupuesto anual'}[modo] || modo.slice(4);
 }
@@ -356,6 +365,7 @@ function vResumen(f){
   let minProj=null, mesMin=null, minObj=null, necFin=0;
   if (vig){ vig.meses.forEach(m=>{ const s=(DB.verSaldo[vig.version]||{})[m]||{}; if(s['Saldo final']!=null && (minProj==null||s['Saldo final']<minProj)){minProj=s['Saldo final'];mesMin=m;} if(s['Nivel mínimo de caja']!=null) minObj=s['Nivel mínimo de caja']; necFin += ((DB.ver[vig.version][m]||{})['Giros recibidos (financiación)']||0); }); }
   const dif = rComp-pComp;
+  const ccRes = calcCaja(f, '');
   let kpiPpto = '';
   if (hayPpto() && f.modo!=='ppto'){ const cp = comparar({...f,modo:'ppto'}).filter(c=>c.hayReal&&c.plan); const rr=cp.reduce((a,c)=>a+sumObj(c.real),0), pp=cp.reduce((a,c)=>a+sumObj(c.plan),0);
     kpiPpto = `<div class="kpi ${cp.length?(rr-pp>=0?'ok':'bad'):''}"><div class="lab">Real − presupuesto anual</div><div class="val">${cp.length?fmt(rr-pp):'—'}</div><div class="sub">${cp.length?'Real '+fmt(rr)+' vs ppto '+fmt(pp)+' · '+cp.length+' meses':'sin meses comparables'}</div></div>`; }
@@ -373,19 +383,18 @@ function vResumen(f){
       <div class="kpi ${necFin>0?'warn':'ok'}"><div class="lab">Financiación nueva proyectada</div><div class="val">${vig?fmt(necFin):'—'}</div><div class="sub">${vig?'giros a tomar en '+esc(vig.version):''}</div></div>
     </div>
     <div class="grid2">
-      <div class="card"><h3>Flujo neto mensual: real vs ${esc(nombreModo(f.modo))}</h3><p class="nota">Barras = real · línea = plan del mes</p><div class="chartbox"><canvas id="cResFlujo"></canvas></div></div>
-      <div class="card"><h3>Saldo de caja: real y proyectado</h3><p class="nota">Real (fin de mes, según bancos si está digitado) · proyección de ${vig?esc(vig.version):'—'} · nivel mínimo</p><div class="chartbox"><canvas id="cResSaldo"></canvas></div></div>
+      <div class="card"><h3>Flujo neto mensual: real vs ${esc(nombreModo(f.modo))}</h3><p class="nota">Barras = flujo neto real, coloreadas con el semáforo de cumplimiento (<span class="sd verde"></span>igual o mejor que el plan · <span class="sd ambar"></span>hasta 10% peor · <span class="sd rojo"></span>más de 10% peor). Línea = plan; en los meses sin real muestra la proyección vigente (barras claras).</p><div class="chartbox"><canvas id="cResFlujo"></canvas></div></div>
+      <div class="card"><h3>Saldo de caja: real vs proyectado y próximos meses</h3><p class="nota">${leyendaCaja(ccRes)}</p><div class="chartbox"><canvas id="cResSaldo"></canvas></div></div>
     </div>
     <div class="card"><h3>Asertividad mensual</h3><p class="nota">Por mes, al nivel elegido. Verde ≥ 90% · ámbar 75–90% · rojo &lt; 75%.</p><div class="chartbox" style="height:220px"><canvas id="cResAsert"></canvas></div></div>`;
   const ms = comp.map(c=>c.mes);
+  const semMes = comp.map(c=>c.hayReal&&c.plan ? semaforo(sumObj(c.real), sumObj(c.plan), f.mat) : '');
   chart('cResFlujo',{type:'bar',data:{labels:ms.map(mesTxt),datasets:[
-    {type:'bar',label:'Real',data:comp.map(c=>c.hayReal?sumObj(c.real):null),backgroundColor:'#0E3552',order:2},
-    {type:'line',label:'Plan',data:comp.map(c=>c.plan?sumObj(c.plan):null),borderColor:'#C9862E',backgroundColor:'#C9862E',pointRadius:4,spanGaps:false,order:1}]},options:baseOpts()});
-  const mesesS = [...new Set([...DB.mesesReal, ...(vig?vig.meses:[])])].sort();
-  chart('cResSaldo',{type:'line',data:{labels:mesesS.map(mesTxt),datasets:[
-    {label:'Saldo real',data:mesesS.map(m=>{const s=DB.saldoReal[m]; return s?(s.bancos!=null?s.bancos:s.finCalc):null;}),borderColor:'#0E3552',backgroundColor:'#0E3552',pointRadius:3},
-    {label:'Saldo proyectado'+(vig?' ('+vig.version+')':''),data:mesesS.map(m=>vig&&(DB.verSaldo[vig.version]||{})[m]?(DB.verSaldo[vig.version][m]['Saldo final']??null):null),borderColor:'#3D6A88',borderDash:[6,4],pointRadius:3},
-    {label:'Nivel mínimo',data:mesesS.map(()=>minObj),borderColor:'#B23A2E',borderWidth:1,pointRadius:0}]},options:baseOpts()});
+    {type:'bar',label:'Real (color = semáforo)',data:comp.map(c=>c.hayReal?sumObj(c.real):null),backgroundColor:semMes.map(x=>x?SEM_HEX[x]:'#0E3552'),order:2},
+    {type:'bar',label:'Proyección (meses sin real)',data:comp.map(c=>!c.hayReal&&c.plan?sumObj(c.plan):null),backgroundColor:'rgba(11,125,176,.25)',borderColor:'#0B7DB0',borderWidth:1,borderDash:[4,3],order:3},
+    {type:'line',label:'Plan',data:comp.map(c=>c.plan?sumObj(c.plan):null),borderColor:'#C9862E',backgroundColor:'#C9862E',pointRadius:4,spanGaps:false,order:1}]},
+    options:baseOpts({plugins:{legend:{position:'bottom',labels:{boxWidth:12,font:{size:11}}},tooltip:{callbacks:{label:c=>c.raw==null?null:`${c.dataset.label}: ${fmt(c.raw)} M`,afterBody:it=>{ const x=semMes[it[0].dataIndex]; const v=comp[it[0].dataIndex].version; return [v?'Plan: '+v:'', x?'Cumplimiento: '+CHIP_CUMPL[x][1]:''].filter(Boolean); }}}},scales:{x:{stacked:true,ticks:{font:{size:10}},grid:{display:false}},y:{ticks:{callback:fmtTick,font:{size:10}},grid:{color:'#eef1f4'}}}})});
+  dibujarCaja('cResSaldo', ccRes);
   chart('cResAsert',{type:'bar',data:{labels:ms.map(mesTxt),datasets:[{label:'Asertividad',data:comp.map(c=>{ const a=asertividad(paresDe([c])).a; return a==null?null:a*1e8; }),
     backgroundColor:comp.map(c=>{const a=asertividad(paresDe([c])).a; return a==null?'#ccc':a>=0.9?'#2E7D5B':a>=0.75?'#C9862E':'#B23A2E';})}]},
     options:baseOpts({plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>'Asertividad: '+fmtPct(c.raw/1e8)}}},scales:{y:{min:0,max:1e8,ticks:{callback:v=>(v/1e6).toFixed(0)+'%'}}}})});
@@ -418,10 +427,14 @@ function filasTabla(f, comp){
   return filas;
 }
 function vTabla(f){
-  const comp = comparar(f), filas = filasTabla(f, comp);
+  const comp = comparar(f);
   const conPlan = comp.filter(c=>c.hayReal&&c.plan);
   const pptoDisp = hayPpto() && f.modo!=='ppto';
   const compP = pptoDisp ? comparar({...f, modo:'ppto'}) : null;
+  // si en un mes una de las dos comparaciones tuvo que unir el recaudo (histórico sin apertura vs apertura), se une en ambas para que la fila sea la misma
+  if (compP && f.nivel==='rubro') comp.forEach((c,i)=>{ const c2=compP[i]; const u = o => o && (R_JUNTO in o);
+    if ([c.real,c.plan,c2.real,c2.plan].some(u)) { c.real=unirRecaudo(c.real); c.plan=c.plan&&unirRecaudo(c.plan); c2.real=unirRecaudo(c2.real); c2.plan=c2.plan&&unirRecaudo(c2.plan); } });
+  const filas = filasTabla(f, comp);
   const cols = ['r','p','d','pp','dpp'].filter(x=>colsTabla[x] && (pptoDisp || (x!=='pp'&&x!=='dpp')));
   const nomCol = {r:'Real',p:'Plan',d:'Real−Plan',pp:'Ppto',dpp:'Real−Ppto'};
   let h1 = `<tr><th rowspan="2">Concepto</th>${comp.map(c=>`<th colspan="${cols.length}" class="sep" style="text-align:center">${mesTxt(c.mes)}${c.version?'<br><span style="font-weight:400;font-size:9.5px;opacity:.8">'+esc(c.version)+(/tarde/.test(DB.versiones.find(v=>v.version===c.version)?.origen||'')?' · tarde':'')+'</span>':''}</th>`).join('')}<th colspan="5" class="sep" style="text-align:center">TOTAL meses comparables (${conPlan.length})</th></tr>`;
@@ -446,7 +459,7 @@ function vTabla(f){
       }).join('');
     }).join('');
     const tot = fl.tipo==='sal' ? '<td class="sep" colspan="5"></td>' :
-      td(conPlan.length?tr:'—','sep')+td(conPlan.length?tp:'—')+celda(conPlan.length?tr-tp:null,'',conPlan.length?semaforo(tr,tp,f.mat*conPlan.length):'')+`<td class="n">${conPlan.length&&tp?fmtPct((tr-tp)/Math.abs(tp)):'—'}</td><td class="n">${fl.tipo==='rub'||fl.tipo==='sub'?chipAsert(sR?Math.max(0,1-sAbs/sR):null):''}</td>`;
+      td(conPlan.length?tr:'—','sep')+td(conPlan.length?tp:'—')+celda(conPlan.length?tr-tp:null,'',conPlan.length?semaforo(tr,tp,f.mat):'')+`<td class="n">${conPlan.length&&tp?fmtPct((tr-tp)/Math.abs(tp)):'—'}</td><td class="n">${fl.tipo==='rub'||fl.tipo==='sub'?chipAsert(sR?Math.max(0,1-sAbs/sR):null):''}</td>`;
     return `<tr class="${fl.tipo==='rub'?'':fl.tipo}"><td class="${fl.tipo==='rub'?'ind':''}">${esc(fl.label)}</td>${celdas}${tot}</tr>`;
   }).join('');
   const avisoPpto = !hayPpto() ? `<div class="aviso">No hay presupuesto anual cargado, por eso no aparece la comparación contra el flujo anual inicial. Se carga una vez (menú 4 del Sheet, versión PPTO-aaaa) con el Excel del flujo anual que quedó en diciembre.</div>` : '';
@@ -605,48 +618,90 @@ function vDesvios(f){
 // ---------- CAJA PROYECTADA ----------
 /** Semáforo del saldo vs nivel mínimo: rojo por debajo del mínimo, ámbar hasta 15% por encima, verde holgado. */
 const semSaldo = (v, min) => v==null||min==null ? '#7488A0' : v < min ? SEM_HEX.rojo : v < min*1.15 ? SEM_HEX.ambar : SEM_HEX.verde;
-let verCaja = null;
+let verCaja = '';   // '' = la proyección más reciente disponible para cada mes
+const saldoRealDe = m => { const s=DB.saldoReal[m]; return s ? (s.bancos!=null?s.bancos:s.finCalc) : null; };
+const CHIP_CUMPL = {verde:['ok','Cumplió'], ambar:['warn','Desvío leve'], rojo:['bad','Incumplió']};
+/** Datos de la gráfica de caja: meses con real (cumplimiento vs lo proyectado al inicio del mes) + meses futuros (proyección vs mínimo). */
+function calcCaja(f, verSel){
+  const ultReal = DB.mesesReal[DB.mesesReal.length-1];
+  const pasados = DB.mesesReal.slice();
+  const fcst = DB.versiones.filter(v=>v.tipo==='FCST');
+  const verDe = m => verSel ? (DB.ver[verSel] && DB.ver[verSel][m] ? verSel : null) : versionVigente(m);
+  const futuros = [...new Set((verSel ? fcst.filter(v=>v.version===verSel) : fcst).flatMap(v=>v.meses))].filter(m=>!ultReal || m>ultReal).sort().filter(m=>verDe(m));
+  const meses = [...pasados, ...futuros];
+  const sDe = (v,m,k) => ((DB.verSaldo[v]||{})[m]||{})[k];
+  const minGlobal = fcst.map(v=>Object.values(DB.verSaldo[v.version]||{}).map(o=>o['Nivel mínimo de caja']).find(x=>x!=null)).filter(x=>x!=null).slice(-1)[0] ?? null;
+  const filasM = meses.map(m=>{
+    if (pasados.includes(m)){ const v0='FCST-'+m; const r=saldoRealDe(m), p=sDe(v0,m,'Saldo final') ?? null;
+      return {m, tipo:'real', ver:DB.ver[v0]?v0:null, r, p, d:(r!=null&&p!=null)?r-p:null, sem:(r!=null&&p!=null)?semaforo(r,p,f.mat):'', min:sDe(v0,m,'Nivel mínimo de caja') ?? minGlobal}; }
+    const v=verDe(m), p=sDe(v,m,'Saldo final') ?? null, min=sDe(v,m,'Nivel mínimo de caja') ?? minGlobal;
+    const sem = p==null||min==null ? '' : p < min - 1e6 ? 'rojo' : p < min*1.15 ? 'ambar' : 'verde';   // 1 M de tolerancia: proyectar justo en el mínimo es ajustado, no bajo
+    return {m, tipo:'proy', ver:v, r:null, p, d:null, sem, min, fin:(DB.ver[v][m]||{})['Giros recibidos (financiación)']||0};
+  });
+  return {filasM, meses, ultReal, futuros};
+}
+function dibujarCaja(id, cc){
+  const {filasM, ultReal, futuros} = cc;
+  const realData = filasM.map(x=>x.tipo==='real'?x.r:null);
+  const proyPas = filasM.map(x=>x.tipo==='real'?x.p:null);
+  const proyFut = filasM.map(x=>x.tipo==='proy'?x.p:(x.m===ultReal&&futuros.length?x.r:null));
+  chart(id,{type:'bar',data:{labels:cc.meses.map(mesTxt),datasets:[
+    {type:'line',label:'Saldo real',data:realData,borderColor:'#16242F',backgroundColor:'#16242F',borderWidth:2.5,pointRadius:7,pointBorderColor:'#fff',pointBorderWidth:1.5,
+      pointBackgroundColor:filasM.map(x=>x.sem&&x.tipo==='real'?SEM_HEX[x.sem]:'#16242F'),order:1,spanGaps:false},
+    {type:'line',label:'Proyectado al inicio de cada mes',data:proyPas,borderColor:'#0B7DB0',borderDash:[6,4],borderWidth:2,pointRadius:3,pointBackgroundColor:'#0B7DB0',order:2,spanGaps:false},
+    {type:'line',label:'Proyección de los próximos meses',data:proyFut,borderColor:'#0B7DB0',borderDash:[3,3],borderWidth:2.5,pointRadius:filasM.map(x=>x.tipo==='proy'?6:0),pointBorderColor:'#fff',pointBorderWidth:1.5,
+      pointBackgroundColor:filasM.map(x=>x.tipo==='proy'&&x.sem?SEM_HEX[x.sem]:'#0B7DB0'),order:2,spanGaps:false},
+    {type:'line',label:'Nivel mínimo',data:filasM.map(x=>x.min),borderColor:'#B23A2E',borderWidth:1.5,borderDash:[4,4],pointRadius:0,order:3},
+    {type:'bar',label:'Financiación nueva prevista',data:filasM.map(x=>x.tipo==='proy'&&x.fin?x.fin:null),backgroundColor:'rgba(201,134,46,.55)',order:4}]},
+    options:baseOpts({plugins:{legend:{position:'bottom',labels:{boxWidth:12,font:{size:11}}},tooltip:{callbacks:{label:c=>c.raw==null?null:`${c.dataset.label}: ${fmt(c.raw)} M`,
+      afterBody:items=>{ const x=filasM[items[0].dataIndex]; if(!x) return ''; const t=[]; if(x.ver) t.push((x.tipo==='real'?'Proyectado por ':'Versión ')+x.ver);
+        if(x.sem) t.push(x.tipo==='real'?'Cumplimiento: '+CHIP_CUMPL[x.sem][1]:'Vs mínimo: '+(x.sem==='verde'?'holgado':x.sem==='ambar'?'ajustado':'bajo el mínimo')); return t; }}}}})});
+}
+const leyendaCaja = cc => `Hasta ${cc.ultReal?mesTxt(cc.ultReal):'—'}: línea negra = saldo real (bancos); el punto lleva el semáforo de cumplimiento contra el saldo que proyectó el forecast de inicio de ese mes (azul punteado): <span class="sd verde"></span>igual o mejor · <span class="sd ambar"></span>hasta 10% abajo · <span class="sd rojo"></span>más abajo. Después: proyección, con el punto en semáforo contra el nivel mínimo (<span class="sd rojo"></span>debajo · <span class="sd ambar"></span>hasta 15% encima · <span class="sd verde"></span>holgado). Barras naranjas = financiación nueva prevista.`;
 function vCaja(f){
-  const fc = DB.versiones.filter(v=>v.tipo!=='REAL');
-  if (!fc.length){ $('v-caja').innerHTML='<div class="aviso">Aún no hay forecast publicado.</div>'; return; }
+  if (!DB.mesesReal.length && !DB.versiones.some(v=>v.tipo==='FCST')){ $('v-caja').innerHTML='<div class="aviso">Aún no hay forecast publicado.</div>'; return; }
   const multi = DB.versiones.filter(v=>v.tipo==='FCST' && v.meses.length>1);
-  if (!verCaja || !DB.ver[verCaja]) verCaja = (multi[multi.length-1]||fc[fc.length-1]).version;
-  const v = DB.versiones.find(x=>x.version===verCaja), ms = v.meses;
-  const sal = DB.verSaldo[verCaja]||{};
-  const fv = {desde:ms[0],hasta:ms[ms.length-1],modo:'ver:'+verCaja,nivel:f.nivel};
-  const comp = ms.map(m=>({mes:m,version:verCaja,hayReal:false,real:{},plan:agrupar(DB.ver[verCaja][m],f.nivel)}));
-  const filas = filasTabla(fv, comp);
-  const necesidad = ms.map(m=>(DB.ver[verCaja][m]||{})['Giros recibidos (financiación)']||0);
-  const minObj = ms.map(m=>(sal[m]||{})['Nivel mínimo de caja']).find(x=>x!=null);
+  if (verCaja && !multi.some(x=>x.version===verCaja)) verCaja='';
+  const cc = calcCaja(f, verCaja), filasM = cc.filasM, futuros = cc.futuros;
+  const nC = filasM.filter(x=>x.tipo==='real'&&x.sem); const cuenta = k => nC.filter(x=>x.sem===k).length;
+  const chipF = x => { if(!x.sem) return '<span class="chip neu">—</span>'; if(x.tipo==='real'){ const c=CHIP_CUMPL[x.sem]; return `<span class="chip ${c[0]}">${c[1]}</span>`; }
+    return `<span class="chip ${x.sem==='verde'?'ok':x.sem==='ambar'?'warn':'bad'}">${x.sem==='verde'?'Holgado':x.sem==='ambar'?'Ajustado':'Bajo mínimo'}</span>`; };
+  const verTabla = verCaja || (multi.length ? multi[multi.length-1].version : null);
+  const v = verTabla ? DB.versiones.find(x=>x.version===verTabla) : null, sal = verTabla ? (DB.verSaldo[verTabla]||{}) : {};
+  const ms = v ? v.meses : [];
+  const fv = {desde:ms[0],hasta:ms[ms.length-1],modo:'ver:'+verTabla,nivel:f.nivel};
+  const comp = ms.map(m=>({mes:m,version:verTabla,hayReal:false,real:{},plan:agrupar(DB.ver[verTabla][m],f.nivel)}));
+  const filas = v ? filasTabla(fv, comp) : [];
+  const sepC = m => m===futuros[0]?'sep':'';
   $('v-caja').innerHTML = `
-    <div class="filtros" style="padding:0 0 10px;background:none;border:none"><label>Versión<select id="selVer">${fc.map(x=>`<option ${x.version===verCaja?'selected':''}>${esc(x.version)}</option>`).join('')}</select></label>
-      <span class="muted" style="font-size:11px">Publicada ${esc(String(v.fecha).slice(0,10))} · ${ms.length} meses</span></div>
-    <div class="grid2">
-      <div class="card"><h3>Caja proyectada (${esc(verCaja)})</h3><p class="nota">Línea = saldo final proyectado; cada punto con semáforo vs el nivel mínimo (<span class="sd rojo"></span>debajo del mínimo · <span class="sd ambar"></span>hasta 15% por encima · <span class="sd verde"></span>holgado). Barras grises = flujo neto; naranja = financiación nueva necesaria.</p><div class="chartbox"><canvas id="cCaja"></canvas></div></div>
-      <div class="card"><h3>Evolución del pronóstico de saldo</h3><p class="nota">Cada línea gris es una versión de forecast (pasa el mouse para ver cuál); la línea azul es ${esc(verCaja)} y la negra el saldo real. Puntos con el mismo semáforo vs el nivel mínimo.</p><div class="chartbox"><canvas id="cEvol"></canvas></div></div>
+    <div class="kpis">
+      <div class="kpi ok"><div class="lab">Meses que cumplieron el saldo</div><div class="val">${cuenta('verde')} de ${nC.length}</div><div class="sub">saldo real ≥ saldo proyectado al inicio del mes</div></div>
+      <div class="kpi warn"><div class="lab">Desvío leve</div><div class="val">${cuenta('ambar')}</div><div class="sub">hasta 10% por debajo de lo proyectado</div></div>
+      <div class="kpi bad"><div class="lab">Incumplieron</div><div class="val">${cuenta('rojo')}</div><div class="sub">más de 10% por debajo</div></div>
+      <div class="kpi ${filasM.some(x=>x.tipo==='proy'&&x.sem==='rojo')?'bad':filasM.some(x=>x.tipo==='proy'&&x.sem==='ambar')?'warn':'ok'}"><div class="lab">Meses proyectados bajo el mínimo</div><div class="val">${filasM.filter(x=>x.tipo==='proy'&&x.sem==='rojo').length} de ${futuros.length}</div><div class="sub">${futuros.length?mesTxt(futuros[0])+' a '+mesTxt(futuros[futuros.length-1]):'sin proyección'}</div></div>
     </div>
-    <div class="card"><h3>Flujo proyectado por mes (${esc(verCaja)})</h3><div class="tabla-wrap"><table class="t" id="tablaCaja"><thead><tr><th>Concepto</th>${ms.map(m=>`<th>${mesTxt(m)}</th>`).join('')}<th class="sep">Total</th></tr></thead><tbody>
+    <div class="card"><div style="display:flex;justify-content:space-between;align-items:flex-end;gap:12px;flex-wrap:wrap">
+      <div><h3>Saldo de caja: real vs proyectado, y proyección de los próximos meses</h3><p class="nota" style="max-width:1100px">${leyendaCaja(cc)}</p></div>
+      <label style="font-size:9.5px;font-weight:700;color:var(--ink-soft);text-transform:uppercase;display:flex;flex-direction:column;gap:3px">Proyección a mostrar<select id="selVer" style="font-family:var(--sans);font-size:12.5px;padding:5px 8px;border:1px solid var(--line);border-radius:6px;font-weight:600;color:var(--navy)"><option value="" ${!verCaja?'selected':''}>La más reciente de cada mes</option>${multi.map(x=>`<option ${x.version===verCaja?'selected':''}>${esc(x.version)}</option>`).join('')}</select></label>
+    </div>
+      <div class="chartbox" style="height:420px"><canvas id="cCaja"></canvas></div>
+      <div class="tabla-wrap" style="margin-top:12px;max-height:none"><table class="t"><thead><tr><th>Mes</th>${filasM.map(x=>`<th class="${sepC(x.m)}">${mesTxt(x.m)}${x.ver?'<br><span style="font-weight:400;font-size:9px;opacity:.8">'+esc(x.ver)+'</span>':''}</th>`).join('')}</tr></thead><tbody>
+        <tr><td>Saldo real</td>${filasM.map(x=>td(x.r==null?'—':x.r, sepC(x.m))).join('')}</tr>
+        <tr><td>Saldo proyectado</td>${filasM.map(x=>td(x.p==null?'—':x.p, sepC(x.m))).join('')}</tr>
+        <tr><td>Real − proyectado</td>${filasM.map(x=>`<td class="n ${sepC(x.m)} ${x.d!=null&&x.d<=-5e5?'neg':''} ${x.tipo==='real'&&x.sem?'sem-'+x.sem:''}">${x.d==null?'—':`<span class="sd ${x.sem}"></span>`+fmt(x.d)}</td>`).join('')}</tr>
+        <tr><td>Nivel mínimo</td>${filasM.map(x=>td(x.min==null?'—':x.min, sepC(x.m))).join('')}</tr>
+        <tr class="sub"><td>Calificación</td>${filasM.map(x=>`<td class="n ${sepC(x.m)}">${chipF(x)}</td>`).join('')}</tr>
+      </tbody></table></div>
+      <p class="nota" style="margin-top:8px">El saldo proyectado de cada mes arrastra también el error del saldo inicial; el detalle por rubro está en la Tabla FC.</p>
+    </div>
+    ${v?`<div class="card"><h3>Flujo proyectado por mes (${esc(verTabla)})</h3><div class="tabla-wrap"><table class="t" id="tablaCaja"><thead><tr><th>Concepto</th>${ms.map(m=>`<th>${mesTxt(m)}</th>`).join('')}<th class="sep">Total</th></tr></thead><tbody>
       ${filas.map(fl=>{ if(fl.tipo==='sec') return `<tr class="sec"><td>${esc(fl.label)}</td>${ms.map(()=>'<td></td>').join('')}<td></td></tr>`;
         const vals = comp.map(c=>fl.get(c,'p')); const t = fl.tipo==='sal'?'':vals.reduce((a,b)=>a+(b||0),0);
         return `<tr class="${fl.tipo==='rub'?'':fl.tipo}"><td class="${fl.tipo==='rub'?'ind':''}">${esc(fl.label)}</td>${vals.map(x=>td(x==null?'—':x)).join('')}${t===''?'<td class="sep"></td>':td(t,'sep')}</tr>`; }).join('')}
       <tr><td>Nivel mínimo de caja</td>${ms.map(m=>td((sal[m]||{})['Nivel mínimo de caja']??'—')).join('')}<td class="sep"></td></tr>
-      </tbody></table></div></div>`;
+      </tbody></table></div></div>`:''}`;
   $('selVer').onchange = e => { verCaja = e.target.value; vCaja(F()); };
-  chart('cCaja',{type:'bar',data:{labels:ms.map(mesTxt),datasets:[
-    {type:'line',label:'Saldo final proyectado',data:ms.map(m=>(sal[m]||{})['Saldo final']??null),borderColor:'#0E3552',backgroundColor:'#0E3552',pointRadius:5,order:1,
-      pointBackgroundColor:ms.map(m=>semSaldo((sal[m]||{})['Saldo final'], (sal[m]||{})['Nivel mínimo de caja']??minObj)),pointBorderColor:'#fff'},
-    {type:'line',label:'Nivel mínimo',data:ms.map(()=>minObj??null),borderColor:'#B23A2E',borderWidth:1,pointRadius:0,order:1},
-    {type:'bar',label:'Flujo neto',data:ms.map(m=>sumObj(DB.ver[verCaja][m])),backgroundColor:'#C7D2DA',order:3},
-    {type:'bar',label:'Financiación nueva',data:necesidad,backgroundColor:'#C9862E',order:2}]},options:baseOpts()});
-  const versF = DB.versiones.filter(x=>x.tipo==='FCST' && x.meses.length>1); const mesesE = [...new Set([...versF.flatMap(x=>x.meses), ...DB.mesesReal.slice(-6)])].sort();
-  const minDe = (v,m) => ((DB.verSaldo[v]||{})[m]||{})['Nivel mínimo de caja'] ?? minObj;
-  chart('cEvol',{type:'line',data:{labels:mesesE.map(mesTxt),datasets:[
-    ...versF.map(x=>{ const sel = x.version===verCaja; const vals = mesesE.map(m=>((DB.verSaldo[x.version]||{})[m]||{})['Saldo final']??null);
-      return {label:x.version,data:vals,borderColor:sel?'#0B7DB0':'#C7D2DA',borderWidth:sel?2.5:1.5,order:sel?1:3,spanGaps:false,
-        pointRadius:sel?4:2.5,pointBackgroundColor:mesesE.map((m,i)=>semSaldo(vals[i],minDe(x.version,m))),pointBorderColor:mesesE.map(()=>'rgba(0,0,0,0)')}; }),
-    {label:'Real',data:mesesE.map(m=>{const s=DB.saldoReal[m]; return s?(s.bancos!=null?s.bancos:s.finCalc):null;}),borderColor:'#16242F',backgroundColor:'#16242F',borderWidth:2.5,pointRadius:3,order:0},
-    {label:'Nivel mínimo',data:mesesE.map(()=>minObj??null),borderColor:'#B23A2E',borderWidth:1,borderDash:[4,4],pointRadius:0,order:4}]},
-    options:baseOpts({plugins:{legend:{display:false},tooltip:{mode:'nearest',intersect:false,callbacks:{label:c=>`${c.dataset.label}: ${fmt(c.raw)} M`}}}})});
+  dibujarCaja('cCaja', cc);
 }
 
 // ---------- DATOS ----------
