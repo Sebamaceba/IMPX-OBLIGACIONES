@@ -368,7 +368,7 @@
       <div class="filters">
         <select id="f47_vista"><option value="mes">Agrupar por mes</option><option value="semana">Agrupar por semana</option></select>
         <select id="f47_periodo"><option value="">Todos los períodos</option></select>
-        <select id="f47_tipo_fecha"><option value="ambos">Estimados y reales</option><option value="real">Solo reales/confirmados</option><option value="estimado">Solo estimados</option></select>
+        <select id="f47_tipo_fecha"><option value="ambos">Estimados y reales</option><option value="real">Solo fecha digitada</option><option value="estimado">Solo fecha calculada</option></select>
         <select id="f47_tipo"><option value="">Todos los tipos de pago</option></select>
         <input id="f47_buscar" placeholder="Buscar pedido, proveedor o proyecto...">
         <button id="f47_descargar" type="button" style="background:var(--navy);color:#fff;border:none;border-radius:6px;padding:8px 14px;font-size:12px;cursor:pointer;">⬇ Descargar a Excel</button>
@@ -1276,34 +1276,80 @@ function weightedMean(pairs){
   return mean(pairs.map(p=>p.valor)); // respaldo: si ninguna observación trae fecha, promedio simple
 }
 
-function buildNavegacionStats(ton){
+function buildNavegacionStats(ton, provPorPedido){
   // Une Cuadro Pedidos (Fecha Real de Zarpe, País de Origen) con Control de Importaciones (Fecha Real de Arribo)
-  // por Nombre Proyecto, y calcula días de navegación por País de Origen.
+  // por Nombre Proyecto, y calcula días de navegación (zarpe → arribo).
+  // Tanda 55 (5-nov-2026, decisión de Sebastián): la navegación se estima con los embarques del PROPIO PROVEEDOR
+  // (≥ MIN_MUESTRA embarques) y solo si no los tiene cae al país y luego al global. Punto = MEDIANA (antes p80 del
+  // país). Caso que lo motivó: WUXI_HAOGUANG navega en ~37 días (9 embarques reales) y se proyectaba con 59 (p80 China).
+  // El rango probable usa p20–p80 de esa misma muestra. El p80 sigue disponible como "meta" para los semáforos de tránsito.
+  provPorPedido = provPorPedido || {};
   const porProyecto = {};
   ton.rows.forEach(r=>{
     if(!r.nombreProyecto || !r.fechaRealZarpe) return;
-    if(!porProyecto[r.nombreProyecto]) porProyecto[r.nombreProyecto] = {pais:r.paisOrigen, zarpe:r.fechaRealZarpe};
+    if(!porProyecto[r.nombreProyecto]){
+      const ped = ton.proformaToPedido ? ton.proformaToPedido[r.proforma] : null;
+      porProyecto[r.nombreProyecto] = {pais:r.paisOrigen, zarpe:r.fechaRealZarpe, prov: ped ? (provPorPedido[ped]||null) : null};
+    }
   });
-  const porPais = {};
+  const porPais = {}, porProv = {}, todos = [];
   Object.entries(porProyecto).forEach(([proy,info])=>{
     const imp = ton.porProyectoImport[proy];
     if(!imp || !imp.fechaRealArribo) return;
     const d = daysBetween(info.zarpe, imp.fechaRealArribo);
     if(d===null || d<0 || d>200) return;
     const k = info.pais || 'SIN PAÍS';
-    porPais[k] = porPais[k] || [];
-    porPais[k].push(d);
+    (porPais[k] = porPais[k] || []).push(d);
+    if(info.prov) (porProv[info.prov] = porProv[info.prov] || []).push(d);
+    todos.push(d);
   });
-  const GLOBAL = mean(Object.values(porPais).flat());
-  const statsPorPais = {};
-  Object.entries(porPais).forEach(([pais,arr])=>{
-    statsPorPais[pais] = { n:arr.length, promedio: mean(arr), p50: percentile(arr,0.5), p80: percentile(arr,0.8), confiable: arr.length>=MIN_MUESTRA };
-  });
-  function diasNavegacion(pais){
+  const resumen = arr => ({ n:arr.length, promedio: mean(arr), p20: percentile(arr,0.2), p50: percentile(arr,0.5), p80: percentile(arr,0.8), confiable: arr.length>=MIN_MUESTRA });
+  const statsPorPais = {}, statsPorProveedor = {};
+  Object.entries(porPais).forEach(([pais,arr])=>{ statsPorPais[pais] = resumen(arr); });
+  Object.entries(porProv).forEach(([pv,arr])=>{ statsPorProveedor[pv] = resumen(arr); });
+  const statsGlobal = todos.length ? resumen(todos) : {n:0, p20:40, p50:48, p80:60, confiable:false};
+  const GLOBAL = statsGlobal.p50;
+  // Jerarquía: proveedor (≥5 embarques) → país (≥5) → global. Devuelve también de dónde salió el dato.
+  function rangoNavegacion(pais, prov){
+    const sp = prov ? statsPorProveedor[prov] : null;
+    if(sp && sp.confiable) return {...sp, nivel:'proveedor', etiqueta:`navegación del proveedor (mediana de ${sp.n} embarques)`};
     const s = statsPorPais[pais];
-    return (s && s.confiable) ? s.p80 : GLOBAL;
+    if(s && s.confiable) return {...s, nivel:'país', etiqueta:`navegación de ${pais} (mediana de ${s.n} embarques${sp?`; el proveedor solo tiene ${sp.n}`:''})`};
+    return {...statsGlobal, nivel:'global', etiqueta:`navegación global (mediana de ${statsGlobal.n} embarques)`};
   }
-  return { statsPorPais, GLOBAL, diasNavegacion };
+  function diasNavegacion(pais, prov){ return rangoNavegacion(pais, prov).p50; }
+  // ---- Tanda 55: ETA digitada por Comex en Control de Importaciones ("Fecha Estimada de Arribo") ----
+  // Hoy el Tablero no la usaba. Se usa para lo que va NAVEGANDO solo si, en los embarques ya arribados, acierta igual o mejor
+  // que el cálculo (zarpe real + mediana de navegación). Se excluyen del backtest las ETA idénticas al arribo real (suelen ser
+  // ETA sobrescritas después de llegar y harían ver a la ETA mejor de lo que es).
+  const errEta = [], errNav = [];
+  Object.entries(porProyecto).forEach(([proy,info])=>{
+    const imp = ton.porProyectoImport[proy];
+    if(!imp || !imp.fechaRealArribo || !imp.fechaEstimadaArribo) return;
+    const e = daysBetween(imp.fechaEstimadaArribo, imp.fechaRealArribo); if(e===null || e===0 || Math.abs(e)>120) return;
+    const calc = addDays(info.zarpe, Math.round(rangoNavegacion(info.pais, info.prov).p50||45));
+    errEta.push(Math.abs(e)); errNav.push(Math.abs(daysBetween(calc, imp.fechaRealArribo)));
+  });
+  const backtestETA = { n: errEta.length, errEtaMediana: percentile(errEta,0.5), errNavMediana: percentile(errNav,0.5), errEtaP80: percentile(errEta,0.8) };
+  backtestETA.usarETA = backtestETA.n>=MIN_MUESTRA && backtestETA.errEtaMediana!==null && backtestETA.errEtaMediana <= backtestETA.errNavMediana;
+  // Arribo esperado de un embarque que YA zarpó y no ha llegado: UNA sola función para llegadas, pagos y nacionalización.
+  function arriboTransito(zarpe, pedido, proyecto, paisFila){
+    const hoyD = new Date(); hoyD.setHours(0,0,0,0);
+    const imp = proyecto ? ton.porProyectoImport[proyecto] : null;
+    if(backtestETA.usarETA && imp && imp.fechaEstimadaArribo && imp.fechaEstimadaArribo >= hoyD){
+      const e = Math.round(backtestETA.errEtaP80||7);
+      const mn = addDays(imp.fechaEstimadaArribo, -e);
+      return {fecha: imp.fechaEstimadaArribo, origen:'Digitado', base:`ETA digitada en Control de Importaciones (error típico ±${Math.round(backtestETA.errEtaMediana)} días en ${backtestETA.n} embarques)`,
+              min: mn<hoyD?hoyD:mn, max: addDays(imp.fechaEstimadaArribo, e)};
+    }
+    const r = rangoNavegacion(paisFila || ton.paisPorPedido[pedido], provPorPedido[pedido]);
+    const mn = addDays(zarpe, Math.round(r.p20||r.p50||45));
+    return {fecha: addDays(zarpe, Math.round(r.p50||45)), origen:'Calculado', base:`zarpe real + ${r.etiqueta}`, min: mn<hoyD?hoyD:mn, max: addDays(zarpe, Math.round(r.p80||r.p50||45))};
+  }
+  function diasNavegacionMeta(pais, prov){ return rangoNavegacion(pais, prov).p80; } // tolerancia para semáforos de tránsito
+  function diasNavegacionPedido(pedido){ return diasNavegacion(ton.paisPorPedido[pedido], provPorPedido[pedido]); }
+  function rangoNavegacionPedido(pedido){ return rangoNavegacion(ton.paisPorPedido[pedido], provPorPedido[pedido]); }
+  return { statsPorPais, statsPorProveedor, statsGlobal, GLOBAL, backtestETA, arriboTransito, diasNavegacion, diasNavegacionMeta, rangoNavegacion, diasNavegacionPedido, rangoNavegacionPedido, provPorPedido };
 }
 
 function findHeaderRow(rows2d, anchors){
@@ -1721,6 +1767,7 @@ function buildToneladasModel(pedDetRaw, impRaw, prof, spAll, cierrePorPedido={})
       g.pesosVistos[key] = (g.pesosVistos[key]||0)+1;
     }
     if(r.fechaRealArribo && (!g.fechaRealArribo || r.fechaRealArribo>g.fechaRealArribo)) g.fechaRealArribo = r.fechaRealArribo;
+    if(r.fechaEstimadaArribo && (!g.fechaEstimadaArribo || r.fechaEstimadaArribo>g.fechaEstimadaArribo)) g.fechaEstimadaArribo = r.fechaEstimadaArribo; // Tanda 55: ETA digitada por Comex
     if(r.fechaLevanteDIM && (!g.fechaLevanteDIM || r.fechaLevanteDIM>g.fechaLevanteDIM)) g.fechaLevanteDIM = r.fechaLevanteDIM;
     if(r.incoterm && !g.incoterm) g.incoterm = r.incoterm;
   });
@@ -1787,7 +1834,7 @@ function buildMotorPagos(prof, ton, nav){
 
   function fechaArriboRealOEstimada(s){
     if(s.fechaRealArribo) return {fecha:s.fechaRealArribo, esEstimada:false};
-    if(s.fechaRealZarpe) return {fecha: addDays(s.fechaRealZarpe, nav.diasNavegacion(ton.paisPorPedido[s.pedido])||45), esEstimada:true};
+    if(s.fechaRealZarpe) return {fecha: nav.arriboTransito(s.fechaRealZarpe, s.pedido, s.proyecto).fecha, esEstimada:true};
     return {fecha:null, esEstimada:true};
   }
 
@@ -1908,7 +1955,8 @@ function buildModel({profRaw, spRaw, pgRaw, gfRaw, nacRaw, pedDetRaw, impRaw, pp
     c.porFacturacion = base>0 && c.facturado>0 && c.faltaFacturar < UMBRAL_FACTURACION_COMPLETA*base;
   });
   const ton = buildToneladasModel(pedDetRaw||[], impRaw||[], prof, spAll0, cierrePorPedido);
-  const nav = buildNavegacionStats(ton);
+  const provPorPedidoNav = {}; prof.forEach(x=>{ if(x.pedido && x.proveedor && !provPorPedidoNav[x.pedido]) provPorPedidoNav[x.pedido] = x.proveedor; });
+  const nav = buildNavegacionStats(ton, provPorPedidoNav);
   const pptoPorMes = buildPptoPorMes(pptoRaw||[]);
   const inventarioInicialPorMes = buildInventarioInicialPorMes(pptoRaw||[]);
 
@@ -1972,12 +2020,17 @@ function buildModel({profRaw, spRaw, pgRaw, gfRaw, nacRaw, pedDetRaw, impRaw, pp
     const cedeFilas = Math.max(0, aRepartir - huerfano), totExceso = exceso.reduce((a,b)=>a+b,0);
     if(totExceso>0) idxs.forEach((i,j)=>{ ajustePago[i] -= cedeFilas * exceso[j]/totExceso; });
   });
+  // Tanda 55 (decisión de Sebastián): los SALDOS pendientes de pedidos anteriores a FECHA_CORTE_HISTORICO (pedidos de 2025)
+  // son falta de data, no deuda real → se marcan 'EXCLUIDO (pedido anterior al corte)' y no entran a pagos, flujo ni BD.
+  // No es una exclusión silenciosa: se listan en Diagnóstico. Los GIROS FINANCIEROS abiertos sí se mantienen (son deuda con el banco).
+  const fechaPedidoMinProf = {}; prof.forEach(x=>{ if(x.pedido && x.fecha && (!fechaPedidoMinProf[x.pedido] || x.fecha<fechaPedidoMinProf[x.pedido])) fechaPedidoMinProf[x.pedido] = x.fecha; });
   const spAll = spAll0.map((s,i)=>{
     const netoFactura = s.valorFactura - s.reclasificacion - notasCreditoProrrateada(s);
     const pagadoRegistrado = pagadoAsignado[i];
     const pagado = pagadoRegistrado + ajustePago[i];
     const saldoCalculado = Math.max(0, netoFactura - pagado);
-    const estadoCalculado = saldoCalculado > 1 ? 'PENDIENTE POR PAGAR' : 'PAGADO';
+    const fpPed = fechaPedidoMinProf[s.pedido];
+    const estadoCalculado = saldoCalculado > 1 ? ((fpPed && fpPed < FECHA_CORTE_HISTORICO) ? 'EXCLUIDO (pedido anterior al corte)' : 'PENDIENTE POR PAGAR') : 'PAGADO';
     const tComex = ton.porProyectoComex[s.proyecto];
     const tImp = ton.porProyectoImport[s.proyecto];
     const entregadoKg = tComex ? tComex.entregadoKg : null;
@@ -2535,7 +2588,7 @@ function buildModel({profRaw, spRaw, pgRaw, gfRaw, nacRaw, pedDetRaw, impRaw, pp
     return maxConcurrentesPorProveedor[prov] || 1;
   }
 
-  function diasNavegacionPedido(pedido){ return nav.diasNavegacion(ton.paisPorPedido[pedido]); }
+  function diasNavegacionPedido(pedido){ return nav.diasNavegacionPedido(pedido); }
 
   // ---- País de origen típico por proveedor (moda histórica) ----
   // diasNavegacionPedido() necesita un país y solo lo tiene para pedidos que YA tienen una fila en Cuadro
@@ -2563,7 +2616,7 @@ function buildModel({profRaw, spRaw, pgRaw, gfRaw, nacRaw, pedDetRaw, impRaw, pp
   function paisTipicoProveedor(prov){
     return modaPais(paisesPorProveedor[prov]) || GLOBAL_paisTipico;
   }
-  function diasNavegacionProveedor(prov){ return nav.diasNavegacion(paisTipicoProveedor(prov)); }
+  function diasNavegacionProveedor(prov){ return nav.diasNavegacion(paisTipicoProveedor(prov), prov); }
 
   function condicionRepresentativaPedido(pedido){
     const p = prof.find(x=>x.pedido===pedido && x.condicion);
@@ -2753,6 +2806,64 @@ function buildModel({profRaw, spRaw, pgRaw, gfRaw, nacRaw, pedDetRaw, impRaw, pp
       fechaArriboEstimada: parciales[0]?.fechaArriboEstimada};
   });
 
+  // ================= Tanda 55 (5-nov-2026): secuencia de embarques por proveedor + rango probable + origen de la fecha =================
+  // (a) Hallazgo: el N.º de parciales por pedido ya era bueno (backtest con 158 pedidos completados: error medio 0,47 embarques),
+  //     pero cada pedido se proyectaba SOLO. Tres pedidos del mismo proveedor colocados la misma semana zarpaban todos el mismo
+  //     día (ej. PS_GLOBAL 0271/0272/0273 → 3-ene). En la realidad el proveedor los despacha en fila: mediana de días entre
+  //     embarques del proveedor (todos sus pedidos juntos, gaps ≤ 30 días; PS_GLOBAL = 5 días, 33 observaciones).
+  //     Regla: los zarpes CALCULADOS (modelo o producción estimada) se ponen en fila por proveedor; los DIGITADOS (fecha de
+  //     zarpe del proveedor, producción ya terminada) no se mueven, pero sí ocupan su lugar en la fila.
+  // (b) Rango probable de arribo = [zarpe − error típico de la fuente + navegación p20, zarpe + error + navegación p80].
+  //     (implementado: errores combinados en cuadratura, ver cerrarParcial). Error típico del zarpe por fuente (backtest Tanda 53b): proveedor ±2 · producción terminada ±7 · producción estimada ±26 ·
+  //     mediana entre embarques ±14 · tiempo típico pedido→1.er zarpe ±26 (supuesto: igual que producción estimada) · re-anclado a hoy ±14.
+  // (c) Origen de la fecha: "Digitado" = alguien la escribió en el Sheet · "Calculado" = la calcula el Tablero (se dice desde qué).
+  const gapsColaObs = {}, gapsColaTodos = [];
+  { const ev = {}; spAll.forEach(x=>{ if(!x.fechaBL || !x.proveedor || !x.proyecto) return; const k = x.proveedor+'|'+x.proyecto; if(!ev[k]) ev[k] = {pv:x.proveedor, d:x.fechaBL}; });
+    const porPv = {}; Object.values(ev).forEach(e=>{ (porPv[e.pv] = porPv[e.pv] || []).push(e.d); });
+    Object.entries(porPv).forEach(([pv, arr])=>{ arr.sort((a,b)=>a-b); for(let i=1;i<arr.length;i++){ const d = daysBetween(arr[i-1], arr[i]); if(d===null || d>30) continue; gapsColaTodos.push(d); (gapsColaObs[pv] = gapsColaObs[pv] || []).push(d); } }); }
+  const GAP_COLA_GLOBAL = mediana(gapsColaTodos) ?? 6;
+  function gapColaProveedor(prov){ const a = gapsColaObs[prov]; return Math.max(1, Math.round((a && a.length>=MIN_MUESTRA) ? mediana(a) : GAP_COLA_GLOBAL)); }
+  function metaFuenteZarpe(par){
+    const f = par.fuenteZarpe || '';
+    if(par.retrasado) return {origen:'Calculado', base:'re-anclado a hoy (el zarpe calculado ya venció)', err:14, ajustable:true};
+    if(/^Proveedor:/.test(f)) return {origen:'Digitado', base:'fecha estimada de zarpe del proveedor (Cuadro Pedidos)', err:2, ajustable:false};
+    if(/^Producción terminada/.test(f)) return {origen:'Calculado', base:'producción real digitada + días típicos hasta zarpe', err:7, ajustable:false};
+    if(/^Producción estimada/.test(f)) return {origen:'Calculado', base:'producción estimada digitada + días típicos hasta zarpe', err:26, ajustable:true};
+    if(/mediana de días entre embarques/.test(f)) return {origen:'Calculado', base:'modelo: mediana de días entre embarques', err:14, ajustable:true};
+    return {origen:'Calculado', base:'modelo: tiempo típico pedido → 1.er zarpe del proveedor', err:26, ajustable:true};
+  }
+  const hoyDia = new Date(HOY.getFullYear(), HOY.getMonth(), HOY.getDate());
+  function cerrarParcial(p, par){
+    const r = nav.rangoNavegacionPedido(p.pedido);
+    par.navDias = Math.round(r.p50||45); par.navFuente = r.etiqueta;
+    par.fechaArriboEstimada = addDays(par.fechaZarpeEstimada, par.navDias);
+    // Error del zarpe y variación de la navegación son independientes: se combinan en cuadratura (no se suman los dos extremos)
+    const p50 = r.p50||45, bajo = Math.max(0, p50-(r.p20||p50)), alto = Math.max(0, (r.p80||p50)-p50);
+    const mn = addDays(par.fechaArriboEstimada, -Math.round(Math.sqrt(par.errZarpe**2 + bajo**2)));
+    par.arriboMin = mn < hoyDia ? hoyDia : mn;
+    par.arriboMax = addDays(par.fechaArriboEstimada, Math.round(Math.sqrt(par.errZarpe**2 + alto**2)));
+    let pago = fechaPagoPactada(p.condicionPago, par.fechaZarpeEstimada, par.fechaArriboEstimada, p.proveedor);
+    par.pagoAjustadoHoy = pago < HOY; if(par.pagoAjustadoHoy) pago = HOY;
+    par.fechaPagoEstimada = pago;
+    par.origenPago = 'Calculado'; par.basePago = `condición pactada sobre zarpe ${par.origenZarpe.toLowerCase()}`;
+  }
+  { const todos = [];
+    grupoA.concat(grupoB).forEach(p=> (p.parciales||[]).forEach(par=>{ Object.assign(par, (m=>({origenZarpe:m.origen, baseZarpe:m.base, errZarpe:m.err, ajustable:m.ajustable}))(metaFuenteZarpe(par))); todos.push({p, par}); }));
+    const porProv = {}; todos.forEach(x=>{ (porProv[x.p.proveedor||'—'] = porProv[x.p.proveedor||'—'] || []).push(x); });
+    Object.entries(porProv).forEach(([pv, arr])=>{
+      const gap = gapColaProveedor(pv);
+      arr.sort((a,b)=> (a.par.fechaZarpeEstimada-b.par.fechaZarpeEstimada) || ((a.p.fechaPedido||0)-(b.p.fechaPedido||0)) || (a.par.n-b.par.n));
+      let prev = null;
+      arr.forEach(({par})=>{
+        if(prev && par.ajustable){ const min = addDays(prev, gap); if(par.fechaZarpeEstimada < min){ par.fechaZarpeEstimada = min; par.secuenciado = true; par.gapCola = gap;
+          par.fuenteZarpe = (par.fuenteZarpe||'') + ` · en fila tras el embarque anterior del proveedor (+${gap} días, mediana del proveedor)`; } }
+        if(!prev || par.fechaZarpeEstimada > prev) prev = par.fechaZarpeEstimada;
+      });
+    });
+    todos.forEach(({p, par})=> cerrarParcial(p, par));
+    grupoB.forEach(p=>{ const z = (p.parciales||[])[0]; if(z){ p.fechaEstimadaProximaBL = z.fechaZarpeEstimada; p.fechaEstimadaPago = z.fechaPagoEstimada; p.fechaArriboEstimada = z.fechaArriboEstimada; } });
+  }
+
   const excluidosPorCorte = pedidos.filter(p=>!p.cerrado && p.fechaPedido && p.fechaPedido<FECHA_CORTE_DATA_CONFIABLE && (p.nProyectosParciales===0 || p.saldoSinFacturar>1));
   const excluidosPorTolerancia = pedidos.filter(p=>!p.cerrado && p.nProyectosParciales>0 && p.saldoSinFacturar>1 && p.pedidoKg>0 && ((p.saldoKg||0)/p.pedidoKg)<=UMBRAL_TON_PENDIENTE);
 
@@ -2905,7 +3016,7 @@ function buildModel({profRaw, spRaw, pgRaw, gfRaw, nacRaw, pedDetRaw, impRaw, pp
   };
 
   return { pedidos, spAll, spUnico, pg, gf, gfAbiertos, nac, nacMes, grupoA, grupoB, obligaciones, pagosMes, gfMes, pedidosMes, enriquecidos, enriquecidosUnico,
-           calibracionPagos:{FACTOR_PARCIALES_GLOBAL, factorParcialesProv, DESFASE_PAGO_GLOBAL, desfaseObs, nObsParciales: obsParciales.length, LAG_PROD_ZARPE_GLOBAL, GAP_MEDIANO_GLOBAL, zarpesEsperadosPorPedido},
+           calibracionPagos:{GAP_COLA_GLOBAL, gapsColaObs, gapColaProveedor, FACTOR_PARCIALES_GLOBAL, factorParcialesProv, DESFASE_PAGO_GLOBAL, desfaseObs, nObsParciales: obsParciales.length, LAG_PROD_ZARPE_GLOBAL, GAP_MEDIANO_GLOBAL, zarpesEsperadosPorPedido},
            promedios:{GLOBAL_proformaPago, GLOBAL_blPago, GLOBAL_gap1, GLOBAL_gap2Plus, GLOBAL_primerZarpe, GLOBAL_capacidadEmbarque, GLOBAL_anticipoPago},
            // Funciones estadísticas por proveedor, expuestas para el módulo de "Pedidos Nuevos Proyectados"
            // (flujo de caja de compras aún no realizadas) — antes eran closures privadas de buildModel().
@@ -3216,12 +3327,17 @@ function renderView8(){
   const notaCap = document.getElementById('v8_nota_capacidad');
   if(notaCap) notaCap.innerHTML = `* La capacidad por embarque ya no es un número fijo: se ajusta una curva (Kg por parcial en función del tamaño del pedido) por proveedor con historial suficiente, o la curva GLOBAL si no. El valor de esta columna es solo ilustrativo (evaluado en el pedido mediano histórico del proveedor); el cálculo real de parciales usa el tamaño exacto de cada pedido nuevo. Cuando R² es bajo o "b" está cerca de 0, la curva aporta poco y el sistema puede estar usando el máximo histórico plano como respaldo — revisar con más datos.`;
 
-  let htmlPais = '<tr><th>País de Origen</th><th># Observaciones</th><th>Promedio (días)</th><th>Mediana (P50)</th><th>P80 (usado en estimaciones)</th><th>Confiable</th></tr>';
-  Object.entries(M.nav.statsPorPais).sort((a,b)=>b[1].n-a[1].n).forEach(([pais,s])=>{
-    htmlPais += `<tr><td class="txt">${pais}</td><td>${s.n}</td><td>${fmtD(s.promedio)}</td><td>${fmtD(s.p50)}</td><td>${fmtD(s.p80)}</td>
-      <td><span class="pill ${s.confiable?'ok':'warn'}">${s.confiable?'Sí':'Muestra chica'}</span></td></tr>`;
+  // Tanda 55: navegación por PROVEEDOR primero (mediana = punto; p20–p80 = rango probable); país y global solo como respaldo
+  let htmlPais = '<tr><th>Proveedor / País de Origen</th><th># Embarques</th><th>P20 (días)</th><th>Mediana P50 (usada como punto)</th><th>P80 (rango alto y meta de semáforo)</th><th>¿Se usa?</th></tr>';
+  Object.entries(M.nav.statsPorProveedor||{}).sort((a,b)=>b[1].n-a[1].n).forEach(([pv,s])=>{
+    htmlPais += `<tr><td class="txt">${pv}</td><td>${s.n}</td><td>${fmtD(s.p20)}</td><td>${fmtD(s.p50)}</td><td>${fmtD(s.p80)}</td>
+      <td><span class="pill ${s.confiable?'ok':'warn'}">${s.confiable?'Sí (propio)':'No: < 5 embarques, usa su país'}</span></td></tr>`;
   });
-  htmlPais += `<tr style="background:var(--paper);font-weight:700;"><td class="txt">RESPALDO GLOBAL (todos los países)</td><td colspan="3"></td><td>${fmtD(M.nav.GLOBAL)}</td><td></td></tr>`;
+  Object.entries(M.nav.statsPorPais).sort((a,b)=>b[1].n-a[1].n).forEach(([pais,s])=>{
+    htmlPais += `<tr style="background:var(--paper);"><td class="txt">País: ${pais}</td><td>${s.n}</td><td>${fmtD(s.p20)}</td><td>${fmtD(s.p50)}</td><td>${fmtD(s.p80)}</td>
+      <td><span class="pill ${s.confiable?'ok':'warn'}">${s.confiable?'Respaldo':'Muestra chica'}</span></td></tr>`;
+  });
+  htmlPais += `<tr style="background:var(--paper);font-weight:700;"><td class="txt">RESPALDO GLOBAL (todos los embarques)</td><td>${M.nav.statsGlobal?M.nav.statsGlobal.n:''}</td><td>${fmtD(M.nav.statsGlobal&&M.nav.statsGlobal.p20)}</td><td>${fmtD(M.nav.GLOBAL)}</td><td>${fmtD(M.nav.statsGlobal&&M.nav.statsGlobal.p80)}</td><td></td></tr>`;
   document.getElementById('tbl_estad_pais').innerHTML = htmlPais;
 }
 
@@ -3660,14 +3776,21 @@ function renderDetalleProyectosLlegada(confirmadoReal, confirmadoTransito, estim
     lista.forEach(it=>{
       const ref = estado==='Sin zarpe' ? `${it.pedido||'—'} · parcial ${it.parcial||'—'} (${it.tipo==='Sin parcial'?'pedido sin envíos':'parcial pendiente'})` : (it.proyecto||'—');
       const k = [estado, it.mesDisp, it.familia, it.pedido||'', ref].join('|');
-      const g = grupos[k] = grupos[k] || {estado, mes:it.mesDisp, familia:it.familia, proveedor:it.proveedor||'—', pedido:it.pedido||'—', ref, fechaZarpe:it.fechaZarpe||null, fechaArribo:it.fechaArribo||null, kg:0};
+      const g = grupos[k] = grupos[k] || {estado, mes:it.mesDisp, familia:it.familia, proveedor:it.proveedor||'—', pedido:it.pedido||'—', ref, fechaZarpe:it.fechaZarpe||null, fechaArribo:it.fechaArribo||null, kg:0,
+        origenZarpe:it.origenZarpe||'', baseZarpe:it.baseZarpe||'', origenArribo:it.origenArribo||'', baseArribo:it.baseArribo||'', arriboMin:it.arriboMin||null, arriboMax:it.arriboMax||null, secuenciado:!!it.secuenciado};
       g.kg += it.kg||0;
+      if(it.arriboMin && (!g.arriboMin || it.arriboMin<g.arriboMin)) g.arriboMin = it.arriboMin;
+      if(it.arriboMax && (!g.arriboMax || it.arriboMax>g.arriboMax)) g.arriboMax = it.arriboMax;
       if(it.fechaArribo && (!g.fechaArribo || it.fechaArribo>g.fechaArribo)) g.fechaArribo = it.fechaArribo;
       if(it.fechaZarpe && (!g.fechaZarpe || it.fechaZarpe<g.fechaZarpe)) g.fechaZarpe = it.fechaZarpe;
     });
   }
   sumar(confirmadoReal, 'Arribó'); sumar(confirmadoTransito, 'Con zarpe'); sumar(estimadoTodo, 'Sin zarpe');
   V91_DATOS = Object.values(grupos).filter(g=>g.mes && g.kg>0.5);
+  // Tanda 55: ¿el rango probable de arribo cruza a otro mes de disponibilidad (corte día de gabela)?
+  { const gab = parseInt((document.getElementById('v9_gabela')||{}).value||'20',10);
+    V91_DATOS.forEach(g=>{ const mMin = g.arriboMin ? mesDisponibilidad(g.arriboMin, gab) : g.mes, mMax = g.arriboMax ? mesDisponibilidad(g.arriboMax, gab) : g.mes;
+      g.mesMin = mMin; g.mesMax = mMax; g.riesgoMes = g.estado==='Arribó' ? '' : (mMax>g.mes ? (mMin<g.mes ? 'puede adelantarse o atrasarse' : 'puede pasar a '+fmtMesLabel(mMax)) : (mMin<g.mes ? 'puede llegar en '+fmtMesLabel(mMin) : '')); }); }
   const selF = document.getElementById('v91_familia'), selM = document.getElementById('v91_mes');
   if(!selF.dataset.poblado){ selF.innerHTML += FAMILIAS_ORDEN.map(f=>`<option value="${f}">${f}</option>`).join(''); selF.dataset.poblado='1'; }
   const previo = selM.value, meses = [...new Set(V91_DATOS.map(g=>g.mes))].sort();
@@ -3677,8 +3800,8 @@ function renderDetalleProyectosLlegada(confirmadoReal, confirmadoTransito, estim
   document.getElementById('v91_buscar').oninput = pintarDetalleProyectosLlegada;
   document.getElementById('v91_descargar').onclick = ()=>{
     const filas = filtrarV91();
-    const aoa = [['Mes de llegada','Estado','Familia','Proveedor','Pedido','Proyecto comex / parcial','Fecha zarpe','Fecha arribo','Ton']];
-    filas.forEach(g=> aoa.push([fmtMesLabel(g.mes), g.estado, g.familia, g.proveedor, g.pedido, g.ref, fmtDate(g.fechaZarpe), fmtDate(g.fechaArribo), Number((g.kg/1000).toFixed(2))]));
+    const aoa = [['Mes de llegada','Estado','Familia','Proveedor','Pedido','Proyecto comex / parcial','Fecha zarpe','Origen zarpe','Fecha arribo','Origen arribo','Cómo se calculó el arribo','Arribo probable desde','Arribo probable hasta','Riesgo de cambiar de mes','Ton']];
+    filas.forEach(g=> aoa.push([fmtMesLabel(g.mes), g.estado, g.familia, g.proveedor, g.pedido, g.ref, fmtDate(g.fechaZarpe), g.origenZarpe, fmtDate(g.fechaArribo), g.origenArribo, g.baseArribo, fmtDate(g.arriboMin), fmtDate(g.arriboMax), g.riesgoMes||'', Number((g.kg/1000).toFixed(2))]));
     const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(aoa), 'Detalle llegadas');
     XLSX.writeFile(wb, `Detalle_llegadas_por_proyecto_${fmtDate(new Date())}.xlsx`);
   };
@@ -3700,21 +3823,27 @@ function pintarDetalleProyectosLlegada(){
     `<div class="mini-kpi"><span>Total (filtro actual)</span><b>${fmtTon(tot())}</b></div>`+
     `<div class="mini-kpi ok"><span>Arribó</span><b>${fmtTon(tot('Arribó'))}</b></div>`+
     `<div class="mini-kpi"><span>Con zarpe (en tránsito)</span><b>${fmtTon(tot('Con zarpe'))}</b></div>`+
-    `<div class="mini-kpi warn"><span>Sin zarpe (estimado)</span><b>${fmtTon(tot('Sin zarpe'))}</b></div>`;
-  let h = '<tr><th>Mes de llegada</th><th>Estado</th><th>Familia</th><th>Proveedor</th><th>Pedido</th><th>Proyecto comex / parcial</th><th>Fecha zarpe</th><th>Fecha arribo</th><th>Ton.</th></tr>';
+    `<div class="mini-kpi warn"><span>Sin zarpe (estimado)</span><b>${fmtTon(tot('Sin zarpe'))}</b></div>`+
+    `<div class="mini-kpi"><span>Zarpe digitado por el proveedor</span><b>${fmtTon(filas.filter(g=>g.estado==='Sin zarpe'&&g.origenZarpe==='Digitado').reduce((a,g)=>a+g.kg,0))}</b></div>`+
+    `<div class="mini-kpi warn"><span>Rango probable cruza a otro mes</span><b>${fmtTon(filas.filter(g=>g.riesgoMes).reduce((a,g)=>a+g.kg,0))}</b></div>`;
+  let h = '<tr><th>Mes de llegada</th><th>Estado</th><th>Familia</th><th>Proveedor</th><th>Pedido</th><th>Proyecto comex / parcial</th><th>Fecha zarpe</th><th>Fecha arribo</th><th>Rango probable de arribo</th><th>Ton.</th></tr>';
+  const pillOrigen = o => o==='Real' ? '<span class="pill ok">real</span>' : o==='Digitado' ? '<span class="pill">digitado</span>' : o==='Calculado' ? '<span class="pill warn">calculado</span>' : '';
   let mesPrev = null;
   const pill = {'Arribó':'ok','Con zarpe':'','Sin zarpe':'warn'};
   filas.forEach(g=>{
     if(g.mes!==mesPrev){
       const delMes = filas.filter(x=>x.mes===g.mes), t = e=>delMes.filter(x=>!e||x.estado===e).reduce((a,x)=>a+x.kg,0);
-      h += `<tr style="background:var(--paper);"><td class="txt" colspan="8" style="font-weight:700;color:var(--navy);">${fmtMesLabel(g.mes)} — arribó ${fmtTon(t('Arribó'))} · con zarpe ${fmtTon(t('Con zarpe'))} · sin zarpe ${fmtTon(t('Sin zarpe'))}</td><td style="font-weight:700;">${fmtTon(t())}</td></tr>`;
+      h += `<tr style="background:var(--paper);"><td class="txt" colspan="9" style="font-weight:700;color:var(--navy);">${fmtMesLabel(g.mes)} — arribó ${fmtTon(t('Arribó'))} · con zarpe ${fmtTon(t('Con zarpe'))} · sin zarpe ${fmtTon(t('Sin zarpe'))}</td><td style="font-weight:700;">${fmtTon(t())}</td></tr>`;
       mesPrev = g.mes;
     }
     const est = g.estado!=='Arribó';
     h += `<tr><td class="txt">${fmtMesLabel(g.mes)}</td><td><span class="pill ${pill[g.estado]}">${g.estado}</span></td><td class="txt">${g.familia}</td><td class="txt">${g.proveedor}</td><td class="txt">${g.pedido}</td><td class="txt" style="font-size:11.5px;">${g.ref}</td>`+
-      `<td>${fmtDate(g.fechaZarpe)}${g.estado==='Sin zarpe'?' <span class="pill warn">estimada</span>':''}</td><td>${fmtDate(g.fechaArribo)}${est?' <span class="pill warn">estimada</span>':''}</td><td>${fmtTon(g.kg)}</td></tr>`;
+      `<td title="${(g.baseZarpe||'').replace(/"/g,"'")}">${fmtDate(g.fechaZarpe)} ${pillOrigen(g.origenZarpe)}${g.secuenciado?' <span class="pill" title="Corrido en la fila de embarques del proveedor">en fila</span>':''}</td>`+
+      `<td title="${(g.baseArribo||'').replace(/"/g,"'")}">${fmtDate(g.fechaArribo)} ${pillOrigen(g.origenArribo)}</td>`+
+      `<td style="font-size:11px;">${est && g.arriboMin ? `${fmtDate(g.arriboMin)} – ${fmtDate(g.arriboMax)}${g.riesgoMes?`<br><span class="pill warn">${g.riesgoMes}</span>`:''}` : '—'}</td><td>${fmtTon(g.kg)}</td></tr>`;
   });
-  h += `<tr style="background:var(--paper);font-weight:700;"><td class="txt" colspan="8">TOTAL</td><td>${fmtTon(tot())}</td></tr>`;
+  h += `<tr style="background:var(--paper);font-weight:700;"><td class="txt" colspan="9">TOTAL</td><td>${fmtTon(tot())}</td></tr>`;
+  h += `<tr><td class="txt" colspan="10" style="font-size:11px;color:var(--ink-soft);white-space:normal;"><b>Origen de la fecha:</b> <i>real</i> = ya ocurrió · <i>digitado</i> = fecha escrita en el Sheet (p. ej. zarpe que informa el proveedor) · <i>calculado</i> = la calcula el Tablero (pase el mouse sobre la fecha para ver desde qué). <b>Rango probable</b> = zarpe ± error típico de su fuente (proveedor ±2 d, producción terminada ±7, producción estimada ±26, modelo ±14–26) combinado con la variación de la navegación del proveedor p20–p80 (si tiene ≥5 embarques; si no, la del país). Los dos errores son independientes, así que se combinan (raíz de la suma de cuadrados) en vez de sumar los dos extremos. <b>En fila</b> = el zarpe se corrió porque el proveedor despacha sus embarques uno tras otro (mediana de días entre embarques).</td></tr>`;
   document.getElementById('tbl_v91_detalle').innerHTML = h;
 }
 // Desde 10.2b: lleva al detalle 9.1 con el mes y la familia de la barra clicada.
@@ -3937,6 +4066,16 @@ function renderView10(){
       return {mes:m, historico:false, invInicio:s('invInicial'), real:0, ya:s('llegaYaPedidoTon'), nuevo:s('llegaNuevoTon'), venta:s('ventaMes'), min:s('bandaMin'), obj:s('bandaObjetivo'), max:s('bandaMax'), dif:null, esReal: xs.some(x=>x.esReal)};
     }).filter(Boolean);
     const enRango = f => f.invInicio!==null && f.invInicio >= f.min - 1e-6 && f.invInicio <= f.max + 1e-6;
+    // Tanda 55: de qué está hecha la barra "lo ya pedido" (origen de la fecha y riesgo de cambiar de mes)
+    const LL = M._llegadasCache || (M._llegadasCache = buildLlegadasPorFamilia(M)), gabYa = diaGabelaActual();
+    function desgloseYa(m){
+      const o = {arribo:0, transito:0, digitado:0, calculado:0, atrasa:0, adelanta:0};
+      const it = (lista, tipo)=> lista.forEach(x=>{ if(!familias.includes(x.familia) || mesDisponibilidad(x.fechaArribo, gabYa)!==m) return; const t = (x.kg||0)/1000;
+        if(tipo==='real') o.arribo += t; else if(tipo==='tr') o.transito += t; else if(x.origenZarpe==='Digitado') o.digitado += t; else o.calculado += t;
+        if(tipo!=='real'){ if(x.arriboMax && mesDisponibilidad(x.arriboMax, gabYa)>m) o.atrasa += t; if(x.arriboMin && mesDisponibilidad(x.arriboMin, gabYa)<m) o.adelanta += t; } });
+      it(LL.confirmadoReal,'real'); it(LL.confirmadoTransito,'tr'); it(LL.estimado,'est');
+      return o;
+    }
     const colorPunto = filas.map(f=> f.invInicio===null ? COLORS.slate : (enRango(f) ? '#1F8A4C' : '#C0392B'));
     const hayHist = filas.some(f=>f.historico);
     const datasets = [];
@@ -3963,6 +4102,9 @@ function renderView10(){
            const out = [];
            if(f.historico && f.venta!==null && f.ppto>0) out.push(`Venta PPTO del mes: ${tonFmt(f.ppto)} Ton · real vs. PPTO: ${f.venta>=f.ppto?'+':''}${Math.round((f.venta/f.ppto-1)*100)}%`);
            if(f.historico && f.venta===null) out.push('Sin conteo físico del mes siguiente: no se puede deducir la venta real (se muestra solo el inventario).');
+           if(!f.historico && f.ya>0.5){ const d = desgloseYa(f.mes);
+             out.push(`Lo ya pedido: ${d.arribo>0.5?`ya arribó ${tonFmt(d.arribo)} · `:''}navegando ${tonFmt(d.transito)} · sin zarpe con fecha digitada por el proveedor ${tonFmt(d.digitado)} · sin zarpe con fecha calculada ${tonFmt(d.calculado)}`);
+             if(d.atrasa>0.5 || d.adelanta>0.5) out.push(`Rango probable: ${d.atrasa>0.5?`${tonFmt(d.atrasa)} Ton podrían pasar al mes siguiente`:''}${d.atrasa>0.5&&d.adelanta>0.5?' · ':''}${d.adelanta>0.5?`${tonFmt(d.adelanta)} Ton podrían llegar antes`:''}`); }
            if(f.invInicio!==null) out.push(enRango(f) ? '● Inventario dentro del rango (mínimo–máximo)' : '● Inventario FUERA del rango (mínimo–máximo)');
            return out; }}}}},
       false, tonFmt, false);
@@ -4171,6 +4313,9 @@ function renderDiag(){
   const cerradosAuto = MODEL.pedidos.filter(p=>p.cerrado && p.diferenciaEntregaKg!==null && Math.abs(p.diferenciaEntregaKg||0)>1);
   if(cerradosAuto.length) advs.push(`${cerradosAuto.length} pedido(s) cerrados por conciliación financiera (anticipo ya reclasificado) muestran diferencia entre lo pedido y lo entregado en toneladas — revisar si es un tema de calidad/cantidad aceptada: ` +
     cerradosAuto.slice(0,10).map(p=>`${p.pedido} (${p.diferenciaEntregaKg>0?'+':''}${fmtTon(p.diferenciaEntregaKg)})`).join(', ') + (cerradosAuto.length>10?'…':''));
+  { const b = MODEL.nav.backtestETA; if(b) advs.push(b.n ? `ETA digitada en Control de Importaciones: en ${b.n} embarques ya arribados erró ${Math.round(b.errEtaMediana)} días (mediana) vs. ${Math.round(b.errNavMediana)} del cálculo zarpe + navegación del proveedor → ${b.usarETA?'<b>se usa la ETA</b> para lo que va navegando':'se usa el cálculo (la ETA no acierta mejor)'}.` : 'Control de Importaciones no trae "Fecha Estimada de Arribo" en embarques ya arribados: no se puede medir su acierto, se usa zarpe real + navegación del proveedor.'); }
+  { const exc = MODEL.spAll.filter(s=>s.estadoCalculado==='EXCLUIDO (pedido anterior al corte)');
+    if(exc.length) advs.push(`${exc.length} saldo(s) a proveedor de pedidos anteriores a ${fmtDate(FECHA_CORTE_HISTORICO)} por ${fmt(exc.reduce((a,s)=>a+s.saldoCalculado,0))} NO se programan (falta de data de 2025, decisión Tanda 55): ${exc.map(s=>s.proyecto).join(', ')}. Los giros financieros de esos pedidos SÍ siguen en el flujo (son deuda con el banco).`); }
   if(MODEL.excluidosPorCorte.length) advs.push(`${MODEL.excluidosPorCorte.length} pedido(s) anteriores a ${fmtDate(MODEL.FECHA_CORTE_DATA_CONFIABLE)} con saldo abierto NO se incluyen en los pronósticos de la Vista 4 (el seguimiento financiero completo no estaba alineado antes de esa fecha) — siguen visibles en la Vista 2 para consulta histórica: ` +
     MODEL.excluidosPorCorte.slice(0,10).map(p=>p.pedido).join(', ') + (MODEL.excluidosPorCorte.length>10?'…':''));
   if(MODEL.excluidosPorTolerancia.length) advs.push(`${MODEL.excluidosPorTolerancia.length} pedido(s) con saldo pendiente ≤5% de lo pedido en toneladas se tratan como "saldo residual inmaterial" (16-sep): NO se incluyen en Grupo B (Vista 4) y su Estado Ton. en Vista 2/KPIs se muestra como COMPLETADO en vez de CON ENTREGA PARCIAL — son toneladas no atendidas por tolerancia de producción, no un parcial pendiente real (el pedido puede seguir sin aparecer "Cerrado" financieramente, eso depende solo de la conciliación de anticipo): ` +
@@ -4462,9 +4607,9 @@ function buildCascadaCumplimiento(M){
     vistoProyNav.add(r.nombreProyecto);
     const realDias = daysBetween(r.fechaRealZarpe, imp.fechaRealArribo);
     if(realDias===null || realDias<0 || realDias>200) return;
-    const metaDias = M.nav.diasNavegacion(r.paisOrigen);
     const pedidoCod = M.ton.proformaToPedido[r.proforma];
     const pedido = pedidoCod ? pedidoPorCodigo[pedidoCod] : null;
+    const metaDias = M.nav.diasNavegacionMeta(r.paisOrigen, pedido?pedido.proveedor:null);
     etapa3.push({realDias, metaDias, peso: imp.pesoBrutoKg||r.cantidadEntregadaKg||0, fecha:imp.fechaRealArribo,
       proveedor: pedido?pedido.proveedor:null, familia:familiaDeProducto(r.producto), pais:r.paisOrigen, pedido:pedidoCod});
   });
@@ -4546,7 +4691,7 @@ function buildCascadaCumplimiento(M){
     }
     const pedidoCod = M.ton.proformaToPedido[r.proforma];
     const pedido = pedidoCod ? pedidoPorCodigo[pedidoCod] : null;
-    abierto3.push({transcurridos, metaDias:M.nav.diasNavegacion(r.paisOrigen), peso:r.cantidadEntregadaKg||0, fechaInicio:r.fechaRealZarpe,
+    abierto3.push({transcurridos, metaDias:M.nav.diasNavegacionMeta(r.paisOrigen, pedido?pedido.proveedor:null), peso:r.cantidadEntregadaKg||0, fechaInicio:r.fechaRealZarpe,
       proveedor:pedido?pedido.proveedor:null, pais:r.paisOrigen, familia:familiaDeProducto(r.producto), pedido:pedidoCod, referencia:r.nombreProyecto});
   });
   const abierto4 = []; // Nacionalización abierta: arribó pero sin Fecha Levante DIM todavía
@@ -4592,10 +4737,13 @@ function buildLlegadasPorFamilia(M){
       const imp = M.ton.porProyectoImport[f.nombreProyecto];
       const kg = f.cantidadEntregadaKg||0; if(!kg) return;
       if(imp && imp.fechaRealArribo){
-        confirmadoReal.push({familia:g.familia, kg, fechaArribo:imp.fechaRealArribo, fechaZarpe:f.fechaRealZarpe, proveedor:pedido.proveedor, pedido:pedidoCod, proyecto:f.nombreProyecto});
+        confirmadoReal.push({familia:g.familia, kg, fechaArribo:imp.fechaRealArribo, fechaZarpe:f.fechaRealZarpe, proveedor:pedido.proveedor, pedido:pedidoCod, proyecto:f.nombreProyecto,
+          origenZarpe:'Real', origenArribo:'Real', baseArribo:'arribo registrado en Control de Importaciones', arriboMin:imp.fechaRealArribo, arriboMax:imp.fechaRealArribo});
       } else {
-        const dias = M.nav.diasNavegacion(f.paisOrigen);
-        confirmadoTransito.push({familia:g.familia, kg, fechaArribo: addDays(f.fechaRealZarpe, dias||M.nav.GLOBAL||45), fechaZarpe:f.fechaRealZarpe, proveedor:pedido.proveedor, pedido:pedidoCod, proyecto:f.nombreProyecto});
+        // Tanda 55: ETA digitada (si acierta mejor) o zarpe real + navegación del PROVEEDOR (mediana), con rango; misma función que pagos/nac.
+        const a = M.nav.arriboTransito(f.fechaRealZarpe, pedidoCod, f.nombreProyecto, f.paisOrigen);
+        confirmadoTransito.push({familia:g.familia, kg, fechaArribo: a.fecha, fechaZarpe:f.fechaRealZarpe, proveedor:pedido.proveedor, pedido:pedidoCod, proyecto:f.nombreProyecto,
+          origenZarpe:'Real', origenArribo:a.origen, baseArribo:a.base, arriboMin:a.min, arriboMax:a.max});
       }
     });
   });
@@ -4624,7 +4772,7 @@ function buildLlegadasPorFamilia(M){
     const pct = composicionFamiliaPedido(p.pedido, 'total'); if(!pct) return;
     p.parciales.forEach(par=>{
       Object.entries(pct).forEach(([familia,frac])=>{
-        estimado.push({familia, kg: (par.kgEstimado||0)*frac, fechaArribo: par.fechaArriboEstimada, fechaZarpe: par.fechaZarpeEstimada, proveedor:p.proveedor, pedido:p.pedido, parcial:`${par.n}/${par.deN}`, tipo:'Sin parcial'});
+        estimado.push({familia, kg: (par.kgEstimado||0)*frac, fechaArribo: par.fechaArriboEstimada, fechaZarpe: par.fechaZarpeEstimada, proveedor:p.proveedor, pedido:p.pedido, parcial:`${par.n}/${par.deN}`, tipo:'Sin parcial', origenZarpe:par.origenZarpe, baseZarpe:par.baseZarpe, origenArribo:'Calculado', baseArribo:`zarpe ${(par.origenZarpe||'calculado').toLowerCase()} (${par.baseZarpe||''}) + ${par.navFuente||'navegación'}`, arriboMin:par.arriboMin, arriboMax:par.arriboMax, secuenciado:!!par.secuenciado});
       });
     });
   });
@@ -4633,7 +4781,7 @@ function buildLlegadasPorFamilia(M){
     const pct = composicionFamiliaPedido(p.pedido, 'saldo'); if(!pct) return;
     p.parciales.forEach(par=>{
       Object.entries(pct).forEach(([familia,frac])=>{
-        estimado.push({familia, kg: (par.kgEstimado||0)*frac, fechaArribo: par.fechaArriboEstimada, fechaZarpe: par.fechaZarpeEstimada, proveedor:p.proveedor, pedido:p.pedido, parcial:`${par.n}/${par.deN}`, tipo:'Parcial pendiente'});
+        estimado.push({familia, kg: (par.kgEstimado||0)*frac, fechaArribo: par.fechaArriboEstimada, fechaZarpe: par.fechaZarpeEstimada, proveedor:p.proveedor, pedido:p.pedido, parcial:`${par.n}/${par.deN}`, tipo:'Parcial pendiente', origenZarpe:par.origenZarpe, baseZarpe:par.baseZarpe, origenArribo:'Calculado', baseArribo:`zarpe ${(par.origenZarpe||'calculado').toLowerCase()} (${par.baseZarpe||''}) + ${par.navFuente||'navegación'}`, arriboMin:par.arriboMin, arriboMax:par.arriboMax, secuenciado:!!par.secuenciado});
       });
     });
   });
@@ -5499,7 +5647,7 @@ function calcularNacEstimada(M, arancelPct, ivaPct){
     if(s.estatusProyecto==='ARRIBADO'){
       fechaArribo = s.fechaRealArribo; esReal = true; kg = s.pesoBrutoKg || s.entregadoKg;
     } else if(s.estatusProyecto==='NAVEGANDO' && s.fechaRealZarpe){
-      fechaArribo = addDays(s.fechaRealZarpe, M.nav.diasNavegacion(M.ton.paisPorPedido[s.pedido])||45); esReal = false; kg = s.entregadoKg;
+      fechaArribo = M.nav.arriboTransito(s.fechaRealZarpe, s.pedido, s.proyecto).fecha; esReal = false; kg = s.entregadoKg;
     } else return; // 'EN PRODUCCIÓN' sin zarpe real: no se puede estimar arribo todavía
     if(kgYaContado.has(s.proyecto)) kg = 0; else kgYaContado.add(s.proyecto); // el $ sí se suma por cada línea, el Kg (propiedad del embarque) solo una vez
     const diasDesdeArribo = esReal ? daysBetween(fechaArribo, new Date()) : null;
@@ -5621,7 +5769,9 @@ function construirBDPagos(M, horizonte=12){
       tonPedido: p.pedidoKg ? p.pedidoKg/1000 : null, nota: f.nota||'',
       clave: f.clave||'', fechaZarpe: f.fechaZarpe||null, fuenteFecha: f.fuenteFecha||'',
       zarpeProveedor: f.zarpeProveedor || (f.pedido ? (zarpeProvPorPedido[f.pedido]||null) : null), fechaArribo: f.fechaArribo||null,
-      pctNac: f.pctNac ?? null, cop: f.cop ?? null, trm: f.trm ?? null, fuenteTrm: f.fuenteTrm || ''});
+      pctNac: f.pctNac ?? null, cop: f.cop ?? null, trm: f.trm ?? null, fuenteTrm: f.fuenteTrm || '',
+      // Tanda 55: Digitado = la fecha de pago la escribió alguien en un Sheet · Calculado = la calcula el Tablero
+      origenFecha: f.origenFecha || (f.tipo==='Real' ? 'Digitado' : 'Calculado'), arriboMin: f.arriboMin||null, arriboMax: f.arriboMax||null});
   }
   // Tanda 40: la nacionalización se paga en COP. COP → USD con la TRM del mes de pago (Sheet de Finanzas: promedio real
   // si el mes ya cerró; si no, TRM proyectada por Finanzas o la última TRM). USD → COP (referencia) igual.
@@ -5634,19 +5784,20 @@ function construirBDPagos(M, horizonte=12){
     const kg = tonVisto.has(s.proyecto) ? null : (s.entregadoKg||null); tonVisto.add(s.proyecto);
     add({concepto:'1. Saldo a proveedor', detalle:'Facturado (proyecto comex)', tipo:'Real', fecha:s.fechaUsada, pedido:s.pedido, referencia:s.proyecto, contraparte:s.proveedor,
       clave:`SALDO|${s.pedido}|${s.proyecto}`, fechaZarpe:s.fechaRealZarpe, fuenteFecha: s.fechaRealZarpe?'Real (zarpe registrado)':'Sin zarpe registrado', fechaArribo:s.fechaRealArribo||null,
+      origenFecha: s.fuentePago==='sheet' ? 'Digitado' : 'Calculado',
       kg, valorBase:s.netoFactura, pagado:s.pagadoSaldo, montoUsd:s.saldoCalculado, nota: explicarComex(s).fecha});
   });
   // 2) Saldos a proveedores — ESTIMADO (parciales aún sin facturar)
   M.grupoA.forEach(p=> (p.parciales||[]).forEach(par=>{
     const factorSaldo = p.valorPedido>0 ? Math.max(0, 1-(p.anticipoPagado||0)/p.valorPedido) : 1; // el anticipo ya pagado no se vuelve a pagar
     add({concepto:'1. Saldo a proveedor', detalle:`Parcial estimado ${par.n}/${par.deN} (pedido sin envíos)`, tipo:'Estimado', fecha:par.fechaPagoEstimada, pedido:p.pedido,
-      clave:`SALDO|${p.pedido}|*`, fechaZarpe:par.fechaZarpeEstimada, fuenteFecha: par.retrasado?'Modelo (re-proyectado: zarpe vencido)':(par.fuenteZarpe||'Modelo (tiempo típico del proveedor)'), fechaArribo:par.fechaArriboEstimada,
+      clave:`SALDO|${p.pedido}|*`, fechaZarpe:par.fechaZarpeEstimada, fuenteFecha: `Zarpe ${(par.origenZarpe||'Calculado').toLowerCase()}: ` + (par.retrasado?'Modelo (re-proyectado: zarpe vencido)':(par.fuenteZarpe||'Modelo (tiempo típico del proveedor)')), fechaArribo:par.fechaArriboEstimada, origenFecha:'Calculado', arriboMin:par.arriboMin, arriboMax:par.arriboMax,
       referencia:`Parcial est. ${par.n}/${par.deN}`, kg:par.kgEstimado, valorBase:par.valorEstimado, pagado:par.valorEstimado-par.montoPago, montoUsd:par.montoPago,
       nota: (par.retrasado ? 'zarpe ya vencido: re-proyectado desde hoy · ' : '') + explicarParcial(p, par, 'A').monto});
   }));
   M.grupoB.forEach(p=> (p.parciales||[]).forEach(par=>{
     add({concepto:'1. Saldo a proveedor', detalle:`Parcial estimado ${par.n}/${par.deN} (saldo de pedido parcial)`, tipo:'Estimado', fecha:par.fechaPagoEstimada, pedido:p.pedido,
-      clave:`SALDO|${p.pedido}|*`, fechaZarpe:par.fechaZarpeEstimada, fuenteFecha: par.retrasado?'Modelo (re-proyectado: zarpe vencido)':(par.fuenteZarpe||'Modelo (tiempo típico del proveedor)'), fechaArribo:par.fechaArriboEstimada,
+      clave:`SALDO|${p.pedido}|*`, fechaZarpe:par.fechaZarpeEstimada, fuenteFecha: `Zarpe ${(par.origenZarpe||'Calculado').toLowerCase()}: ` + (par.retrasado?'Modelo (re-proyectado: zarpe vencido)':(par.fuenteZarpe||'Modelo (tiempo típico del proveedor)')), fechaArribo:par.fechaArriboEstimada, origenFecha:'Calculado', arriboMin:par.arriboMin, arriboMax:par.arriboMax,
       referencia:`Parcial est. ${par.n}/${par.deN}`, kg:par.kgEstimado, valorBase:par.valorEstimado, pagado:par.valorEstimado-par.montoPago, montoUsd:par.montoPago,
       nota: (par.retrasado ? 'zarpe ya vencido: re-proyectado desde hoy · ' : '') + explicarParcial(p, par, 'B').monto});
   }));
@@ -5660,7 +5811,7 @@ function construirBDPagos(M, horizonte=12){
   const NR = nacRegistradaPendiente(M);
   const nacSinValor = NR.sinValor;
   NR.filas.forEach(x=>{
-    add({concepto:'3. Nacionalización', detalle:'Registrada sin pagar', tipo:'Real', fecha:x.fecha, pedido:x.pedido, referencia:x.proyecto, clave:`NAC|${x.proyecto}`, fuenteFecha: x.conFechaPago?'Real (fecha de pago registrada)':'Levante + 7 días', contraparte:'DIAN / agencia de aduanas',
+    add({concepto:'3. Nacionalización', detalle:'Registrada sin pagar', tipo:'Real', origenFecha: x.conFechaPago?'Digitado':'Calculado', fecha:x.fecha, pedido:x.pedido, referencia:x.proyecto, clave:`NAC|${x.proyecto}`, fuenteFecha: x.conFechaPago?'Real (fecha de pago registrada)':'Levante + 7 días', contraparte:'DIAN / agencia de aduanas',
       valorBase:x.valorBase, montoUsd:x.usd, cop:x.cop, trm:x.trm, fuenteTrm:x.fuenteTrm,
       nota: (x.conFechaPago?'':'sin fecha de pago: levante + 7 días · ') + (x.trm ? 'USD = saldo COP registrado ÷ TRM' : `USD estimado: ${(FN.arancel*100).toFixed(0)}% arancel + ${(FN.iva*100).toFixed(0)}% IVA sobre valor factura × parte pendiente`)});
   });
@@ -5695,7 +5846,9 @@ const BD_COLUMNAS = [ // Tanda 40: los encabezados viajan con los datos al Sheet
   ['Fecha zarpe usada', f=>fechaSimple(f.fechaZarpe)], ['Fuente de la fecha', f=>f.fuenteFecha], ['Zarpe estimado por el proveedor', f=>fechaSimple(f.zarpeProveedor)], ['Fecha arribo esperada', f=>fechaSimple(f.fechaArribo)],
   ['Valor total del pedido USD', f=>num2(f.valorPedidoUsd)], ['Pagado total del pedido USD', f=>num2(f.pagadoPedidoUsd)], ['Ton pedidas del pedido', f=>num2(f.tonPedido)], ['Nota', f=>f.nota],
   ['Supuesto nacionalización (% s/ factura)', f=>f.pctNac===null||f.pctNac===undefined ? null : +(+f.pctNac).toFixed(2)], ['Monto COP (nacionalización)', f=>f.cop===null||f.cop===undefined ? null : Math.round(f.cop)],
-  ['TRM usada', f=>num2(f.trm)], ['Fuente TRM', f=>f.fuenteTrm||'']];
+  ['TRM usada', f=>num2(f.trm)], ['Fuente TRM', f=>f.fuenteTrm||''],
+  // Tanda 55: columnas nuevas AL FINAL para no mover las que ya consume el FC maestro
+  ['Origen fecha de pago (Digitado/Calculado)', f=>f.origenFecha||''], ['Arribo probable desde', f=>fechaSimple(f.arriboMin)], ['Arribo probable hasta', f=>fechaSimple(f.arriboMax)]];
 // Fecha de zarpe que el PROVEEDOR reporta en Cuadro Pedidos para lo que aún no zarpa (la más tardía por pedido).
 function zarpeProveedorPorPedido(M){
   if(M._zarpeProv) return M._zarpeProv;
@@ -6190,7 +6343,7 @@ function renderView4(){
 
   // 4.1 Proyectos comex pendientes (saldo CALCULADO, no el que trae el Sheet), con filtros de mes de pago/zarpe/arribo
   const pendComexAll = M.spAll.filter(s=>s.estadoCalculado==='PENDIENTE POR PAGAR').map(s=>({
-    ...s, fechaArriboRealOEstimada: s.fechaRealArribo || (s.fechaRealZarpe ? addDays(s.fechaRealZarpe, M.nav.diasNavegacion(M.ton.paisPorPedido[s.pedido])||45) : null)
+    ...s, fechaArriboRealOEstimada: s.fechaRealArribo || (s.fechaRealZarpe ? M.nav.arriboTransito(s.fechaRealZarpe, s.pedido, s.proyecto).fecha : null)
   }));
   poblarMeses('f41_mes', pendComexAll.map(s=>s.fechaUsada));
   poblarMeses('f41_mesZarpe', pendComexAll.map(s=>s.fechaRealZarpe));
@@ -6239,7 +6392,7 @@ function renderView4(){
     if(sinFiltroActivo) sinFecha.forEach(p=> html2 += `<tr class="row-bad"><td class="txt">${p.pedido}</td><td class="txt">${p.proveedor}</td><td colspan="8" class="txt">⚠ ${p.condicionUsada} — saldo ${fmt(p.saldoProyectado||0)} NO entra al flujo hasta tener fecha</td></tr>`);
     filasA.forEach(f=>
       html2 += `<tr class="${f.retrasado?'row-bad':''}"><td class="txt">${f.pedido}</td><td class="txt">${f.proveedor}</td><td>${f.n} de ${f.deN}</td>
-        <td>${fmt(f.valorEstimado)}</td><td><b>${fmt(f.montoPago||0)}</b></td><td>${fmtTon(f.kgEstimado)}</td><td>${fmtDate(f.fechaZarpeEstimada)}<br><span style="display:inline-block;min-width:180px;max-width:240px;white-space:normal;font-family:var(--sans);font-size:9.5px;line-height:1.25;color:var(--ink-soft);">${f.fuenteZarpe||''}</span></td><td>${fmtDate(f.fechaArriboEstimada)}</td>
+        <td>${fmt(f.valorEstimado)}</td><td><b>${fmt(f.montoPago||0)}</b></td><td>${fmtTon(f.kgEstimado)}</td><td>${fmtDate(f.fechaZarpeEstimada)} ${f.origenZarpe==='Digitado'?'<span class="pill">digitado</span>':'<span class="pill warn">calculado</span>'}${f.secuenciado?' <span class="pill" title="Corrido en la fila de embarques del proveedor">en fila</span>':''}<br><span style="display:inline-block;min-width:180px;max-width:240px;white-space:normal;font-family:var(--sans);font-size:9.5px;line-height:1.25;color:var(--ink-soft);">${f.fuenteZarpe||''}</span></td><td title="${String(f.navFuente||'').replace(/"/g,"'")}">${fmtDate(f.fechaArriboEstimada)} <span class="pill warn">calculado</span>${f.arriboMin?`<br><span style="font-size:10px;color:var(--ink-soft);">probable ${fmtDate(f.arriboMin)} – ${fmtDate(f.arriboMax)}</span>`:''}</td>
         <td>${fmtDate(f.fechaPagoEstimada)}${f.retrasado?' <span class="pill bad">RETRASADO</span>':''}</td><td style="font-size:10px;color:var(--ink-soft);">${f.condicionUsada}</td></tr>`);
     const totalFacA = filasA.reduce((a,f)=>a+f.valorEstimado,0);
     const totalA = filasA.reduce((a,f)=>a+(f.montoPago||0),0); // Tanda 54: el total es lo que se PAGA (igual a 4.1 y al flujo)
@@ -6275,7 +6428,7 @@ function renderView4(){
     if(sinFiltroActivo) sinFecha.forEach(p=> html3 += `<tr class="row-bad"><td class="txt">${p.pedido}</td><td class="txt">${p.proveedor}</td><td colspan="8" class="txt">⚠ ${p.condicionUsada} — saldo ${fmt(p.saldoProyectado||0)} NO entra al flujo hasta tener fecha</td></tr>`);
     filasB.forEach(f=>
       html3 += `<tr class="${f.retrasado?'row-bad':''}"><td class="txt">${f.pedido}</td><td class="txt">${f.proveedor}</td><td>${f.n} de ${f.deN}</td>
-        <td>${fmt(f.valorEstimado)}</td><td><b>${fmt(f.montoPago||0)}</b></td><td>${fmtTon(f.kgEstimado)}</td><td>${fmtDate(f.fechaZarpeEstimada)}<br><span style="display:inline-block;min-width:180px;max-width:240px;white-space:normal;font-family:var(--sans);font-size:9.5px;line-height:1.25;color:var(--ink-soft);">${f.fuenteZarpe||''}</span></td><td>${fmtDate(f.fechaArriboEstimada)}</td>
+        <td>${fmt(f.valorEstimado)}</td><td><b>${fmt(f.montoPago||0)}</b></td><td>${fmtTon(f.kgEstimado)}</td><td>${fmtDate(f.fechaZarpeEstimada)} ${f.origenZarpe==='Digitado'?'<span class="pill">digitado</span>':'<span class="pill warn">calculado</span>'}${f.secuenciado?' <span class="pill" title="Corrido en la fila de embarques del proveedor">en fila</span>':''}<br><span style="display:inline-block;min-width:180px;max-width:240px;white-space:normal;font-family:var(--sans);font-size:9.5px;line-height:1.25;color:var(--ink-soft);">${f.fuenteZarpe||''}</span></td><td title="${String(f.navFuente||'').replace(/"/g,"'")}">${fmtDate(f.fechaArriboEstimada)} <span class="pill warn">calculado</span>${f.arriboMin?`<br><span style="font-size:10px;color:var(--ink-soft);">probable ${fmtDate(f.arriboMin)} – ${fmtDate(f.arriboMax)}</span>`:''}</td>
         <td>${fmtDate(f.fechaPagoEstimada)}${f.retrasado?' <span class="pill bad">RETRASADO</span>':''}</td><td style="font-size:10px;color:var(--ink-soft);">${f.condicionUsada}</td></tr>`);
     const totalFacB = filasB.reduce((a,f)=>a+f.valorEstimado,0);
     const totalB = filasB.reduce((a,f)=>a+(f.montoPago||0),0); // Tanda 54: el total es lo que se PAGA (igual a 4.1 y al flujo)
@@ -6582,8 +6735,8 @@ function renderProgramacionPagos(M, nacEst){
     const totalVenc = filtrados.filter(it=>it.vencido).reduce((a,it)=>a+it.monto,0);
     document.getElementById('f47_resumen').innerHTML = `
       <div class="mini-kpi"><span>Pagos en la vista</span><b>${filtrados.length}</b>${tk?`<span>${TIPO_PAGO[tk].tabla} · ${TIPO_PAGO[tk].lbl}</span>`:''}</div>
-      <div class="mini-kpi bad"><span>Total Real/Confirmado</span><b>${fmt(totalReal)}</b>${totalVenc>0?`<span>de los cuales vencido: ${fmt(totalVenc)}</span>`:''}</div>
-      <div class="mini-kpi warn"><span>Total Estimado</span><b>${fmt(totalEst)}</b></div>
+      <div class="mini-kpi bad"><span>Total con fecha digitada</span><b>${fmt(totalReal)}</b>${totalVenc>0?`<span>de los cuales vencido: ${fmt(totalVenc)}</span>`:''}</div>
+      <div class="mini-kpi warn"><span>Total con fecha calculada</span><b>${fmt(totalEst)}</b></div>
       <div class="mini-kpi"><span>Proyectos Comex (4.2)</span><b>${fmt(totalComex)}</b></div>
       <div class="mini-kpi"><span>Pronósticos 4.3/4.4 + Nacionalización</span><b>${fmt(totalProyectado)}</b></div>
       <div class="mini-kpi"><span>Giros Financieros (4.5)</span><b>${fmt(totalGF)}</b></div>
@@ -6616,13 +6769,13 @@ function renderProgramacionPagos(M, nacEst){
     document.getElementById('tbl_pivote_periodo').innerHTML = htmlP;
 
     // Detalle itemizado con trazabilidad
-    let htmlD = '<tr><th>Fecha de pago</th><th>Tipo de pago</th><th>Tabla</th><th>Proveedor</th><th>Pedido</th><th>Referencia</th><th>Monto USD</th><th style="min-width:260px;">Cómo se calcula el monto</th><th style="min-width:260px;">Cómo se calcula la fecha</th><th>Origen</th></tr>';
+    let htmlD = '<tr><th>Fecha de pago</th><th>Tipo de pago</th><th>Tabla</th><th>Proveedor</th><th>Pedido</th><th>Referencia</th><th>Monto USD</th><th style="min-width:260px;">Cómo se calcula el monto</th><th style="min-width:260px;">Cómo se calcula la fecha</th><th>Origen de la fecha</th></tr>';
     const cel = 'style="font-family:var(--sans);font-size:10.5px;line-height:1.35;color:var(--ink-soft);white-space:normal;min-width:280px;max-width:360px;text-align:left;"';
     filtrados.sort((a,b)=>a.fecha-b.fecha).forEach(it=>{
       htmlD += `<tr class="${it.esEstimado?'':'row-bad'}"><td>${fmtDate(it.fecha)}${it.vencido?' <span class="pill bad">VENCIDO</span>':''}${it.retrasado?' <span class="pill warn">retrasado</span>':''}</td>
         <td class="txt">${it.tipoLbl}</td><td>${it.tabla}</td><td class="txt">${it.proveedor||''}</td><td class="txt">${it.pedido||''}</td><td class="txt">${it.referencia}</td>
         <td><b>${fmt(it.monto)}</b></td><td ${cel}>${it.comoMonto||''}</td><td ${cel}>${it.comoFecha||''}</td>
-        <td>${it.esEstimado?'<span class="pill warn">Estimado</span>':'<span class="pill ok">Real/Confirmado</span>'}</td></tr>`;
+        <td title="${String(it.comoFecha||'').replace(/"/g,"'")}">${it.esEstimado?'<span class="pill warn">Calculada</span>':'<span class="pill ok">Digitada</span>'}</td></tr>`;
     });
     const totalDetalle = filtrados.reduce((a,it)=>a+it.monto,0);
     htmlD += `<tr style="background:var(--paper);font-weight:700;"><td class="txt" colspan="6">TOTAL DETALLE (filtro actual)</td><td>${fmt(totalDetalle)}</td><td colspan="3"></td></tr>`;
@@ -6631,10 +6784,10 @@ function renderProgramacionPagos(M, nacEst){
   go();
 
   document.getElementById('f47_descargar').onclick = function(){
-    const wsData = [['Fecha de pago','Mes','Tipo de pago','Tabla de origen','Proveedor','Pedido','Referencia','Monto USD','Interés estimado USD','Origen','Vencido','Retrasado','Cómo se calcula el monto','Cómo se calcula la fecha']];
+    const wsData = [['Fecha de pago','Mes','Tipo de pago','Tabla de origen','Proveedor','Pedido','Referencia','Monto USD','Interés estimado USD','Origen de la fecha (Digitada/Calculada)','Vencido','Retrasado','Cómo se calcula el monto','Cómo se calcula la fecha']];
     filtrados.slice().sort((a,b)=>a.fecha-b.fecha).forEach(it=>{
       wsData.push([fmtDate(it.fecha), it.mesKey, it.tipoLbl, it.tabla, it.proveedor||'', it.pedido||'', it.referencia, Number(it.monto.toFixed(2)), it.interes?Number(it.interes.toFixed(2)):0,
-        it.esEstimado?'Estimado':'Real/Confirmado', it.vencido?'SÍ':'', it.retrasado?'SÍ':'', it.comoMonto||'', it.comoFecha||'']);
+        it.esEstimado?'Calculada':'Digitada', it.vencido?'SÍ':'', it.retrasado?'SÍ':'', it.comoMonto||'', it.comoFecha||'']);
     });
     const ws = XLSX.utils.aoa_to_sheet(wsData);
     ws['!cols'] = [{wch:12},{wch:9},{wch:34},{wch:12},{wch:22},{wch:20},{wch:30},{wch:14},{wch:12},{wch:15},{wch:8},{wch:9},{wch:90},{wch:90}];
