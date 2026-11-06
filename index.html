@@ -381,7 +381,7 @@
       <h3 style="margin-top:14px;font-size:13px;color:var(--navy);">Consolidado por período</h3>
       <div class="scroll"><table id="tbl_pivote_periodo"></table></div>
       <h3 style="margin-top:18px;font-size:13px;color:var(--navy);">Detalle — cada pago con su origen y su cálculo</h3>
-      <div class="desc" style="margin-bottom:6px;">Cada fila trae su <b>línea de tiempo</b>: pedido → zarpe/BL → arribo → pago, con cada fecha marcada <b style="color:#1F8A4C;">✓</b> real (ya ocurrió), <b style="color:var(--navy);">✎</b> digitada (escrita en el Sheet) o <b style="color:var(--amber);">≈</b> calculada por el Tablero (pase el mouse para ver de dónde sale), la regla de la fecha de pago y cuántos días faltan. El detalle del cálculo del monto y de la fecha está en "▸ cómo se calcula". <b>Origen de la fecha de pago:</b> <i>Digitada</i> = la escribió Comex o Tesorería en el Sheet (fecha real a pagar, vencimiento del giro, fecha de pago de la nacionalización) y la fila sale en rojo; <i>Calculada</i> = la calcula el Tablero (p. ej. BL + días de la condición pactada) — pase el mouse para ver cómo. Un BL con varias proformas sale en <b>una sola fila</b> con su total; haga clic para ver cada línea de factura (no son pagos repetidos). "VENCIDO" = fecha ya pasada y sin pago registrado (en el gráfico de flujo se suma al mes actual).</div>
+      <div class="desc" style="margin-bottom:6px;">Cada fila trae su <b>línea de tiempo</b>: pedido → zarpe/BL → arribo → pago, con cada fecha marcada <b style="color:#1F8A4C;">✓</b> real (ya ocurrió), <b style="color:var(--navy);">✎</b> digitada (escrita en el Sheet) o <b style="color:var(--amber);">≈</b> calculada por el Tablero (pase el mouse para ver de dónde sale), la regla de la fecha de pago y cuántos días faltan. El detalle del cálculo del monto y de la fecha está en "▸ cómo se calcula". <b>Origen de la fecha de pago:</b> <i>Digitada</i> = la escribió Comex o Tesorería en el Sheet (fecha real a pagar, vencimiento del giro, fecha de pago de la nacionalización) y la fila sale en rojo; <i>Calculada</i> = la calcula el Tablero (p. ej. BL + días de la condición pactada) — pase el mouse para ver cómo. Cada <b>proyecto comex (BL)</b> sale en <b>una sola fila</b> con el total a pagar, aunque tenga varias proformas, pedidos o fechas; haga clic para ver cada línea de factura (no son pagos repetidos). "VENCIDO" = fecha ya pasada y sin pago registrado (en el gráfico de flujo se suma al mes actual).</div>
       <div class="scroll"><table id="tbl_pivote_detalle"></table></div>
     </div>
     <div class="panel">
@@ -6827,18 +6827,24 @@ function renderProgramacionPagos(M, nacEst){
       return `<tr class="${it.esEstimado?'':'row-bad'}" ${extra}><td>${fmtDate(it.fecha)}${it.vencido?' <span class="pill bad">VENCIDO</span>':''}${it.retrasado?' <span class="pill warn">retrasado</span>':''}</td>
         <td class="txt">${it.tipoLbl}</td><td>${it.tabla}</td><td class="txt">${it.proveedor||''}</td><td class="txt">${it.pedido||''}</td><td class="txt">${refTxt ?? it.referencia}</td>
         <td><b>${montoTxt ?? fmt(it.monto)}</b><br>${toggleCalc(id)}</td><td style="min-width:420px;">${tiempoTxt ?? lineaTiempoHtml(it)}</td>
-        <td title="${String(it.comoFecha||'').replace(/"/g,"'")}">${it.esEstimado?'<span class="pill warn">Calculada</span>':'<span class="pill ok">Digitada</span>'}</td></tr>` + filaCalc(it, id); };
+        <td title="${String(it.comoFecha||'').replace(/"/g,"'")}">${it.origenMixto?'<span class="pill">Mixta (ver líneas)</span>':(it.esEstimado?'<span class="pill warn">Calculada</span>':'<span class="pill ok">Digitada</span>')}</td></tr>` + filaCalc(it, id); };
     const grupos47 = []; const idxG = {};
     filtrados.sort((a,b)=>a.fecha-b.fecha).forEach(it=>{
-      const k = it.tk==='comex' ? ['c', it.referencia, it.pedido, +soloDiaT(it.fecha), it.esEstimado].join('|') : null;
+      const k = it.tk==='comex' ? 'c|'+it.referencia : null; // Tanda 55d: UNA fila por proyecto comex (BL), aunque mezcle pedidos, proformas o fechas
       if(k && idxG[k]!==undefined) grupos47[idxG[k]].push(it); else { if(k) idxG[k] = grupos47.length; grupos47.push([it]); }
     });
     grupos47.forEach((g, gi)=>{
       if(g.length===1){ const it = g[0]; htmlD += filaHtml(it, '', it.tk==='comex' && it.proforma ? `${it.referencia}<br><span style="font-size:10px;color:var(--ink-soft);">proforma ${it.proforma}</span>` : null); return; }
       const tot = g.reduce((a,x)=>a+x.monto,0), kg = g.reduce((a,x)=>a+(x.kgFila||0),0), id = `f47g_${gi}`;
-      htmlD += filaHtml(g[0], `style="cursor:pointer;" onclick="document.querySelectorAll('[data-g=${id}]').forEach(r=>r.style.display=r.style.display==='table-row'?'none':'table-row')"`,
-        `<b>${g[0].referencia}</b> <span class="pill">${g.length} proformas</span><br><span style="font-size:10px;color:var(--ink-soft);">clic para ver el detalle por proforma${kg?` · ${fmtTon(kg)} en el BL`:''}</span>`,
-        fmt(tot), lineaTiempoHtml(g[0]) + `<div style="font-size:10px;color:var(--ink-soft);text-align:left;">Suma de ${g.length} líneas de factura del mismo BL (una por proforma). No es un pago repetido.</div>`);
+      const peds = [...new Set(g.map(x=>x.pedido).filter(Boolean))], profs = [...new Set(g.map(x=>x.proforma).filter(Boolean))];
+      const fechas = [...new Set(g.map(x=>+soloDiaT(x.fecha)))].sort((a,b)=>a-b);
+      const est = new Set(g.map(x=>x.esEstimado));
+      const padre = {...g[0], pedido: peds.length>1 ? `${peds.length} pedidos: ${peds.join(', ')}` : (peds[0]||''), vencido: g.some(x=>x.vencido), retrasado: g.some(x=>x.retrasado),
+        esEstimado: est.has(true), origenMixto: est.size>1};
+      const notaFechas = fechas.length>1 ? ` · <b>${fechas.length} fechas de pago</b>, del ${fmtDate(new Date(fechas[0]))} al ${fmtDate(new Date(fechas[fechas.length-1]))} (ábralo para ver cada una)` : '';
+      htmlD += filaHtml(padre, `style="cursor:pointer;" onclick="document.querySelectorAll('[data-g=${id}]').forEach(r=>r.style.display=r.style.display==='table-row'?'none':'table-row')"`,
+        `<b>${g[0].referencia}</b> <span class="pill">${g.length} línea(s) · ${profs.length} proforma(s)</span><br><span style="font-size:10px;color:var(--ink-soft);">▸ clic para ver cada proforma${kg?` · ${fmtTon(kg)} en el BL`:''}</span>`,
+        fmt(tot), lineaTiempoHtml(padre) + `<div style="font-size:10px;color:var(--ink-soft);text-align:left;white-space:normal;">Total del proyecto comex: suma de ${g.length} líneas de factura (una por proforma/producto). No es un pago repetido${notaFechas}.</div>`);
       g.forEach(it=>{ htmlD += filaHtml(it, `data-g="${id}" style="display:none;background:var(--paper);"`, `↳ proforma ${it.proforma||'—'}${it.kgFila?` · ${fmtTon(it.kgFila)}`:''}`, null, `<div style="font-size:11px;color:var(--ink-soft);text-align:left;white-space:normal;">${it.comoMonto||''}</div>`); });
     });
     const totalDetalle = filtrados.reduce((a,it)=>a+it.monto,0);
