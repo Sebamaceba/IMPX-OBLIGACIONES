@@ -350,8 +350,10 @@
 
   <div class="view" id="v4">
     <div class="panel">
-      <h2>Resumen: total pendiente por pagar actualmente</h2>
-      <div class="mini-kpis" id="v4_resumen"></div>
+      <h2>Resumen: pendiente por pagar según cuándo vence</h2>
+      <div class="desc">Mismos pagos de 4.1 (una sola fuente), abiertos por horizonte: lo vencido sin pagar, el mes actual, el mes siguiente y el resto. La columna Total cuadra con el total de 4.1.</div>
+      <div class="mini-kpis" id="v4_resumen_kpi"></div>
+      <div class="scroll"><table id="v4_resumen"></table></div>
     </div>
     <div class="panel">
       <h2>Flujo de caja necesario — obligaciones reales + proyectadas por mes</h2>
@@ -367,9 +369,11 @@
       <div class="desc">Vista tipo tabla dinámica: consolida TODO lo pendiente (proyectos comex, pronósticos de pedidos, giros financieros y nacionalización) por mes o por semana, separando lo confirmado (real) de lo estimado — para armar la programación semanal de pagos.</div>
       <div class="filters">
         <select id="f47_vista"><option value="mes">Agrupar por mes</option><option value="semana">Agrupar por semana</option></select>
-        <select id="f47_periodo"><option value="">Todos los períodos</option></select>
-        <select id="f47_tipo_fecha"><option value="ambos">Estimados y reales</option><option value="real">Solo fecha digitada</option><option value="estimado">Solo fecha calculada</option></select>
-        <select id="f47_tipo"><option value="">Todos los tipos de pago</option></select>
+        <label style="font-size:12px;color:var(--ink-soft);">Desde</label><select id="f47_desde"><option value="">(inicio)</option></select>
+        <label style="font-size:12px;color:var(--ink-soft);">Hasta</label><select id="f47_hasta"><option value="">(fin)</option></select>
+        <select id="f47_tipo_fecha"><option value="ambos">Fecha digitada y calculada</option><option value="real">Solo fecha digitada</option><option value="estimado">Solo fecha calculada</option></select>
+        <details id="f47_tipo_box" style="position:relative;display:inline-block;"><summary id="f47_tipo_lbl" style="cursor:pointer;border:1px solid var(--line,#DDE3E8);border-radius:6px;padding:7px 12px;font-size:12px;background:#fff;list-style:none;">Todos los tipos de pago ▾</summary>
+          <div id="f47_tipo" style="position:absolute;z-index:20;background:#fff;border:1px solid var(--line,#DDE3E8);border-radius:8px;padding:8px 12px;margin-top:4px;box-shadow:0 4px 14px rgba(0,0,0,.12);min-width:330px;font-size:12px;"></div></details>
         <input id="f47_buscar" placeholder="Buscar pedido, proveedor o proyecto...">
         <button id="f47_descargar" type="button" style="background:var(--navy);color:#fff;border:none;border-radius:6px;padding:8px 14px;font-size:12px;cursor:pointer;">⬇ Descargar a Excel</button>
       </div>
@@ -2007,7 +2011,7 @@ function buildModel({profRaw, spRaw, pgRaw, gfRaw, nacRaw, pedDetRaw, impRaw, pp
   });
   const ajustePago = spAll0.map(()=>0);
   Object.entries(filasPorProyecto).forEach(([proy, idxs])=>{
-    if(!proy || idxs.length<2) return;
+    if(!proy) return; // Tanda 55g: también proyectos de UNA sola fila (antes se exigían 2+): un pago del proyecto cargado a un pedido mal digitado (ej. HEBEI_DA_SHANG_0127 vs 127) o sin pedido se le asigna aquí
     const pedidosFila = new Set(idxs.map(i=>spAll0[i].pedido));
     const huerfano = Object.entries(pagosSaldoPorProyectoPedido).filter(([k])=>{ const [pr, pe] = k.split('||'); return pr===proy && !pedidosFila.has(pe); }).reduce((a,[,v])=>a+v,0);
     const exceso = idxs.map(i=>Math.max(0, pagadoAsignado[i] - netoPorFila(spAll0[i])));
@@ -4327,6 +4331,9 @@ function renderDiag(){
   const cerradosAuto = MODEL.pedidos.filter(p=>p.cerrado && p.diferenciaEntregaKg!==null && Math.abs(p.diferenciaEntregaKg||0)>1);
   if(cerradosAuto.length) advs.push(`${cerradosAuto.length} pedido(s) cerrados por conciliación financiera (anticipo ya reclasificado) muestran diferencia entre lo pedido y lo entregado en toneladas — revisar si es un tema de calidad/cantidad aceptada: ` +
     cerradosAuto.slice(0,10).map(p=>`${p.pedido} (${p.diferenciaEntregaKg>0?'+':''}${fmtTon(p.diferenciaEntregaKg)})`).join(', ') + (cerradosAuto.length>10?'…':''));
+  { const pedPorProy = {}; MODEL.spAll.forEach(s=>{ (pedPorProy[s.proyecto] = pedPorProy[s.proyecto] || new Set()).add(s.pedido); });
+    const mal = MODEL.pg.filter(p=>p.concepto==='SALDO' && p.proyectoComex && pedPorProy[p.proyectoComex] && !pedPorProy[p.proyectoComex].has(p.pedido));
+    if(mal.length) advs.push(`${mal.length} pago(s) de saldo en la hoja Pagos tienen un pedido que no coincide con el de su proyecto comex en Seguimiento Proyectos (se asignan igual al proyecto, Tanda 55g). Corregir el pedido en Pagos: ${mal.map(p=>`${p.proyectoComex} (Pagos dice "${p.pedido||'vacío'}", Seguimiento dice "${[...pedPorProy[p.proyectoComex]].join(' / ')}", ${fmt(p.valor)})`).join('; ')}.`); }
   { const b = MODEL.nav.backtestETA; if(b) advs.push(b.n ? `ETA digitada en Control de Importaciones: en ${b.n} embarques ya arribados erró ${Math.round(b.errEtaMediana)} días (mediana) vs. ${Math.round(b.errNavMediana)} del cálculo zarpe + navegación del proveedor → ${b.usarETA?'<b>se usa la ETA</b> para lo que va navegando':'se usa el cálculo (la ETA no acierta mejor)'}.` : 'Control de Importaciones no trae "Fecha Estimada de Arribo" en embarques ya arribados: no se puede medir su acierto, se usa zarpe real + navegación del proveedor.'); }
   { const exc = MODEL.spAll.filter(s=>s.estadoCalculado==='EXCLUIDO (pedido anterior al corte)');
     if(exc.length) advs.push(`${exc.length} saldo(s) a proveedor de pedidos anteriores a ${fmtDate(FECHA_CORTE_HISTORICO)} por ${fmt(exc.reduce((a,s)=>a+s.saldoCalculado,0))} NO se programan (falta de data de 2025, decisión Tanda 55): ${exc.map(s=>s.proyecto).join(', ')}. Los giros financieros de esos pedidos SÍ siguen en el flujo (son deuda con el banco).`); }
@@ -5646,7 +5653,15 @@ function familiaDePedido(M, pedido){
 }
 
 function calcularNacEstimada(M, arancelPct, ivaPct){
-  const nacRegistrados = new Set(M.nac.map(n=>n.proyectoComex));
+  // Tanda 55f: un proyecto cuenta como "registrado" (sale del estimado) solo si su fila en Nacionalización ya trae
+  // un valor (saldo, valor real o valor estimado COP) o está PAGADO. Si Comex creó la fila sin valor todavía
+  // (ej. WUXI_HAOGUANG_10_26, "SIN PAGO" y saldo 0), antes se caía por el hueco: no estaba ni en registrada
+  // (exige saldo > 0) ni en estimada. Ahora se sigue estimando hasta que la fila tenga valor.
+  const nacConValor = new Set(), nacSinValor = new Set();
+  M.nac.forEach(n=>{ if(!n.proyectoComex) return;
+    const conValor = String(n.estado||'').toUpperCase()==='PAGADO' || (n.saldo||0)>0 || (n.valorRealCOP||0)>0 || (n.valorEstimadoCOP||0)>0;
+    (conValor ? nacConValor : nacSinValor).add(n.proyectoComex); });
+  const nacRegistrados = nacConValor;
   const items = [];
 
   // Escenario 1: proyectos comex CONFIRMADOS sin registro en la hoja de Nacionalización — YA ARRIBADOS o NAVEGANDO.
@@ -5668,7 +5683,8 @@ function calcularNacEstimada(M, arancelPct, ivaPct){
     if(s.entregadoKgFila!=null && s.entregadoKg>0){ kg = (kg||0) * s.entregadoKgFila / s.entregadoKg; kgYaContado.add(s.proyecto); }
     else if(kgYaContado.has(s.proyecto)) kg = 0; else kgYaContado.add(s.proyecto); // el $ sí se suma por cada línea, el Kg (propiedad del embarque) solo una vez
     const diasDesdeArribo = esReal ? daysBetween(fechaArribo, new Date()) : null;
-    items.push({origen: esReal?'Arribado (sin registrar en Nacionalización)':'Navegando (estimado)', pedido:s.pedido, referencia:s.proyecto,
+    const filaVacia = nacSinValor.has(s.proyecto);
+    items.push({origen: filaVacia ? 'Registrada en Nacionalización SIN valor todavía (se estima)' : (esReal?'Arribado (sin registrar en Nacionalización)':'Navegando (estimado)'), pedido:s.pedido, referencia:s.proyecto,
       valorBase:s.valorFactura, kg, fechaArribo, retrasado:false, esReal, posibleYaPagado: esReal && diasDesdeArribo>180});
   });
   // Escenario 2: pedidos con parciales incompletos — cada parcial faltante pronosticado
@@ -6523,15 +6539,22 @@ function renderView4(){
 
   const totalNacReg = nacRegistradaPendiente(M).filas.reduce((a,x)=>a+(x.usd||0),0);
   const granTotal = totalComex + totalA + totalB + totalGF + totalNacTodos + totalNacReg;
-  document.getElementById('v4_resumen').innerHTML = `
-    <div class="mini-kpi bad"><span>4.2 Saldo Proyectos Comex</span><b>${fmt(totalComex)}</b></div>
-    <div class="mini-kpi bad"><span>4.3 Pedidos sin parcial (a pagar, neto de anticipo)</span><b>${fmt(totalA)}</b></div>
-    <div class="mini-kpi bad"><span>4.4 Parciales incompletos (a pagar)</span><b>${fmt(totalB)}</b></div>
-    <div class="mini-kpi bad"><span>4.5 Giros Financieros</span><b>${fmt(totalGF)}</b></div>
-    <div class="mini-kpi bad"><span>4.7 Nacionalización estimada (que entra al flujo)</span><b>${fmt(totalNacTodos)}</b></div>
-    <div class="mini-kpi bad"><span>Nacionalización registrada sin pagar</span><b>${fmt(totalNacReg)}</b></div>
-    <div class="mini-kpi"><span>TOTAL GENERAL PENDIENTE (= total de 4.1)</span><b>${fmt(granTotal)}</b></div>
-  `;
+  // Tanda 55h: el resumen se abre por horizonte (antes era un total sin temporalidad). Usa los mismos ítems de 4.1.
+  { const its = itemsProgramacionPagos(M, nacEst), hoyR = new Date(), mAct = monthKey(hoyR), mSig = monthKey(new Date(hoyR.getFullYear(), hoyR.getMonth()+1, 1));
+    const cols = [['venc','Vencido sin pagar'], ['act', `Mes actual (${fmtMesLabel(mAct)})`], ['sig', `Mes siguiente (${fmtMesLabel(mSig)})`], ['resto','Meses siguientes'], ['tot','Total']];
+    const bucket = it => it.vencido ? 'venc' : (it.mesKey<=mAct ? 'act' : (it.mesKey===mSig ? 'sig' : 'resto'));
+    const fila = arr => { const o = {venc:0, act:0, sig:0, resto:0, tot:0}; arr.forEach(it=>{ o[bucket(it)] += it.monto; o.tot += it.monto; }); return o; };
+    let h = `<tr><th>Tipo de pago</th>${cols.map(c=>`<th>${c[1]}</th>`).join('')}</tr>`;
+    TIPOS_PAGO.forEach(t=>{ const o = fila(its.filter(it=>it.tk===t.k)); if(!o.tot) return;
+      h += `<tr><td class="txt">${t.tabla} · ${t.lbl}</td>${cols.map(c=>`<td${c[0]==='venc'&&o.venc?' style="color:var(--red);font-weight:700;"':''}>${o[c[0]]?fmt(o[c[0]]):'—'}</td>`).join('')}</tr>`; });
+    const T = fila(its);
+    h += `<tr style="background:var(--paper);font-weight:700;"><td class="txt">TOTAL (= total de 4.1)</td>${cols.map(c=>`<td>${fmt(T[c[0]])}</td>`).join('')}</tr>`;
+    document.getElementById('v4_resumen').innerHTML = h;
+    document.getElementById('v4_resumen_kpi').innerHTML =
+      `<div class="mini-kpi bad"><span>Vencido sin pagar</span><b>${fmt(T.venc)}</b><span>revisar con Comex/Tesorería: ¿pagado sin registrar o atrasado?</span></div>`+
+      `<div class="mini-kpi warn"><span>A pagar en ${fmtMesLabel(mAct)}</span><b>${fmt(T.act)}</b></div>`+
+      `<div class="mini-kpi"><span>A pagar en ${fmtMesLabel(mSig)}</span><b>${fmt(T.sig)}</b></div>`+
+      `<div class="mini-kpi"><span>Total pendiente</span><b>${fmt(T.tot)}</b></div>`; }
 
   const horizonte = parseInt(document.getElementById('v4_horizonte').value||'12',10);
   const {mesesN, porMes, total:totalN} = computeFlujoCaja(M, horizonte, arancel, iva);
@@ -6703,25 +6726,33 @@ function renderProgramacionPagos(M, nacEst){
   const items = itemsProgramacionPagos(M, nacEst);
 
   const selVista = document.getElementById('f47_vista');
-  const selPeriodo = document.getElementById('f47_periodo');
+  const selDesde = document.getElementById('f47_desde'), selHasta = document.getElementById('f47_hasta');
   const selTipoFecha = document.getElementById('f47_tipo_fecha');
   const selTipo = document.getElementById('f47_tipo');
   const inpBuscar = document.getElementById('f47_buscar');
-  { const prev = selTipo.value;
-    selTipo.innerHTML = '<option value="">Todos los tipos de pago</option>' + TIPOS_PAGO.map(t=>`<option value="${t.k}">${t.tabla} · ${t.lbl}</option>`).join('');
-    selTipo.value = prev; }
+  // Tanda 55h: tipos de pago con selección múltiple (casillas). Sin ninguna marcada = todos.
+  const tiposMarcados = () => [...selTipo.querySelectorAll('input[type=checkbox]:checked')].map(x=>x.value);
+  const setTipos = ks => { selTipo.querySelectorAll('input[type=checkbox]').forEach(x=>{ x.checked = ks.includes(x.value); }); };
+  { const prev = selTipo.querySelectorAll ? tiposMarcados() : [];
+    selTipo.innerHTML = TIPOS_PAGO.map(t=>`<label style="display:block;padding:3px 0;cursor:pointer;"><input type="checkbox" value="${t.k}"> ${t.tabla} · ${t.lbl}</label>`).join('') +
+      `<div style="margin-top:6px;border-top:1px solid var(--line,#DDE3E8);padding-top:6px;"><a href="javascript:void(0)" id="f47_tipo_todos" style="font-size:11px;">Limpiar (ver todos)</a></div>`;
+    setTipos(prev); }
 
   function poblarPeriodos(){
     const usaSemana = selVista.value==='semana';
     const keys = [...new Set(items.map(it=>usaSemana?it.semanaKey:it.mesKey))].sort();
     const labelFn = k => usaSemana ? (items.find(it=>it.semanaKey===k) ? fmtDate(items.find(it=>it.semanaKey===k).semanaMonday)+' (semana)' : k) : fmtMesLabel(k);
-    selPeriodo.innerHTML = '<option value="">Todos los períodos</option>' + keys.map(k=>`<option value="${k}">${labelFn(k)}</option>`).join('');
+    const pD = selDesde.value, pH = selHasta.value;
+    selDesde.innerHTML = '<option value="">(inicio)</option>' + keys.map(k=>`<option value="${k}">${labelFn(k)}</option>`).join('');
+    selHasta.innerHTML = '<option value="">(fin)</option>' + keys.map(k=>`<option value="${k}">${labelFn(k)}</option>`).join('');
+    if(keys.includes(pD)) selDesde.value = pD; if(keys.includes(pH)) selHasta.value = pH;
   }
   poblarPeriodos();
-  selVista.onchange = ()=>{ poblarPeriodos(); go(); };
-  selPeriodo.onchange = go;
+  selVista.onchange = ()=>{ selDesde.value=''; selHasta.value=''; poblarPeriodos(); go(); };
+  selDesde.onchange = go; selHasta.onchange = go;
   selTipoFecha.onchange = go;
   selTipo.onchange = go;
+  { const lt = document.getElementById('f47_tipo_todos'); if(lt) lt.onclick = ()=>{ setTipos([]); go(); }; }
   inpBuscar.oninput = go;
 
   // ---- ¿De dónde sale cada pago? (explicación + cuadre contra las tablas de origen)
@@ -6752,20 +6783,22 @@ function renderProgramacionPagos(M, nacEst){
     <p style="margin:8px 0 0;font-size:11px;color:var(--ink-soft);">El gráfico "Flujo de caja necesario" y la BD de pagos suman exactamente estos mismos pagos (dentro de su horizonte); la única diferencia es de presentación: lo vencido sin pagar se muestra en el mes actual. Los pedidos nuevos sugeridos (Vista 10.3) no están aquí porque todavía no son una obligación.</p></div>`;
   document.getElementById('f47_origen').innerHTML = hc;
   document.querySelectorAll('#tbl_f47_cuadre .f47-cuadre-fila').forEach(tr=> tr.onclick = ()=>{
-    selTipo.value = tr.dataset.tk; go();
+    setTipos([tr.dataset.tk]); go();
     document.getElementById('tbl_pivote_detalle').scrollIntoView({behavior:'smooth', block:'start'}); });
 
   let filtrados = [];
   function go(){
     const usaSemana = selVista.value==='semana';
-    const periodo = selPeriodo.value;
+    let pDesde = selDesde.value, pHasta = selHasta.value; if(pDesde && pHasta && pDesde>pHasta){ const t=pDesde; pDesde=pHasta; pHasta=t; }
+    const enRango = k => (!pDesde || k>=pDesde) && (!pHasta || k<=pHasta);
     const tipoFecha = selTipoFecha.value;
-    const tk = selTipo.value;
+    const tks = tiposMarcados(), tk = tks.length===1 ? tks[0] : '';
+    document.getElementById('f47_tipo_lbl').textContent = (tks.length ? `Tipos de pago: ${tks.length} seleccionado(s)` : 'Todos los tipos de pago') + ' ▾';
     const q = (inpBuscar.value||'').trim().toLowerCase();
     const pasaBase = it => (tipoFecha==='ambos' || (tipoFecha==='real' && !it.esEstimado) || (tipoFecha==='estimado' && it.esEstimado))
-      && (!tk || it.tk===tk)
+      && (!tks.length || tks.includes(it.tk))
       && (!q || [it.pedido, it.proveedor, it.referencia].some(v=>String(v||'').toLowerCase().includes(q)));
-    filtrados = items.filter(it=> pasaBase(it) && (!periodo || (usaSemana? it.semanaKey===periodo : it.mesKey===periodo)));
+    filtrados = items.filter(it=> pasaBase(it) && enRango(usaSemana? it.semanaKey : it.mesKey));
 
     const totalEst = filtrados.filter(it=>it.esEstimado).reduce((a,it)=>a+it.monto,0);
     const totalReal = filtrados.filter(it=>!it.esEstimado).reduce((a,it)=>a+it.monto,0);
@@ -6774,9 +6807,10 @@ function renderProgramacionPagos(M, nacEst){
     const totalGF = filtrados.filter(it=>it.tk==='gf').reduce((a,it)=>a+it.monto,0);
     const totalVenc = filtrados.filter(it=>it.vencido).reduce((a,it)=>a+it.monto,0);
     document.getElementById('f47_resumen').innerHTML = `
-      <div class="mini-kpi"><span>Pagos en la vista</span><b>${filtrados.length}</b>${tk?`<span>${TIPO_PAGO[tk].tabla} · ${TIPO_PAGO[tk].lbl}</span>`:''}</div>
-      <div class="mini-kpi bad"><span>Total con fecha digitada</span><b>${fmt(totalReal)}</b>${totalVenc>0?`<span>de los cuales vencido: ${fmt(totalVenc)}</span>`:''}</div>
-      <div class="mini-kpi warn"><span>Total con fecha calculada</span><b>${fmt(totalEst)}</b></div>
+      <div class="mini-kpi"><span>Pagos en la vista</span><b>${filtrados.length}</b>${tks.length?`<span>${tks.map(k=>TIPO_PAGO[k].tabla+' · '+TIPO_PAGO[k].lbl).join(' + ')}</span>`:''}${(pDesde||pHasta)?`<span>${pDesde?(usaSemana?pDesde:fmtMesLabel(pDesde)):'inicio'} → ${pHasta?(usaSemana?pHasta:fmtMesLabel(pHasta)):'fin'}</span>`:''}</div>
+      ${(()=>{ const vD = filtrados.filter(it=>it.vencido && !it.esEstimado).reduce((a,it)=>a+it.monto,0), vC = filtrados.filter(it=>it.vencido && it.esEstimado).reduce((a,it)=>a+it.monto,0);
+        return `<div class="mini-kpi bad"><span>Total con fecha digitada</span><b>${fmt(totalReal)}</b>${vD>0?`<span>de los cuales vencido: ${fmt(vD)}</span>`:''}</div>
+      <div class="mini-kpi warn"><span>Total con fecha calculada</span><b>${fmt(totalEst)}</b>${vC>0?`<span>de los cuales vencido: ${fmt(vC)}</span>`:''}</div>`; })()}
       <div class="mini-kpi"><span>Proyectos Comex (4.2)</span><b>${fmt(totalComex)}</b></div>
       <div class="mini-kpi"><span>Pronósticos 4.3/4.4 + Nacionalización</span><b>${fmt(totalProyectado)}</b></div>
       <div class="mini-kpi"><span>Giros Financieros (4.5)</span><b>${fmt(totalGF)}</b></div>
@@ -6800,7 +6834,7 @@ function renderProgramacionPagos(M, nacEst){
     const tP = {total:0, comexConfirmado:0, comexEstimado:0, gf:0, A:0, B:0, nac:0, n:0};
     filasP.forEach(g=>{
       const label = usaSemanaP ? fmtDate(g.monday) : fmtMesLabel(g.key);
-      const activo = g.key===selPeriodo.value;
+      const activo = (pDesde||pHasta) && enRango(g.key);
       Object.keys(tP).forEach(k=> tP[k] += g[k]);
       htmlP += `<tr style="${activo?'background:#EEF3F7;font-weight:700;':''}"><td class="txt">${label}</td><td><b>${fmt(g.total)}</b></td>
         <td>${fmt(g.comexConfirmado)}</td><td>${fmt(g.comexEstimado)}</td><td>${fmt(g.gf)}</td><td>${fmt(g.A)}</td><td>${fmt(g.B)}</td><td>${fmt(g.nac)}</td><td>${g.n}</td></tr>`;
