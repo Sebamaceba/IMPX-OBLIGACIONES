@@ -4855,7 +4855,11 @@ function buildLlegadasPorFamilia(M){
     const pedidoCod = M.ton.proformaToPedido[g.proforma];
     const pedido = pedidoCod ? pedidoPorCodigo[pedidoCod] : null;
     if(!pedido) return; // proforma sin pedido asociado, no se puede ubicar en el tiempo de forma confiable
-    if(pedido.fechaPedido && pedido.fechaPedido < M.FECHA_CORTE_DATA_CONFIABLE) return; // datos anteriores al corte confiable
+    // Tanda 56b: el corte de data confiable (pedidos antes del 1-nov-2025) ya NO borra lo que arribó: lo arribado cuenta como llegada
+    // real (igual que realLlegadasTon / Control de Importaciones; antes ene-26 salía en 0 cuando llegaron 929 Ton). El corte se mantiene
+    // solo para lo "en tránsito" de esos pedidos viejos: zarparon en 2025 y nunca se registró su arribo (Control de Importaciones
+    // arranca a finales de oct-2025), así que no son tránsito real.
+    const pedidoViejo = !!(pedido.fechaPedido && pedido.fechaPedido < M.FECHA_CORTE_DATA_CONFIABLE);
 
     // Lo que YA tiene zarpe (o ya arribó) — dato real u observado, no depende de ningún motor de pronóstico
     const filasConZarpe = g.filas.filter(f=>f.fechaRealZarpe);
@@ -4866,6 +4870,7 @@ function buildLlegadasPorFamilia(M){
         confirmadoReal.push({familia:g.familia, kg, fechaArribo:imp.fechaRealArribo, fechaZarpe:f.fechaRealZarpe, proveedor:pedido.proveedor, pedido:pedidoCod, proyecto:f.nombreProyecto,
           origenZarpe:'Real', origenArribo:'Real', baseArribo:'arribo registrado en Control de Importaciones', arriboMin:imp.fechaRealArribo, arriboMax:imp.fechaRealArribo});
       } else {
+        if(pedidoViejo) return;
         // Tanda 55: ETA digitada (si acierta mejor) o zarpe real + navegación del PROVEEDOR (mediana), con rango; misma función que pagos/nac.
         const a = M.nav.arriboTransito(f.fechaRealZarpe, pedidoCod, f.nombreProyecto, f.paisOrigen);
         confirmadoTransito.push({familia:g.familia, kg, fechaArribo: a.fecha, fechaZarpe:f.fechaRealZarpe, proveedor:pedido.proveedor, pedido:pedidoCod, proyecto:f.nombreProyecto,
