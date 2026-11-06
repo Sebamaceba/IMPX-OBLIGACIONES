@@ -350,12 +350,6 @@
 
   <div class="view" id="v4">
     <div class="panel">
-      <h2>Resumen: pendiente por pagar según cuándo vence</h2>
-      <div class="desc">Mismos pagos de 4.1 (una sola fuente), abiertos por horizonte: lo vencido sin pagar, el mes actual, el mes siguiente y el resto. La columna Total cuadra con el total de 4.1.</div>
-      <div class="mini-kpis" id="v4_resumen_kpi"></div>
-      <div class="scroll"><table id="v4_resumen"></table></div>
-    </div>
-    <div class="panel">
       <h2>Flujo de caja necesario — obligaciones reales + proyectadas por mes</h2>
       <div class="desc">Todo lo de abajo, sumado por mes. Usa el selector para ver 6 o 12 meses adelante.</div>
       <div class="filters">
@@ -722,6 +716,9 @@
       <div class="filters">
         <label style="font-size:12px;color:var(--ink-soft);">Día de "gabela" (después de este día del mes, el arribo cuenta disponible el mes siguiente):
           <input id="v9_gabela" type="number" min="1" max="28" value="20" style="width:55px;margin-left:6px;"></label>
+        <label style="font-size:12px;color:var(--ink-soft);margin:0 6px 0 14px;">Desde:</label><select id="v9_desde" style="padding:4px 8px;border-radius:6px;border:1px solid var(--line);"></select>
+        <label style="font-size:12px;color:var(--ink-soft);margin:0 6px 0 6px;">Hasta:</label><select id="v9_hasta" style="padding:4px 8px;border-radius:6px;border:1px solid var(--line);"></select>
+        <span style="font-size:11px;color:var(--ink-soft);">(mes de disponibilidad; aplica a las gráficas, a las tablas 1–4 y al costo por Ton)</span>
       </div>
       <div id="v9_narrativa" style="margin-top:8px;font-size:12.5px;color:var(--ink-soft);line-height:1.6;"></div>
     </div>
@@ -734,6 +731,18 @@
       <h2>Toneladas de llegada por mes — real vs. certero vs. estimado</h2>
       <div class="desc">Real = ya arribó físicamente. Confirmado en tránsito = ya zarpó, arribo estimado por navegación. Estimado = parciales pendientes + pedidos sin ningún envío, totalmente proyectado.</div>
       <div style="height:340px;"><canvas id="c_llegadasCerteza"></canvas></div>
+    </div>
+    <div class="panel" id="v9_costoArribado">
+      <h2>9.2 · Costo por Ton de lo arribado — factura + nacionalización</h2>
+      <div class="desc">Solo lo que <b>ya arribó</b> (barra "Real" de arriba), en su mes de llegada (mismo mes de disponibilidad y día de gabela de las gráficas). <b>Factura</b> = valor factura USD de los proyectos comex arribados. <b>Nacionalización</b> = la de ESOS mismos proyectos (hoja Nacionalización, cruce por proyecto comex), aunque se pague el mes siguiente: aquí se le asigna al mes en que llegó la mercancía. La nacionalización se registra en COP: se pasa a USD con la TRM del día en que se pagó (o la TRM del mes de pago si aún no se paga). Si un proyecto aún no tiene valor en la hoja, se estima (factura × % efectivo de su familia) y se marca. Cuando un proyecto trae varias familias, factura y nacionalización se reparten por sus Kg.</div>
+      <div class="filters">
+        <select id="v92_familia"><option value="">Todas las familias</option></select>
+        <button id="v92_descargar" type="button" style="background:var(--navy);color:#fff;border:none;border-radius:6px;padding:8px 14px;font-size:12px;cursor:pointer;">⬇ Descargar detalle a Excel</button>
+      </div>
+      <div class="mini-kpis" id="v92_resumen"></div>
+      <div style="height:300px;"><canvas id="c_v92_costo"></canvas></div>
+      <div class="scroll"><table id="tbl_v92_costo"></table></div>
+      <div id="v92_nota" style="margin-top:8px;font-size:11.5px;color:var(--ink-soft);line-height:1.5;"></div>
     </div>
     <div class="panel" id="v9_detalleProyectos">
       <h2>9.1 · ¿Qué compone cada mes de llegada? — detalle por proyecto comex</h2>
@@ -3882,6 +3891,89 @@ function irADetalleLlegadas(mes, familia){
   const el = document.getElementById('v9_detalleProyectos'); if(el) el.scrollIntoView({behavior:'smooth', block:'start'});
 }
 
+// ================= Tanda 56: 9.2 Costo por Ton de lo arribado (factura USD + nacionalización COP→USD) =================
+// Unidad de cálculo: proyecto comex arribado. Ton = Kg netos entregados de Cuadro Pedidos (las mismas de la barra "Real").
+// Factura = Σ valor factura USD de sus líneas en Seguimiento Proyectos. Nacionalización = Σ filas de ESE proyecto en la hoja
+// Nacionalización: valor real COP (o estimado COP si aún no hay real); COP → USD con la TRM del día de pago (pagado) o la TRM
+// del mes de pago (pendiente). Sin fila con valor → se estima factura × % efectivo de la familia (supuestoNac) y se marca.
+// Mes = mes de disponibilidad del arribo (no el mes en que se paga la nacionalización). Varias familias en un proyecto →
+// factura y nacionalización se reparten por Kg.
+function costoArribadoFilas(M, confirmadoReal){
+  const fac = {}; M.spAll.forEach(s=>{ if(s.proyecto) fac[s.proyecto] = (fac[s.proyecto]||0) + (s.valorFactura||0); });
+  const nacBy = {}; M.nac.forEach(n=>{ if(n.proyectoComex) (nacBy[n.proyectoComex] = nacBy[n.proyectoComex] || []).push(n); });
+  const porProy = {};
+  confirmadoReal.forEach(it=>{ const k = it.proyecto; if(!k) return;
+    const g = porProy[k] = porProy[k] || {proyecto:k, pedido:it.pedido, proveedor:it.proveedor, mes:it.mesDisp, fechaArribo:it.fechaArribo, kg:0, porFam:{}};
+    g.kg += it.kg||0; g.porFam[it.familia] = (g.porFam[it.familia]||0) + (it.kg||0); });
+  const filas = [];
+  Object.values(porProy).forEach(g=>{
+    if(!(g.kg>0)) return;
+    const factura = fac[g.proyecto] || 0;
+    let nacCop = 0, nacUsd = 0, sinTRM = false, fuente = '', trmTxt = '', estimada = false, pagada = true, conValor = false;
+    (nacBy[g.proyecto]||[]).forEach(n=>{
+      const cop = (n.valorRealCOP||0) > 0 ? n.valorRealCOP : ((n.saldo||0) > 0 ? n.saldo : (n.valorEstimadoCOP||0)); // real → saldo registrado → estimado
+      if(!(cop>0)) return; conValor = true;
+      const esPagada = String(n.estado||'').toUpperCase()==='PAGADO';
+      if(!esPagada) pagada = false;
+      const T = (esPagada && n.fechaPago) ? trmDia(n.fechaPago) : trmMes(n.fechaPago ? monthKey(n.fechaPago) : monthKey(new Date()));
+      nacCop += cop; if(T){ nacUsd += cop/T.valor; trmTxt = `${Math.round(T.valor).toLocaleString('es-CO')} (${T.fuente})`; } else sinTRM = true;
+    });
+    if(sinTRM) nacUsd = null;
+    if(conValor) fuente = pagada ? 'Hoja Nacionalización: pagada' : 'Hoja Nacionalización: registrada, pendiente de pago';
+    else { estimada = true; pagada = false;
+      const famDom = Object.entries(g.porFam).sort((a,b)=>b[1]-a[1])[0][0]; const S = supuestoNac(famDom);
+      nacUsd = factura * S.pct; const T = trmMes(monthKey(new Date())); nacCop = T ? nacUsd*T.valor : null;
+      fuente = `Estimada (sin valor en la hoja): ${S.fuente}`; trmTxt = T ? `${Math.round(T.valor).toLocaleString('es-CO')} (${T.fuente})` : ''; }
+    Object.entries(g.porFam).forEach(([fam, kg])=>{ const w = kg/g.kg;
+      filas.push({mes:g.mes, familia:fam, proyecto:g.proyecto, pedido:g.pedido, proveedor:g.proveedor, fechaArribo:g.fechaArribo, kg,
+        facturaUsd: factura*w, nacCop: nacCop===null?null:nacCop*w, nacUsd: nacUsd===null?null:nacUsd*w, fuente, trmTxt, estimada, pagada, sinFactura: !(factura>0)}); });
+  });
+  return filas;
+}
+function renderCostoArribado(M, confirmadoRealR){
+  const el = document.getElementById('tbl_v92_costo'); if(!el) return;
+  const selF = document.getElementById('v92_familia');
+  if(!selF.dataset.poblado){ selF.innerHTML += FAMILIAS_ORDEN.map(f=>`<option value="${f}">${f}</option>`).join(''); selF.dataset.poblado='1'; }
+  selF.onchange = ()=>renderCostoArribado(M, confirmadoRealR);
+  const fam = selF.value;
+  const filas = costoArribadoFilas(M, confirmadoRealR).filter(f=>!fam || f.familia===fam);
+  const meses = [...new Set(filas.map(f=>f.mes))].sort();
+  const usdTon = (usd, kg) => kg>0 && usd!==null ? usd/(kg/1000) : null;
+  const fmtU = v => v===null||v===undefined ? '—' : '$'+Math.round(v).toLocaleString('en-US');
+  const fmtC = v => v===null||v===undefined ? '—' : '$'+Math.round(v).toLocaleString('es-CO');
+  const agg = arr => { const o = {kg:0, fac:0, nacUsd:0, nacCop:0, kgEst:0, kgPend:0, nUsdNull:false, kgSinFac:0, n:new Set()};
+    arr.forEach(f=>{ o.kg += f.kg; o.fac += f.facturaUsd; if(f.nacUsd===null) o.nUsdNull = true; else o.nacUsd += f.nacUsd; if(f.nacCop===null) o.nCopNull = true; else o.nacCop += f.nacCop;
+      if(f.estimada) o.kgEst += f.kg; else if(!f.pagada) o.kgPend += f.kg; if(f.sinFactura) o.kgSinFac += f.kg; o.n.add(f.proyecto); }); return o; };
+  let h = `<tr><th>Mes de llegada</th><th>Ton arribadas</th><th># proyectos</th><th>Valor factura USD</th><th>Factura USD/Ton</th><th>Nacionalización COP</th><th>Nacionalización USD</th><th>Nac. USD/Ton</th><th>Nac. COP/Ton</th><th>% nac. s/ factura</th><th>Costo total USD/Ton</th><th>Calidad del dato</th></tr>`;
+  const serieFac = [], serieNac = [];
+  meses.forEach(m=>{ const o = agg(filas.filter(f=>f.mes===m));
+    const fT = usdTon(o.fac, o.kg), nT = o.nUsdNull ? null : usdTon(o.nacUsd, o.kg);
+    serieFac.push(fT||0); serieNac.push(nT||0);
+    const calidad = [o.kgEst>0.5?`${fmtTon(o.kgEst)} con nac. estimada`:'', o.kgPend>0.5?`${fmtTon(o.kgPend)} con nac. aún sin pagar`:'', o.kgSinFac>0.5?`<span style="color:var(--red);">${fmtTon(o.kgSinFac)} sin factura</span>`:''].filter(Boolean).join(' · ') || '<span class="pill ok">todo pagado</span>';
+    h += `<tr><td class="txt">${fmtMesLabel(m)}</td><td>${fmtTon(o.kg)}</td><td>${o.n.size}</td><td>${fmtU(o.fac)}</td><td><b>${fmtU(fT)}</b></td><td>${o.nCopNull?'—':fmtC(o.nacCop)}</td><td>${o.nUsdNull?'— (sin TRM)':fmtU(o.nacUsd)}</td><td><b>${fmtU(nT)}</b></td><td>${o.nCopNull?'—':fmtC(o.kg>0?o.nacCop/(o.kg/1000):null)}</td>`+
+      `<td>${!o.nUsdNull && o.fac>0 ? (o.nacUsd/o.fac*100).toFixed(1)+'%' : '—'}</td><td><b>${fT!==null && nT!==null ? fmtU(fT+nT) : '—'}</b></td><td class="txt" style="font-size:10.5px;">${calidad}</td></tr>`; });
+  const T = agg(filas); const fT = usdTon(T.fac, T.kg), nT = T.nUsdNull ? null : usdTon(T.nacUsd, T.kg);
+  h += `<tr style="background:var(--paper);font-weight:700;"><td class="txt">TOTAL DEL RANGO (ponderado por Ton)</td><td>${fmtTon(T.kg)}</td><td>${T.n.size}</td><td>${fmtU(T.fac)}</td><td>${fmtU(fT)}</td><td>${T.nCopNull?'—':fmtC(T.nacCop)}</td><td>${T.nUsdNull?'—':fmtU(T.nacUsd)}</td><td>${fmtU(nT)}</td><td>${T.nCopNull?'—':fmtC(T.kg>0?T.nacCop/(T.kg/1000):null)}</td><td>${!T.nUsdNull&&T.fac>0?(T.nacUsd/T.fac*100).toFixed(1)+'%':'—'}</td><td>${fT!==null&&nT!==null?fmtU(fT+nT):'—'}</td><td></td></tr>`;
+  el.innerHTML = meses.length ? h : '<tr><td class="txt">No hay Ton arribadas en el rango y familia elegidos.</td></tr>';
+  document.getElementById('v92_resumen').innerHTML =
+    `<div class="mini-kpi"><span>Ton arribadas (rango${fam?' · '+fam:''})</span><b>${fmtTon(T.kg)}</b></div>`+
+    `<div class="mini-kpi"><span>Factura USD/Ton</span><b>${fmtU(fT)}</b></div>`+
+    `<div class="mini-kpi"><span>Nacionalización USD/Ton</span><b>${fmtU(nT)}</b><span>${!T.nUsdNull&&T.fac>0?(T.nacUsd/T.fac*100).toFixed(1)+'% sobre factura':''}</span></div>`+
+    `<div class="mini-kpi"><span>Costo total USD/Ton (factura + nac.)</span><b>${fT!==null&&nT!==null?fmtU(fT+nT):'—'}</b></div>`;
+  barChart('c_v92_costo', meses.map(fmtMesLabel), [
+    {label:'Factura USD/Ton', data:serieFac, backgroundColor:COLORS.navy, stack:'s'},
+    {label:'Nacionalización USD/Ton', data:serieNac, backgroundColor:COLORS.gold, stack:'s'}],
+    {scales:{x:{stacked:true}, y:{stacked:true}}, plugins:{datalabels:{display:false}}}, false, v=>'$'+Math.round(v).toLocaleString('en-US'), true);
+  const nEst = new Set(filas.filter(f=>f.estimada).map(f=>f.proyecto)).size;
+  document.getElementById('v92_nota').innerHTML = `Ton = Kg netos entregados (Cuadro Pedidos). ${nEst?`<b>${nEst} proyecto(s)</b> sin valor en la hoja Nacionalización: su nacionalización se estima y se marca en "Calidad del dato". `:''}`+
+    `${FIN.trm?'':'<b style="color:var(--red);">Sin TRM de Finanzas conectada: la nacionalización solo se muestra en COP.</b> '}El detalle por proyecto (con TRM usada y fuente) está en la descarga.`;
+  document.getElementById('v92_descargar').onclick = ()=>{
+    const aoa = [['Mes de llegada','Familia','Proyecto comex','Pedido','Proveedor','Fecha arribo','Ton','Valor factura USD','Factura USD/Ton','Nacionalización COP','Nacionalización USD','Nac. USD/Ton','TRM usada','Fuente nacionalización']];
+    filas.slice().sort((a,b)=>a.mes.localeCompare(b.mes)||a.proyecto.localeCompare(b.proyecto)).forEach(f=> aoa.push([fmtMesLabel(f.mes), f.familia, f.proyecto, f.pedido||'', f.proveedor||'', fmtDate(f.fechaArribo), +(f.kg/1000).toFixed(2),
+      +f.facturaUsd.toFixed(2), f.kg>0? +(f.facturaUsd/(f.kg/1000)).toFixed(2) : '', f.nacCop===null?'':Math.round(f.nacCop), f.nacUsd===null?'':+f.nacUsd.toFixed(2), f.nacUsd!==null&&f.kg>0? +(f.nacUsd/(f.kg/1000)).toFixed(2):'', f.trmTxt, f.fuente]));
+    const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(aoa), 'Costo por Ton arribada');
+    XLSX.writeFile(wb, `Costo_por_Ton_arribada_${fmtDate(new Date())}.xlsx`); };
+}
 function renderView9(){
   const M = MODEL;
   const diaGabela = parseInt(document.getElementById('v9_gabela').value||'20',10);
@@ -3892,10 +3984,22 @@ function renderView9(){
   function conMes(lista){ return lista.map(it=>({...it, mesDisp: mesDisponibilidad(it.fechaArribo, diaGabela)})); }
   const confirmadoReal = conMes(llegadas.confirmadoReal);
   const confirmadoTransito = conMes(llegadas.confirmadoTransito);
-  const cierto = confirmadoReal.concat(confirmadoTransito);
-  const parcialPendiente = conMes(llegadas.estimado.filter(it=>it.tipo==='Parcial pendiente'));
-  const sinParcial = conMes(llegadas.estimado.filter(it=>it.tipo==='Sin parcial'));
+  const parcialPendiente0 = conMes(llegadas.estimado.filter(it=>it.tipo==='Parcial pendiente'));
+  const sinParcial0 = conMes(llegadas.estimado.filter(it=>it.tipo==='Sin parcial'));
+  const estimadoTodo0 = parcialPendiente0.concat(sinParcial0);
+  // Tanda 56: filtro Desde/Hasta (mes de disponibilidad), como en 10.2b. Aplica a gráficas, tablas 1–4 y 9.2; 9.1 tiene su propio filtro de mes.
+  const selD9 = document.getElementById('v9_desde'), selH9 = document.getElementById('v9_hasta');
+  { const meses9 = [...new Set([...confirmadoReal, ...confirmadoTransito, ...estimadoTodo0].map(it=>it.mesDisp).filter(Boolean))].sort();
+    const pD = selD9.value, pH = selH9.value, opts = meses9.map(m=>`<option value="${m}">${fmtMesLabel(m)}</option>`).join('');
+    selD9.innerHTML = opts; selH9.innerHTML = opts;
+    selD9.value = meses9.includes(pD) ? pD : (meses9[0]||''); selH9.value = meses9.includes(pH) ? pH : (meses9[meses9.length-1]||'');
+    selD9.onchange = renderView9; selH9.onchange = renderView9; }
+  let d9 = selD9.value, h9 = selH9.value; if(d9 && h9 && d9>h9){ const t=d9; d9=h9; h9=t; }
+  const enRango9 = it => it.mesDisp && (!d9 || it.mesDisp>=d9) && (!h9 || it.mesDisp<=h9);
+  const confirmadoRealR = confirmadoReal.filter(enRango9), confirmadoTransitoR = confirmadoTransito.filter(enRango9);
+  const parcialPendiente = parcialPendiente0.filter(enRango9), sinParcial = sinParcial0.filter(enRango9);
   const estimadoTodo = parcialPendiente.concat(sinParcial);
+  const cierto = confirmadoRealR.concat(confirmadoTransitoR);
 
   // 1-3: tablas mes x familia
   const tConfirmado = tablaMesFamilia(cierto, FAMILIAS_ORDEN);
@@ -3907,7 +4011,8 @@ function renderView9(){
 
   // 9.1: detalle por proyecto comex / parcial de lo que compone cada mes de llegada (reemplaza la antigua tabla 3b,
   // que solo mostraba lo estimado). Sale de las MISMAS listas que las gráficas, así que los totales cuadran con ellas.
-  renderDetalleProyectosLlegada(confirmadoReal, confirmadoTransito, estimadoTodo);
+  renderDetalleProyectosLlegada(confirmadoReal, confirmadoTransito, estimadoTodo0);
+  renderCostoArribado(M, confirmadoRealR);
 
   // 4: consolidado (2 filas por mes: CIERTO y ESTIMADO, + fila de total)
   const mesesTodos = [...new Set([...cierto, ...estimadoTodo].map(it=>it.mesDisp).filter(Boolean))].sort();
@@ -3935,8 +4040,8 @@ function renderView9(){
     {scales:{x:{stacked:true}, y:{stacked:true}}, plugins:{datalabels:{display:false}}}, false, fmtTonAxis, true);
 
   // Gráfica 2: apilada por certeza (real / en tránsito / estimado)
-  const dataReal = mesesTodos.map(m=>sumFamMes(confirmadoReal,m,'Láminas')+sumFamMes(confirmadoReal,m,'Tubos')+sumFamMes(confirmadoReal,m,'Perfiles')+sumFamMes(confirmadoReal,m,'Otros Productos'));
-  const dataTransito = mesesTodos.map(m=>sumFamMes(confirmadoTransito,m,'Láminas')+sumFamMes(confirmadoTransito,m,'Tubos')+sumFamMes(confirmadoTransito,m,'Perfiles')+sumFamMes(confirmadoTransito,m,'Otros Productos'));
+  const dataReal = mesesTodos.map(m=>sumFamMes(confirmadoRealR,m,'Láminas')+sumFamMes(confirmadoRealR,m,'Tubos')+sumFamMes(confirmadoRealR,m,'Perfiles')+sumFamMes(confirmadoRealR,m,'Otros Productos'));
+  const dataTransito = mesesTodos.map(m=>sumFamMes(confirmadoTransitoR,m,'Láminas')+sumFamMes(confirmadoTransitoR,m,'Tubos')+sumFamMes(confirmadoTransitoR,m,'Perfiles')+sumFamMes(confirmadoTransitoR,m,'Otros Productos'));
   const dataEstimado = mesesTodos.map(m=>sumFamMes(estimadoTodo,m,'Láminas')+sumFamMes(estimadoTodo,m,'Tubos')+sumFamMes(estimadoTodo,m,'Perfiles')+sumFamMes(estimadoTodo,m,'Otros Productos'));
   barChart('c_llegadasCerteza', mesesTodos.map(fmtMesLabel), [
     {label:'Real (ya arribó)', data:dataReal, backgroundColor:COLORS.green, stack:'s'},
@@ -6540,7 +6645,7 @@ function renderView4(){
   const totalNacReg = nacRegistradaPendiente(M).filas.reduce((a,x)=>a+(x.usd||0),0);
   const granTotal = totalComex + totalA + totalB + totalGF + totalNacTodos + totalNacReg;
   // Tanda 55h: el resumen se abre por horizonte (antes era un total sin temporalidad). Usa los mismos ítems de 4.1.
-  { const its = itemsProgramacionPagos(M, nacEst), hoyR = new Date(), mAct = monthKey(hoyR), mSig = monthKey(new Date(hoyR.getFullYear(), hoyR.getMonth()+1, 1));
+  if(document.getElementById('v4_resumen')){ const its = itemsProgramacionPagos(M, nacEst), hoyR = new Date(), mAct = monthKey(hoyR), mSig = monthKey(new Date(hoyR.getFullYear(), hoyR.getMonth()+1, 1));
     const cols = [['venc','Vencido sin pagar'], ['act', `Mes actual (${fmtMesLabel(mAct)})`], ['sig', `Mes siguiente (${fmtMesLabel(mSig)})`], ['resto','Meses siguientes'], ['tot','Total']];
     const bucket = it => it.vencido ? 'venc' : (it.mesKey<=mAct ? 'act' : (it.mesKey===mSig ? 'sig' : 'resto'));
     const fila = arr => { const o = {venc:0, act:0, sig:0, resto:0, tot:0}; arr.forEach(it=>{ o[bucket(it)] += it.monto; o.tot += it.monto; }); return o; };
