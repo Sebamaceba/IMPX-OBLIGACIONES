@@ -381,7 +381,7 @@
       <h3 style="margin-top:14px;font-size:13px;color:var(--navy);">Consolidado por período</h3>
       <div class="scroll"><table id="tbl_pivote_periodo"></table></div>
       <h3 style="margin-top:18px;font-size:13px;color:var(--navy);">Detalle — cada pago con su origen y su cálculo</h3>
-      <div class="desc" style="margin-bottom:6px;">Cada fila dice de qué tabla viene, cómo se calculó el monto y cómo se calculó la fecha. Las filas en rojo son reales/confirmadas; las demás son estimadas por el modelo. "VENCIDO" = fecha ya pasada y sin pago registrado (en el gráfico de flujo se suma al mes actual).</div>
+      <div class="desc" style="margin-bottom:6px;">Cada fila trae su <b>línea de tiempo</b>: pedido → zarpe/BL → arribo → pago, con cada fecha marcada <b style="color:#1F8A4C;">✓</b> real (ya ocurrió), <b style="color:var(--navy);">✎</b> digitada (escrita en el Sheet) o <b style="color:var(--amber);">≈</b> calculada por el Tablero (pase el mouse para ver de dónde sale), la regla de la fecha de pago y cuántos días faltan. El detalle del cálculo del monto y de la fecha está en "▸ cómo se calcula". <b>Origen de la fecha de pago:</b> <i>Digitada</i> = la escribió Comex o Tesorería en el Sheet (fecha real a pagar, vencimiento del giro, fecha de pago de la nacionalización) y la fila sale en rojo; <i>Calculada</i> = la calcula el Tablero (p. ej. BL + días de la condición pactada) — pase el mouse para ver cómo. Un BL con varias proformas sale en <b>una sola fila</b> con su total; haga clic para ver cada línea de factura (no son pagos repetidos). "VENCIDO" = fecha ya pasada y sin pago registrado (en el gráfico de flujo se suma al mes actual).</div>
       <div class="scroll"><table id="tbl_pivote_detalle"></table></div>
     </div>
     <div class="panel">
@@ -2024,6 +2024,16 @@ function buildModel({profRaw, spRaw, pgRaw, gfRaw, nacRaw, pedDetRaw, impRaw, pp
   // son falta de data, no deuda real → se marcan 'EXCLUIDO (pedido anterior al corte)' y no entran a pagos, flujo ni BD.
   // No es una exclusión silenciosa: se listan en Diagnóstico. Los GIROS FINANCIEROS abiertos sí se mantienen (son deuda con el banco).
   const fechaPedidoMinProf = {}; prof.forEach(x=>{ if(x.pedido && x.fecha && (!fechaPedidoMinProf[x.pedido] || x.fecha<fechaPedidoMinProf[x.pedido])) fechaPedidoMinProf[x.pedido] = x.fecha; });
+  // Tanda 55b: un proyecto comex (BL) puede traer varias líneas de factura, una por proforma. entregadoKg es el total del
+  // PROYECTO (se repite en cada línea: sumarlo por fila infla las toneladas). entregadoKgFila = Kg de ESA proforma en ese
+  // proyecto (Cuadro Pedidos), que sí se puede sumar fila a fila. Si una línea no trae proforma, se reparte por valor de factura.
+  const kgProyProf = {}, kgProyTot = {};
+  (ton.rows||[]).forEach(r=>{ if(!r.nombreProyecto) return; const kg = r.cantidadEntregadaKg||0; const kp = normKey(r.nombreProyecto)+'|'+normKey(r.proforma||'');
+    kgProyProf[kp] = (kgProyProf[kp]||0) + kg; kgProyTot[normKey(r.nombreProyecto)] = (kgProyTot[normKey(r.nombreProyecto)]||0) + kg; });
+  // Líneas sin Kg por proforma: se les reparte lo que FALTA del BL (total − lo ya asignado a líneas con dato), por valor de factura.
+  const kgAsignadoProy = {}, facSinDatoProy = {};
+  spAll0.forEach(x=>{ const k = normKey(x.proyecto||''), v = kgProyProf[k+'|'+normKey(x.proforma||'')];
+    if(v!==undefined) kgAsignadoProy[k] = (kgAsignadoProy[k]||0) + v; else facSinDatoProy[k] = (facSinDatoProy[k]||0) + Math.max(0, x.valorFactura||0); });
   const spAll = spAll0.map((s,i)=>{
     const netoFactura = s.valorFactura - s.reclasificacion - notasCreditoProrrateada(s);
     const pagadoRegistrado = pagadoAsignado[i];
@@ -2041,7 +2051,11 @@ function buildModel({profRaw, spRaw, pgRaw, gfRaw, nacRaw, pedDetRaw, impRaw, pp
     const estatusProyecto = estatusProyectoComex(fechaRealZarpe, fechaRealArribo, entregadoKg);
     return {...s, netoFactura, pagadoSaldo: pagado, pagadoSaldoRegistrado: pagadoRegistrado, pagoReasignado: ajustePago[i], saldoCalculado, estadoCalculado,
       notasCreditoDeclarada: s.notasCredito, notasCredito: notasCreditoProrrateada(s),
-      entregadoKg, fechaRealZarpe, pesoBrutoKg, fechaRealArribo, inconsistentePeso, estatusProyecto};
+      entregadoKg, entregadoKgFila: (()=>{ const kP = normKey(s.proyecto||''), v = kgProyProf[kP+'|'+normKey(s.proforma||'')];
+        if(v!==undefined) return v; const tot = entregadoKg ?? kgProyTot[kP]; if(!tot) return null;
+        const resto = Math.max(0, tot - (kgAsignadoProy[kP]||0));
+        return facSinDatoProy[kP]>0 ? resto*Math.max(0,s.valorFactura||0)/facSinDatoProy[kP] : resto; })(),
+      fechaRealZarpe, pesoBrutoKg, fechaRealArribo, inconsistentePeso, estatusProyecto};
   });
 
   const byPedido = {};
@@ -5528,7 +5542,7 @@ function renderView3(){
         <td>${fmtDate(s.fechaBL)}</td><td>${fmt(s.saldoCalculado)}</td>
         <td style="${difiere?'color:var(--amber);font-weight:600;':''}">${fmt(s.saldoUSD)}</td>
         <td>${bad?fmtDate(s.fechaUsada||s.fechaEstPago):'-'}${bad&&s.fuentePago?`<br><span style="color:var(--ink-soft);font-size:9.5px;">${s.fuentePago}</span>`:''}</td>
-        <td>${fmtTon(s.entregadoKg)}</td>
+        <td title="Kg de esta proforma dentro del BL. Total del BL: ${fmtTon(s.entregadoKg)}">${fmtTon(s.entregadoKgFila ?? s.entregadoKg)}</td>
         <td>${fmtTon(s.pesoBrutoKg)}${s.inconsistentePeso?' <span class="pill warn">revisar</span>':''}</td>
         <td>${fmtDate(s.fechaRealArribo)}</td>
         <td><span class="pill ${bad?'bad':'ok'}">${s.estadoCalculado}</span></td>
@@ -5649,7 +5663,10 @@ function calcularNacEstimada(M, arancelPct, ivaPct){
     } else if(s.estatusProyecto==='NAVEGANDO' && s.fechaRealZarpe){
       fechaArribo = M.nav.arriboTransito(s.fechaRealZarpe, s.pedido, s.proyecto).fecha; esReal = false; kg = s.entregadoKg;
     } else return; // 'EN PRODUCCIÓN' sin zarpe real: no se puede estimar arribo todavía
-    if(kgYaContado.has(s.proyecto)) kg = 0; else kgYaContado.add(s.proyecto); // el $ sí se suma por cada línea, el Kg (propiedad del embarque) solo una vez
+    // Tanda 55b: el Kg del embarque se reparte entre sus líneas de factura según el Kg de cada proforma (suma = total del BL);
+    // si no hay dato por proforma, se mantiene la regla anterior (todo el Kg en la primera línea).
+    if(s.entregadoKgFila!=null && s.entregadoKg>0){ kg = (kg||0) * s.entregadoKgFila / s.entregadoKg; kgYaContado.add(s.proyecto); }
+    else if(kgYaContado.has(s.proyecto)) kg = 0; else kgYaContado.add(s.proyecto); // el $ sí se suma por cada línea, el Kg (propiedad del embarque) solo una vez
     const diasDesdeArribo = esReal ? daysBetween(fechaArribo, new Date()) : null;
     items.push({origen: esReal?'Arribado (sin registrar en Nacionalización)':'Navegando (estimado)', pedido:s.pedido, referencia:s.proyecto,
       valorBase:s.valorFactura, kg, fechaArribo, retrasado:false, esReal, posibleYaPagado: esReal && diasDesdeArribo>180});
@@ -5738,7 +5755,7 @@ function nacRegistradaPendiente(M){
     const T = trmMes(fecha && monthKey(fecha) > mesHoyK ? monthKey(fecha) : mesHoyK);
     const usd = T ? x.saldo/T.valor : nacUsdDeParte(NP, k, x.saldo, FN.factor);
     if(usd===null){ sinValor++; return; }
-    filas.push({proyecto:k, pedido:proyAPed[k]||'', fecha, conFechaPago:!!x.fechaPago, usd, cop:x.saldo, trm:T?T.valor:null,
+    filas.push({proyecto:k, pedido:proyAPed[k]||'', fecha, fechaLevante:x.fechaLevante||null, conFechaPago:!!x.fechaPago, usd, cop:x.saldo, trm:T?T.valor:null,
       fuenteTrm:T?T.fuente:'Sin TRM: supuesto % sobre factura (conectar Finanzas)', valorBase:NP[k]?NP[k].vf:null});
   });
   return {filas, sinValor};
@@ -5781,7 +5798,7 @@ function construirBDPagos(M, horizonte=12){
   // 1) Saldos a proveedores — REAL (proyecto comex ya facturado, pendiente de pago)
   const tonVisto = new Set();
   M.spAll.filter(s=>s.estadoCalculado==='PENDIENTE POR PAGAR').forEach(s=>{
-    const kg = tonVisto.has(s.proyecto) ? null : (s.entregadoKg||null); tonVisto.add(s.proyecto);
+    const kg = s.entregadoKgFila ?? (tonVisto.has(s.proyecto) ? null : (s.entregadoKg||null)); tonVisto.add(s.proyecto); // Tanda 55b: Kg de la proforma en este BL
     add({concepto:'1. Saldo a proveedor', detalle:'Facturado (proyecto comex)', tipo:'Real', fecha:s.fechaUsada, pedido:s.pedido, referencia:s.proyecto, contraparte:s.proveedor,
       clave:`SALDO|${s.pedido}|${s.proyecto}`, fechaZarpe:s.fechaRealZarpe, fuenteFecha: s.fechaRealZarpe?'Real (zarpe registrado)':'Sin zarpe registrado', fechaArribo:s.fechaRealArribo||null,
       origenFecha: s.fuentePago==='sheet' ? 'Digitado' : 'Calculado',
@@ -6585,35 +6602,57 @@ function explicarParcial(p, par, grupo){
 }
 
 // ================= 4.1 PROGRAMACIÓN DE PAGOS (TABLA DINÁMICA) =================
+// Tanda 55c: "línea de tiempo" de cada pago (pedido → zarpe/BL → arribo → pago), cada fecha marcada como
+// ✓ real (ya ocurrió) · ✎ digitada (escrita en el Sheet) · ≈ calculada (la calcula el Tablero).
+function reglaPagoCorta(cond){
+  if(!cond) return 'sin condición registrada: días históricos BL→pago del proveedor';
+  if(cond.tipo==='DIAS_BL') return `condición pactada: BL + ${cond.dias} día(s)`;
+  if(cond.tipo==='DIAS_ARRIBO') return `condición pactada: arribo + ${cond.dias} día(s)`;
+  if(cond.tipo==='ANTES_EMBARQUE') return 'condición pactada: antes de embarque (al terminar producción)';
+  return 'condición no reconocida';
+}
 function itemsProgramacionPagos(M, nacEst){
   const items = [];
   const provDe = {}; M.pedidos.forEach(p=>{ provDe[p.pedido] = p.proveedor; });
+  const pedDe = {}; M.pedidos.forEach(p=>{ pedDe[p.pedido] = p; });
+  const spPorProy = {}; M.spAll.forEach(s=>{ if(s.proyecto && !spPorProy[s.proyecto]) spPorProy[s.proyecto] = s; });
+  const paso = (lbl, f, o, nota) => ({lbl, f:f||null, o:o||'Calculado', nota:nota||''});
   const hoy = soloDiaT(new Date());
   M.spAll.filter(s=>s.estadoCalculado==='PENDIENTE POR PAGAR').forEach(s=>{
     const real = s.fechaRealAPagar;
     const fecha = real || s.fechaPagoEstimadaCalc || s.fechaUsada;
     const e = explicarComex(s);
-    items.push({tk:'comex', tipo:'Proyecto Comex', referencia:s.proyecto, pedido:s.pedido, proveedor:s.proveedor, monto:s.saldoCalculado, fecha, esEstimado: !real,
+    const arrC = s.fechaRealArribo ? {f:s.fechaRealArribo, o:'Real'} : (s.fechaRealZarpe ? (a=>({f:a.fecha, o:a.origen, nota:a.base}))(M.nav.arriboTransito(s.fechaRealZarpe, s.pedido, s.proyecto)) : {f:null});
+    const tlC = {pasos:[paso('Pedido', (pedDe[s.pedido]||{}).fechaPedido, 'Real'), paso(s.fechaBL?'BL':'Zarpe', s.fechaBL||s.fechaRealZarpe, 'Real'), paso('Arribo', arrC.f, arrC.o, arrC.nota), paso('Pago', fecha, real?'Digitado':'Calculado')],
+      estado: ({'ARRIBADO':'arribado','NAVEGANDO':'navegando','EN EMBARQUE':'en embarque','EN PRODUCCIÓN':'en producción'})[s.estatusProyecto]||'',
+      regla: real ? 'fecha real a pagar digitada por Comex' : (s.fuentePago==='estadística genérica (respaldo final)' ? 'sin condición: días históricos BL→pago' : 'condición pactada: '+String(s.fuentePago||'').replace(/^condición:\s*/,'').replace(/^(\d+) día\(s\) post-BL/,'BL + $1 día(s)').replace(/^(\d+) día\(s\) post-arribo/,'arribo + $1 día(s)'))};
+    items.push({tk:'comex', tl:tlC, tipo:'Proyecto Comex', referencia:s.proyecto, proforma:s.proforma||'', kgFila:s.entregadoKgFila, pedido:s.pedido, proveedor:s.proveedor, monto:s.saldoCalculado, fecha, esEstimado: !real,
       comoMonto:e.monto, comoFecha:e.fecha});
   });
+  const tlParcial = (p, par, estado) => ({pasos:[paso('Pedido', p.fechaPedido, 'Real'), paso('Zarpe', par.fechaZarpeEstimada, par.origenZarpe||'Calculado', par.baseZarpe),
+      paso('Arribo', par.fechaArriboEstimada, 'Calculado', par.arriboMin ? `probable ${fmtDate(par.arriboMin)} – ${fmtDate(par.arriboMax)}` : ''), paso('Pago', par.fechaPagoEstimada, 'Calculado')],
+    estado, regla: reglaPagoCorta(p.condicionPago) + (par.secuenciado ? ' · zarpe en fila tras otro embarque del proveedor' : '')});
   M.grupoA.forEach(p=>p.parciales.forEach(par=>{ const e = explicarParcial(p, par, 'A');
-    items.push({tk:'A', tipo:'Pronóstico: sin parcial', referencia:`${p.pedido} (parcial ${par.n}/${par.deN})`, pedido:p.pedido, proveedor:p.proveedor, monto:par.montoPago, fecha:par.fechaPagoEstimada, esEstimado:true,
+    items.push({tk:'A', tl:tlParcial(p, par, `pedido sin envíos · embarque ${par.n} de ${par.deN}`), tipo:'Pronóstico: sin parcial', referencia:`${p.pedido} (parcial ${par.n}/${par.deN})`, pedido:p.pedido, proveedor:p.proveedor, monto:par.montoPago, fecha:par.fechaPagoEstimada, esEstimado:true,
       retrasado:par.retrasado, comoMonto:e.monto, comoFecha:e.fecha});
   }));
   M.grupoB.forEach(p=>p.parciales.forEach(par=>{ const e = explicarParcial(p, par, 'B');
-    items.push({tk:'B', tipo:'Pronóstico: parcial incompleto', referencia:`${p.pedido} (parcial ${par.n}/${par.deN})`, pedido:p.pedido, proveedor:p.proveedor, monto:par.montoPago, fecha:par.fechaPagoEstimada, esEstimado:true,
+    items.push({tk:'B', tl:tlParcial(p, par, `${p.nProyectosParciales} embarque(s) hecho(s) · falta el ${par.n} de ${par.deN}`), tipo:'Pronóstico: parcial incompleto', referencia:`${p.pedido} (parcial ${par.n}/${par.deN})`, pedido:p.pedido, proveedor:p.proveedor, monto:par.montoPago, fecha:par.fechaPagoEstimada, esEstimado:true,
       retrasado:par.retrasado, comoMonto:e.monto, comoFecha:e.fecha});
   }));
   M.gfAbiertos.forEach(g=>{
     // Defensivo (16-sep): un giro sin fecha de vencimiento cargada no debe tumbar toda la Programación de Pagos.
     if(!g.fechaVencimiento) return;
-    items.push({tk:'gf', tipo:'Giro Financiero', referencia:`${g.banco||'Sin banco'}${g.proyectoComex?' · '+g.proyectoComex:''}`, pedido:g.pedido, proveedor:provDe[g.pedido]||'', monto:g.saldoReal, fecha:g.fechaVencimiento, esEstimado:false, interes:g.interesEstimado||0,
+    items.push({tk:'gf', tl:{pasos:[paso('Pedido', (pedDe[g.pedido]||{}).fechaPedido, 'Real'), paso('Giro abierto', g.fechaApertura, 'Real'), paso('Vence', g.fechaVencimiento, 'Digitado')],
+      estado:`giro con ${g.banco||'banco sin especificar'}`, regla:'vencimiento del giro (hoja Giros Financieros)'}, tipo:'Giro Financiero', referencia:`${g.banco||'Sin banco'}${g.proyectoComex?' · '+g.proyectoComex:''}`, pedido:g.pedido, proveedor:provDe[g.pedido]||'', monto:g.saldoReal, fecha:g.fechaVencimiento, esEstimado:false, interes:g.interesEstimado||0,
       comoMonto:`Saldo de capital del giro en la hoja Giros Financieros${g.interesEstimado?` (interés estimado aparte: ${fu(g.interesEstimado)})`:' (sin interés registrado)'}`,
       comoFecha:`Fecha de vencimiento del giro con ${g.banco||'el banco'} (dato de la hoja)`});
   });
   // Tanda 52b: nacionalizaciones ya registradas y sin pagar
   nacRegistradaPendiente(M).filas.forEach(x=>{ if(!x.fecha) return;
-    items.push({tk:'nacReg', tipo:'Nacionalización', referencia:`${x.proyecto} (registrada)`, pedido:x.pedido||'—', proveedor:provDe[x.pedido]||'', monto:x.usd, fecha:x.fecha, esEstimado:!x.conFechaPago,
+    const spN = spPorProy[x.proyecto] || {};
+    items.push({tk:'nacReg', tl:{pasos:[paso('Arribo', spN.fechaRealArribo, 'Real'), paso('Levante', x.fechaLevante, 'Digitado'), paso('Pago', x.fecha, x.conFechaPago?'Digitado':'Calculado')],
+      estado:'nacionalización registrada sin pagar', regla: x.conFechaPago ? 'fecha de pago digitada en la hoja Nacionalización' : 'sin fecha de pago: levante + 7 días'}, tipo:'Nacionalización', referencia:`${x.proyecto} (registrada)`, pedido:x.pedido||'—', proveedor:provDe[x.pedido]||'', monto:x.usd, fecha:x.fecha, esEstimado:!x.conFechaPago,
       comoMonto: x.trm ? `Saldo registrado COP ${Math.round(x.cop).toLocaleString('en-US')} ÷ TRM ${Math.round(x.trm).toLocaleString('en-US')} (${x.fuenteTrm})` : `Sin TRM: factura del proyecto × % de nacionalización × parte aún sin pagar`,
       comoFecha: x.conFechaPago ? 'Fecha de pago registrada en la hoja Nacionalización' : 'Sin fecha de pago registrada: fecha de levante + 7 días'}); });
   const iniMes = new Date(hoy.getFullYear(), hoy.getMonth(), 1);
@@ -6621,7 +6660,8 @@ function itemsProgramacionPagos(M, nacEst){
     if(!f.fechaPago || f.fechaPago < iniMes) return; // estimada con fecha de pago en un mes ya cerrado: no se programa (ver cuadre)
     const fams = {}; f.items.forEach(it=>{ const k = it.familia||'Sin familia'; fams[k] = fams[k] || {b:0, n:0}; fams[k].b += it.valorBase; fams[k].n += it.valorNac; });
     const det = Object.entries(fams).map(([k,v])=>`${k} ${fu(v.b)} × ${v.b>0?(v.n/v.b*100).toFixed(1):'0'}%`).join(' + ');
-    items.push({tk:'nacEst', tipo:'Nacionalización', referencia:`Consolidado arribos ${fmtMesLabel(f.mesArribo)}`, pedido:`${f.items.length} embarque(s)`, proveedor:'DIAN / agencia', monto:f.valorNac, fecha:f.fechaPago, esEstimado:true,
+    items.push({tk:'nacEst', tl:{pasos:[paso(`Arribos de ${fmtMesLabel(f.mesArribo)}`, null, f.items.some(it=>!it.esReal)?'Calculado':'Real'), paso('Pago', f.fechaPago, 'Calculado')],
+      estado:`${f.items.length} embarque(s) consolidados`, regla:'1.ª semana del mes siguiente al arribo'}, tipo:'Nacionalización', referencia:`Consolidado arribos ${fmtMesLabel(f.mesArribo)}`, pedido:`${f.items.length} embarque(s)`, proveedor:'DIAN / agencia', monto:f.valorNac, fecha:f.fechaPago, esEstimado:true,
       retrasado:f.tieneRetrasados, comoMonto:`Valor factura de todo lo que arriba en ${fmtMesLabel(f.mesArribo)} (${fu(f.valorBase)}) × % efectivo por familia: ${det}`,
       comoFecha:`Se consolida lo que arriba en el mes y se paga la 1.ª semana del mes siguiente (${fmtDate(f.fechaPago)})`});
   });
@@ -6769,24 +6809,49 @@ function renderProgramacionPagos(M, nacEst){
     document.getElementById('tbl_pivote_periodo').innerHTML = htmlP;
 
     // Detalle itemizado con trazabilidad
-    let htmlD = '<tr><th>Fecha de pago</th><th>Tipo de pago</th><th>Tabla</th><th>Proveedor</th><th>Pedido</th><th>Referencia</th><th>Monto USD</th><th style="min-width:260px;">Cómo se calcula el monto</th><th style="min-width:260px;">Cómo se calcula la fecha</th><th>Origen de la fecha</th></tr>';
+    let htmlD = '<tr><th>Fecha de pago</th><th>Tipo de pago</th><th>Tabla</th><th>Proveedor</th><th>Pedido</th><th>Referencia</th><th>Monto USD</th><th style="min-width:420px;">Línea de tiempo (pedido → zarpe → arribo → pago)</th><th>Origen de la fecha de pago</th></tr>';
+    // Tanda 55c: la línea de tiempo reemplaza las dos columnas de texto; el cálculo detallado queda en una fila desplegable.
+    const marcaO = o => o==='Real' ? '<span title="Real: ya ocurrió" style="color:#1F8A4C;font-weight:700;">✓</span>' : o==='Digitado' ? '<span title="Digitada en el Sheet" style="color:var(--navy);font-weight:700;">✎</span>' : '<span title="Calculada por el Tablero" style="color:var(--amber);font-weight:700;">≈</span>';
+    const lineaTiempoHtml = it => { const t = it.tl; if(!t) return '';
+      const d = _dias(new Date(), it.fecha);
+      const cuenta = d===null ? '' : (d<0 ? `<span class="pill bad">vencido hace ${-d} d</span>` : d===0 ? '<span class="pill warn">se paga hoy</span>' : `<span class="pill">en ${d} d</span>`);
+      const pasos = t.pasos.map(x=>`<span style="white-space:nowrap;" title="${String(x.nota||'').replace(/"/g,"'")}"><b>${x.lbl}</b> ${x.f?fmtDate(x.f):''} ${marcaO(x.o)}</span>`).join(' <span style="color:var(--ink-soft);">→</span> ');
+      return `<div style="font-family:var(--sans);font-size:11px;line-height:1.5;text-align:left;white-space:normal;">${pasos}<br><span style="color:var(--ink-soft);">${t.estado?t.estado+' · ':''}${t.regla||''}</span> ${cuenta}</div>`; };
+    const toggleCalc = id => `<a href="javascript:void(0)" style="font-size:10px;" onclick="event.stopPropagation();document.querySelectorAll('[data-c=${id}]').forEach(r=>r.style.display=r.style.display==='table-row'?'none':'table-row')">▸ cómo se calcula</a>`;
+    const filaCalc = (it, id) => `<tr data-c="${id}" style="display:none;background:var(--paper);"><td></td><td class="txt" colspan="8" ${cel.replace('max-width:360px;','')}><b>Monto:</b> ${it.comoMonto||''}<br><b>Fecha:</b> ${it.comoFecha||''}</td></tr>`;
+    let nCalc = 0;
     const cel = 'style="font-family:var(--sans);font-size:10.5px;line-height:1.35;color:var(--ink-soft);white-space:normal;min-width:280px;max-width:360px;text-align:left;"';
+    // Tanda 55b: un mismo BL (proyecto comex) trae una línea de factura por proforma → se agrupan en UNA fila por BL + pedido +
+    // fecha, con el detalle por proforma desplegable. El total no cambia: solo se presenta agrupado.
+    const filaHtml = (it, extra='', refTxt=null, montoTxt=null, tiempoTxt=null) => { const id = `f47c_${nCalc++}`;
+      return `<tr class="${it.esEstimado?'':'row-bad'}" ${extra}><td>${fmtDate(it.fecha)}${it.vencido?' <span class="pill bad">VENCIDO</span>':''}${it.retrasado?' <span class="pill warn">retrasado</span>':''}</td>
+        <td class="txt">${it.tipoLbl}</td><td>${it.tabla}</td><td class="txt">${it.proveedor||''}</td><td class="txt">${it.pedido||''}</td><td class="txt">${refTxt ?? it.referencia}</td>
+        <td><b>${montoTxt ?? fmt(it.monto)}</b><br>${toggleCalc(id)}</td><td style="min-width:420px;">${tiempoTxt ?? lineaTiempoHtml(it)}</td>
+        <td title="${String(it.comoFecha||'').replace(/"/g,"'")}">${it.esEstimado?'<span class="pill warn">Calculada</span>':'<span class="pill ok">Digitada</span>'}</td></tr>` + filaCalc(it, id); };
+    const grupos47 = []; const idxG = {};
     filtrados.sort((a,b)=>a.fecha-b.fecha).forEach(it=>{
-      htmlD += `<tr class="${it.esEstimado?'':'row-bad'}"><td>${fmtDate(it.fecha)}${it.vencido?' <span class="pill bad">VENCIDO</span>':''}${it.retrasado?' <span class="pill warn">retrasado</span>':''}</td>
-        <td class="txt">${it.tipoLbl}</td><td>${it.tabla}</td><td class="txt">${it.proveedor||''}</td><td class="txt">${it.pedido||''}</td><td class="txt">${it.referencia}</td>
-        <td><b>${fmt(it.monto)}</b></td><td ${cel}>${it.comoMonto||''}</td><td ${cel}>${it.comoFecha||''}</td>
-        <td title="${String(it.comoFecha||'').replace(/"/g,"'")}">${it.esEstimado?'<span class="pill warn">Calculada</span>':'<span class="pill ok">Digitada</span>'}</td></tr>`;
+      const k = it.tk==='comex' ? ['c', it.referencia, it.pedido, +soloDiaT(it.fecha), it.esEstimado].join('|') : null;
+      if(k && idxG[k]!==undefined) grupos47[idxG[k]].push(it); else { if(k) idxG[k] = grupos47.length; grupos47.push([it]); }
+    });
+    grupos47.forEach((g, gi)=>{
+      if(g.length===1){ const it = g[0]; htmlD += filaHtml(it, '', it.tk==='comex' && it.proforma ? `${it.referencia}<br><span style="font-size:10px;color:var(--ink-soft);">proforma ${it.proforma}</span>` : null); return; }
+      const tot = g.reduce((a,x)=>a+x.monto,0), kg = g.reduce((a,x)=>a+(x.kgFila||0),0), id = `f47g_${gi}`;
+      htmlD += filaHtml(g[0], `style="cursor:pointer;" onclick="document.querySelectorAll('[data-g=${id}]').forEach(r=>r.style.display=r.style.display==='table-row'?'none':'table-row')"`,
+        `<b>${g[0].referencia}</b> <span class="pill">${g.length} proformas</span><br><span style="font-size:10px;color:var(--ink-soft);">clic para ver el detalle por proforma${kg?` · ${fmtTon(kg)} en el BL`:''}</span>`,
+        fmt(tot), lineaTiempoHtml(g[0]) + `<div style="font-size:10px;color:var(--ink-soft);text-align:left;">Suma de ${g.length} líneas de factura del mismo BL (una por proforma). No es un pago repetido.</div>`);
+      g.forEach(it=>{ htmlD += filaHtml(it, `data-g="${id}" style="display:none;background:var(--paper);"`, `↳ proforma ${it.proforma||'—'}${it.kgFila?` · ${fmtTon(it.kgFila)}`:''}`, null, `<div style="font-size:11px;color:var(--ink-soft);text-align:left;white-space:normal;">${it.comoMonto||''}</div>`); });
     });
     const totalDetalle = filtrados.reduce((a,it)=>a+it.monto,0);
-    htmlD += `<tr style="background:var(--paper);font-weight:700;"><td class="txt" colspan="6">TOTAL DETALLE (filtro actual)</td><td>${fmt(totalDetalle)}</td><td colspan="3"></td></tr>`;
+    htmlD += `<tr style="background:var(--paper);font-weight:700;"><td class="txt" colspan="6">TOTAL DETALLE (filtro actual)</td><td>${fmt(totalDetalle)}</td><td colspan="2"></td></tr>`;
     document.getElementById('tbl_pivote_detalle').innerHTML = htmlD;
   }
   go();
 
   document.getElementById('f47_descargar').onclick = function(){
-    const wsData = [['Fecha de pago','Mes','Tipo de pago','Tabla de origen','Proveedor','Pedido','Referencia','Monto USD','Interés estimado USD','Origen de la fecha (Digitada/Calculada)','Vencido','Retrasado','Cómo se calcula el monto','Cómo se calcula la fecha']];
+    const wsData = [['Fecha de pago','Mes','Tipo de pago','Tabla de origen','Proveedor','Pedido','Referencia','Proforma','Ton de la línea','Monto USD','Interés estimado USD','Línea de tiempo (✓ real · ✎ digitada · ≈ calculada)','Estado','Regla de la fecha de pago','Origen de la fecha (Digitada/Calculada)','Vencido','Retrasado','Cómo se calcula el monto','Cómo se calcula la fecha']];
     filtrados.slice().sort((a,b)=>a.fecha-b.fecha).forEach(it=>{
-      wsData.push([fmtDate(it.fecha), it.mesKey, it.tipoLbl, it.tabla, it.proveedor||'', it.pedido||'', it.referencia, Number(it.monto.toFixed(2)), it.interes?Number(it.interes.toFixed(2)):0,
+      wsData.push([fmtDate(it.fecha), it.mesKey, it.tipoLbl, it.tabla, it.proveedor||'', it.pedido||'', it.referencia, it.proforma||'', it.kgFila ? Number((it.kgFila/1000).toFixed(2)) : '', Number(it.monto.toFixed(2)), it.interes?Number(it.interes.toFixed(2)):0,
+        it.tl ? it.tl.pasos.map(x=>`${x.lbl} ${x.f?fmtDate(x.f):''} ${({Real:'✓',Digitado:'✎'})[x.o]||'≈'}`).join(' → ') : '', it.tl?.estado||'', it.tl?.regla||'',
         it.esEstimado?'Calculada':'Digitada', it.vencido?'SÍ':'', it.retrasado?'SÍ':'', it.comoMonto||'', it.comoFecha||'']);
     });
     const ws = XLSX.utils.aoa_to_sheet(wsData);
@@ -6958,7 +7023,7 @@ function renderView6(){
           <td class="txt">${s.proyecto}</td><td>${fmtDate(s.fechaBL)}</td><td>${fmt(s.valorFactura)}</td>
           <td>${fmt(s.reclasificacion)}</td><td>${fmt(s.notasCredito)}</td><td>${fmt(s.netoFactura)}</td>
           <td>${fmt(s.saldoCalculado)}</td>
-          <td>${fmtTon(s.entregadoKg)}</td>
+          <td title="Kg de esta proforma dentro del BL. Total del BL: ${fmtTon(s.entregadoKg)}">${fmtTon(s.entregadoKgFila ?? s.entregadoKg)}</td>
           <td>${fmtTon(s.pesoBrutoKg)}${s.inconsistentePeso?' <span class="pill warn">revisar</span>':''}</td>
           <td><span class="pill ${bad?'bad':'ok'}">${s.estadoCalculado}</span></td>
           <td><span class="pill ${pillP}">${estP}</span></td></tr>`;
