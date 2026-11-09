@@ -1852,9 +1852,21 @@ function buildMotorPagos(prof, ton, nav){
   }
 
   // Estima la fecha de pago del saldo de un proyecto comex YA CONFIRMADO (tiene Fecha BL y/o Arribo)
+  // Tanda 57: la "FECHA BL" de Seguimiento Proyectos trae la fecha estimada de zarpe del Cuadro Pedidos mientras no haya zarpe real
+  // (estimación del área). Regla: el BL se toma como REAL solo si el proyecto ya tiene fecha real de zarpe en Cuadro Pedidos; si no,
+  // es una fecha estimada del área (Calculada). Sin BL, se usa el zarpe real o, si no hay, el zarpe estimado del Cuadro Pedidos.
+  const zarpeCuadro = {};
+  (ton.rows||[]).forEach(r=>{ if(!r.nombreProyecto) return; const z = zarpeCuadro[r.nombreProyecto] = zarpeCuadro[r.nombreProyecto] || {real:null, est:null};
+    if(r.fechaRealZarpe && (!z.real || r.fechaRealZarpe<z.real)) z.real = r.fechaRealZarpe;
+    if(r.fechaEstimadaZarpe && (!z.est || r.fechaEstimadaZarpe<z.est)) z.est = r.fechaEstimadaZarpe; });
   function fechaBLRealOEstimada(s){
-    if(s.fechaBL) return {fecha:s.fechaBL, esEstimada:false};
+    const z = zarpeCuadro[s.proyecto];
+    if(s.fechaBL){
+      if(z && !z.real && !s.fechaRealZarpe) return {fecha:s.fechaBL, esEstimada:true, area:true};
+      return {fecha:s.fechaBL, esEstimada:false};
+    }
     if(s.fechaRealZarpe) return {fecha:s.fechaRealZarpe, esEstimada:true};
+    if(z && z.est) return {fecha:z.est, esEstimada:true, area:true};
     return {fecha:null, esEstimada:true};
   }
   function fechaPagoConfirmado(s){
@@ -1870,11 +1882,11 @@ function buildMotorPagos(prof, ton, nav){
     }
     const bl = fechaBLRealOEstimada(s);
     if(cond && cond.tipo==='DIAS_BL' && bl.fecha){
-      return {fecha: addDays(bl.fecha, cond.dias), esEstimada:bl.esEstimada, fuente:`condición: ${cond.dias} día(s) post-BL${bl.esEstimada?' (BL estimada con zarpe)':''}`};
+      return {fecha: addDays(bl.fecha, cond.dias), esEstimada:bl.esEstimada, blArea:!!bl.area, anclaFecha:bl.fecha, fuente:`condición: ${cond.dias} día(s) post-BL${bl.area?' (sobre la fecha estimada de zarpe del Cuadro Pedidos: estimación del área)':(bl.esEstimada?' (BL estimada con zarpe)':'')}`};
     }
     if(bl.fecha){
       const d = diasBLProveedor(s.proveedor);
-      return {fecha: addDays(bl.fecha, d==null?15:d), esEstimada:true, fuente:`estadística proveedor (sin condición registrada)${bl.esEstimada?' + BL estimada con zarpe':''}`};
+      return {fecha: addDays(bl.fecha, d==null?15:d), esEstimada:true, blArea:!!bl.area, anclaFecha:bl.fecha, fuente:`estadística proveedor (sin condición registrada)${bl.area?' + zarpe estimado del Cuadro Pedidos (estimación del área)':(bl.esEstimada?' + BL estimada con zarpe':'')}`};
     }
     return null;
   }
@@ -2905,6 +2917,7 @@ function buildModel({profRaw, spRaw, pgRaw, gfRaw, nacRaw, pedDetRaw, impRaw, pp
     const est = motorPagos.fechaPagoConfirmado(s);
     // Tanda 53b: la fecha de pago se deja en lo PACTADO (no se suma el desfase histórico de Tesorería; ese dato queda solo como referencia en M.calibracionPagos).
     // Fecha Pago Estimada: SIEMPRE el cálculo propio del modelo (condición real de ESE comex, ancla BL o Arribo según corresponda)
+    s.blEstimadoArea = !!(est && est.blArea); s.anclaZarpeArea = est && est.blArea ? est.anclaFecha : null;
     if(est){ s.fechaPagoEstimadaCalc = est.fecha; s.fechaPagoEstimadaEsEstimada = est.esEstimada; s.fuentePagoEstimada = est.fuente; }
     else { s.fechaPagoEstimadaCalc = null; s.fuentePagoEstimada = 'sin BL/arribo aún'; }
     // Fecha Real a Pagar: el dato que el equipo ya diligenció en Seguimiento de Proyectos (si existe)
@@ -6708,6 +6721,7 @@ function explicarComex(s){
   let fecha;
   if(s.fechaRealAPagar) fecha = 'Fecha real a pagar diligenciada por Comex en Seguimiento de Proyectos (dato confirmado, no modelo)';
   else if(s.fuentePago==='estadística genérica (respaldo final)') fecha = `Sin BL ni condición utilizable: ${s.fechaBL?'BL '+fmtDate(s.fechaBL):'fecha del pedido'} + días históricos BL→pago del proveedor (respaldo)`;
+  else if(s.blEstimadoArea) fecha = `Fecha estimada de zarpe ${fmtDate(s.anclaZarpeArea)} del Cuadro Pedidos (estimación del área: aún no hay zarpe real ni BL definitivo) + ${String(s.fuentePago||'condición del proyecto').replace(/^condición:\s*/,'condición pactada: ').replace(/ \(sobre la fecha estimada.*\)$/,'')}. Calculada: cambia si Comex actualiza el zarpe.`;
   else fecha = `${s.fechaBL?'BL '+fmtDate(s.fechaBL):'Sin BL aún'} + ${String(s.fuentePago||'condición del proyecto').replace(/^condición:\s*/,'condición pactada: ')}${s.fechaEsEstimada?' (ancla estimada)':''}`;
   return {monto, fecha};
 }
@@ -6756,9 +6770,11 @@ function itemsProgramacionPagos(M, nacEst){
     const fecha = real || s.fechaPagoEstimadaCalc || s.fechaUsada;
     const e = explicarComex(s);
     const arrC = s.fechaRealArribo ? {f:s.fechaRealArribo, o:'Real'} : (s.fechaRealZarpe ? (a=>({f:a.fecha, o:a.origen, nota:a.base}))(M.nav.arriboTransito(s.fechaRealZarpe, s.pedido, s.proyecto)) : {f:null});
-    const tlC = {pasos:[paso('Pedido', (pedDe[s.pedido]||{}).fechaPedido, 'Real'), paso(s.fechaBL?'BL':'Zarpe', s.fechaBL||s.fechaRealZarpe, 'Real'), paso('Arribo', arrC.f, arrC.o, arrC.nota), paso('Pago', fecha, real?'Digitado':'Calculado')],
+    if(s.blEstimadoArea && !arrC.f && s.anclaZarpeArea){ const r = M.nav.rangoNavegacionPedido(s.pedido); arrC.f = addDays(s.anclaZarpeArea, Math.round(r.p50||45)); arrC.o = 'Calculado'; arrC.nota = `zarpe estimado del área + ${r.etiqueta}`; }
+    const pasoZ = s.blEstimadoArea ? paso('Zarpe est. (área)', s.anclaZarpeArea, 'Calculado', 'Fecha estimada de zarpe digitada en Cuadro Pedidos: aún no hay zarpe real ni BL definitivo') : paso(s.fechaBL?'BL':'Zarpe', s.fechaBL||s.fechaRealZarpe, 'Real');
+    const tlC = {pasos:[paso('Pedido', (pedDe[s.pedido]||{}).fechaPedido, 'Real'), pasoZ, paso('Arribo', arrC.f, arrC.o, arrC.nota), paso('Pago', fecha, real?'Digitado':'Calculado')],
       estado: ({'ARRIBADO':'arribado','NAVEGANDO':'navegando','EN EMBARQUE':'en embarque','EN PRODUCCIÓN':'en producción'})[s.estatusProyecto]||'',
-      regla: real ? 'fecha real a pagar digitada por Comex' : (s.fuentePago==='estadística genérica (respaldo final)' ? 'sin condición: días históricos BL→pago' : 'condición pactada: '+String(s.fuentePago||'').replace(/^condición:\s*/,'').replace(/^(\d+) día\(s\) post-BL/,'BL + $1 día(s)').replace(/^(\d+) día\(s\) post-arribo/,'arribo + $1 día(s)'))};
+      regla: real ? 'fecha real a pagar digitada por Comex' : (s.fuentePago==='estadística genérica (respaldo final)' ? 'sin condición: días históricos BL→pago' : 'condición pactada: '+String(s.fuentePago||'').replace(/^condición:\s*/,'').replace(/ \(sobre la fecha estimada.*\)$/,'').replace(/^(\d+) día\(s\) post-BL/,'BL + $1 día(s)').replace(/^(\d+) día\(s\) post-arribo/,'arribo + $1 día(s)') + (s.blEstimadoArea ? ' · BL = zarpe estimado del área (Cuadro Pedidos)' : ''))};
     items.push({tk:'comex', tl:tlC, tipo:'Proyecto Comex', referencia:s.proyecto, proforma:s.proforma||'', kgFila:s.entregadoKgFila, pedido:s.pedido, proveedor:s.proveedor, monto:s.saldoCalculado, fecha, esEstimado: !real,
       comoMonto:e.monto, comoFecha:e.fecha});
   });
@@ -6998,9 +7014,9 @@ function renderProgramacionPagos(M, nacEst){
   go();
 
   document.getElementById('f47_descargar').onclick = function(){
-    const wsData = [['Fecha de pago','Mes','Tipo de pago','Tabla de origen','Proveedor','Pedido','Referencia','Proforma','Ton de la línea','Monto USD','Interés estimado USD','Línea de tiempo (✓ real · ✎ digitada · ≈ calculada)','Estado','Regla de la fecha de pago','Origen de la fecha (Digitada/Calculada)','Vencido','Retrasado','Cómo se calcula el monto','Cómo se calcula la fecha']];
+    const wsData = [['Fecha de pago','Mes','Tipo de pago','Referencia','Pedido','Proveedor','Proforma','Tabla de origen','Ton de la línea','Monto USD','Interés estimado USD','Línea de tiempo (✓ real · ✎ digitada · ≈ calculada)','Estado','Regla de la fecha de pago','Origen de la fecha (Digitada/Calculada)','Vencido','Retrasado','Cómo se calcula el monto','Cómo se calcula la fecha']];
     filtrados.slice().sort((a,b)=>a.fecha-b.fecha).forEach(it=>{
-      wsData.push([fmtDate(it.fecha), it.mesKey, it.tipoLbl, it.tabla, it.proveedor||'', it.pedido||'', it.referencia, it.proforma||'', it.kgFila ? Number((it.kgFila/1000).toFixed(2)) : '', Number(it.monto.toFixed(2)), it.interes?Number(it.interes.toFixed(2)):0,
+      wsData.push([fmtDate(it.fecha), it.mesKey, it.tipoLbl, it.referencia, it.pedido||'', it.proveedor||'', it.proforma||'', it.tabla, it.kgFila ? Number((it.kgFila/1000).toFixed(2)) : '', Number(it.monto.toFixed(2)), it.interes?Number(it.interes.toFixed(2)):0,
         it.tl ? it.tl.pasos.map(x=>`${x.lbl} ${x.f?fmtDate(x.f):''} ${({Real:'✓',Digitado:'✎'})[x.o]||'≈'}`).join(' → ') : '', it.tl?.estado||'', it.tl?.regla||'',
         it.esEstimado?'Calculada':'Digitada', it.vencido?'SÍ':'', it.retrasado?'SÍ':'', it.comoMonto||'', it.comoFecha||'']);
     });
