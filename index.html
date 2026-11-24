@@ -5987,6 +5987,9 @@ function nacRegistradaPendiente(M){
   });
   return {filas, sinValor};
 }
+// Horizonte de lo que se PUBLICA al Sheet de Finanzas (FC_PROYECCION_12M / FC_RESUMEN_MENSUAL / FC_RESUMEN_TABLA), para la
+// consulta del FC proyectado en Excel. Solo lo usa sincronizarFinanzas(): las vistas, el panel BD y la descarga siguen en 12 meses.
+const HORIZONTE_PUBLICACION_MESES = 24;
 function construirBDPagos(M, horizonte=12){
   const hoy = new Date(), mesHoy = monthKey(hoy);
   const fin = new Date(hoy.getFullYear(), hoy.getMonth()+horizonte, 1);
@@ -6124,7 +6127,7 @@ function descargarBDPagos(){
 // ================= FINANZAS: sincronización, TRM y Plan vs. real de caja (Tanda 40) =================
 // El Tablero CALCULA (única fuente de lógica) y el Sheet de Finanzas (dueña: CFO) GUARDA, vía su propio Apps Script
 // (Finanzas_FC_AppsScript.gs):
-//   · FC_PROYECCION_12M: proyección de pagos 12 meses en USD, se sobrescribe una vez al mes (1.er día hábil).
+//   · FC_PROYECCION_12M: proyección de pagos a HORIZONTE_PUBLICACION_MESES (24) meses en USD (el nombre de la hoja se mantiene para no romper conexiones), se sobrescribe una vez al mes (1.er día hábil).
 //   · FC_META_MES: meta congelada de cada mes (Vencido + mes + 2 siguientes). Historial: nunca se sobrescribe.
 //   · FC_PAGOS_REAL: pagos realizados en USD (hojas Pagos + Nacionalización), reemplaza los últimos 4 meses.
 //   · TRM_DIARIA / TRM_MENSUAL: TRM oficial (datos.gov.co) y TRM proyectada editable. Solo se usa para pasar a USD
@@ -6215,9 +6218,9 @@ async function cargarFinanzas(){
 }
 async function sincronizarFinanzas(){
   if(!FINANZAS_WEBAPP_URL || !MODEL || FIN.error) return;
-  const hoy = new Date(), clave = 'fin_sinc_v12_'+isoDia(hoy), est = FIN.estado||{};   // v1.2: la proyección se sobrescribe en cada envío (1 vez al día por navegador)
+  const hoy = new Date(), clave = 'fin_sinc_v12h24_'+isoDia(hoy), est = FIN.estado||{};   // v1.2: la proyección se sobrescribe en cada envío (1 vez al día por navegador)
   try{ if(localStorage.getItem(clave) && (est.metaCongelada || !est.hoyEsHabilOPosterior)) return; }catch(e){}
-  const B = construirBDPagos(MODEL, 12);
+  const B = construirBDPagos(MODEL, HORIZONTE_PUBLICACION_MESES);
   const filasP = B.filas.map(f=> BD_COLUMNAS.map(([n,fn])=>{ if(n==='Fecha de corte') return isoDia(B.fechaCorte); const v = fn(f); return v instanceof Date ? isoDia(v) : (v===null||v===undefined ? '' : v); }));
   const meses = [3,2,1,0].map(i=>monthKey(new Date(hoy.getFullYear(), hoy.getMonth()-i, 1)));
   const R = construirPagosReales(MODEL, meses);
